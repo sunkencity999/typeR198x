@@ -8,6 +8,117 @@ html, body {
   font-family: var(--font-ui);
 }
 
+#loadingOverlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at top, rgba(12,16,40,0.96), rgba(2,3,10,0.98));
+  z-index: 999;
+  transition: opacity 0.45s ease, visibility 0.45s ease;
+}
+
+#loadingOverlay.hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+#loadingOverlay .loadingInner {
+  text-align: center;
+  animation: floatPulse 3s ease-in-out infinite;
+}
+
+#loadingOverlay .loadingLogo {
+  width: 180px;
+  height: auto;
+  filter: drop-shadow(0 0 18px rgba(255,57,209,0.45));
+  margin-bottom: 24px;
+}
+
+#loadingOverlay .loadingSpinner {
+  width: 90px;
+  height: 90px;
+  border: 4px solid rgba(255,255,255,0.15);
+  border-top-color: rgba(255,120,80,0.9);
+  border-radius: 50%;
+  margin: 0 auto 18px;
+  animation: spin 1s linear infinite;
+}
+
+#loadingOverlay .loadingText {
+  letter-spacing: 0.25em;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.85);
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes floatPulse {
+  0% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+  100% { transform: translateY(0); }
+}
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 3, 10, 0.85);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  z-index: 1000;
+  transition: opacity 0.35s ease, visibility 0.35s ease;
+}
+
+.modalOverlay.hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.modalInner {
+  max-width: 720px;
+  background: rgba(7, 8, 16, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  padding: 32px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
+  color: #f6f7ff;
+}
+
+.modalEyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.35em;
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 12px;
+}
+
+.modalBody {
+  max-height: 320px;
+  overflow-y: auto;
+  margin-bottom: 24px;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.modalBody p {
+  margin-bottom: 1rem;
+}
+
+.modalBody p:last-child {
+  margin-bottom: 0;
+}
+
 * { box-sizing: border-box; }
 
 #app {

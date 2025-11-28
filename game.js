@@ -159,6 +159,7 @@ const defaultSave = () => ({
   selectedShip: "coconut",
   highScore: 0,
   lastUnlockedLevel: 1, // 1..10
+  storySeen: false,
   settings: { muted: false, crt: true },
   run: null // { levelIndex, score, hp, seed, shipId, powerups, stats, time, ... }
 });
@@ -200,18 +201,39 @@ const WORDS_HARD = [
 ];
 
 // Boss segments per level (stylized phrases; avoid punctuation that is annoying to type)
-const BOSS_SEGMENTS = [
+const BOSS_SEGMENT_BASE = [
   ["neon", "express", "boss"],
   ["turbo", "arcade", "guardian"],
   ["hyper", "vector", "shogun"],
-  ["plasma", "hologram", "sentinel"],
-  ["chromatic", "overdrive", "monolith"],
-  ["afterburn", "synchronizer", "leviathan"],
-  ["electrostatic", "interference", "stormcaller"],
-  ["microprocessor", "deterministic", "starforged"],
-  ["hyperspectral", "transcontinental", "nightengine"],
-  ["metachronistic", "autocorrelation", "electromancer"]
+  ["plasma", "temple", "warden"],
+  ["chrome", "legend", "engine"],
+  ["process", "titan", "matrix"],
+  ["null", "queen", "symphony"],
+  ["logic", "dragon", "protocol"],
+  ["night", "engine", "evermore"],
+  ["final", "electro", "sovereign"]
 ];
+
+const BOSS_WORD_POOL = [
+  "neon","signal","vector","ghost","quantum","phase","horizon","vapor",
+  "matrix","gamma","cypher","shadow","omega","binary","cadence","volt",
+  "nova","spirit","core","zenith","rift","cipher","delta","glyph",
+  "static","echo","sable","flux","lumen","aether","cinder","pulse",
+  "aurora","glitch","cursor","plinth","bastion","spire","ember","auric"
+];
+
+function buildBossSegments(level) {
+  const base = (BOSS_SEGMENT_BASE[level - 1] || ["neon", "boss"]).map(w => w.toLowerCase());
+  const needed = (base.length * 2) + Math.max(0, (level - 1) * 5);
+  const segments = [...base];
+  let cursor = level * 3;
+  while (segments.length < needed) {
+    const word = BOSS_WORD_POOL[cursor % BOSS_WORD_POOL.length] || "nova";
+    segments.push(word.toLowerCase());
+    cursor += 4;
+  }
+  return segments;
+}
 
 // ----------------------------- Level Config -----------------------------
 const LEVELS = Array.from({ length: 10 }, (_, i) => {
@@ -222,7 +244,7 @@ const LEVELS = Array.from({ length: 10 }, (_, i) => {
   const wordMin = Math.round(lerp(3, 7, i / 9));
   const wordMax = Math.round(lerp(5, 12, i / 9));
   const letterRatio = lerp(0.78, 0.25, i / 9);         // early more letters
-  const duration = Math.round(lerp(26, 38, i / 9));    // seconds until boss
+  const duration = Math.round(lerp(26, 38, i / 9)) * 3;    // three waves before boss
   const bossName = ["SIGNAL WRAITH","VECTOR OGRE","PLASMA SHOGUN","HOLO TITAN","CHROME MONOLITH","SYNC LEVIATHAN","STATIC EMPRESS","LOGIC DRAGON","NIGHT ENGINE","FINAL ELECTROMANCER"][i];
 
   return {
@@ -236,7 +258,7 @@ const LEVELS = Array.from({ length: 10 }, (_, i) => {
     duration,
     boss: {
       name: bossName,
-      segments: BOSS_SEGMENTS[i],
+      segments: buildBossSegments(level),
       minionRate: lerp(0.35, 0.75, i / 9),
       hazardRate: lerp(0.0, 0.55, i / 9) // starting from level 1 no hazards
     }
@@ -452,6 +474,9 @@ class Game {
       gameOverText: document.getElementById("gameOverText"),
       victoryText: document.getElementById("victoryText"),
       crtOverlay: document.getElementById("crtOverlay"),
+      loading: document.getElementById("loadingOverlay"),
+      storyModal: document.getElementById("storyModal"),
+      storyLaunch: document.getElementById("btnStoryLaunch"),
       shipChoices: document.querySelectorAll("input[name='shipChoice']")
     };
 
@@ -477,13 +502,19 @@ class Game {
     // audio
     this.sfx = new SFX();
 
+    this.loadingOverlay = this.ui.loading;
+    this.storyModal = this.ui.storyModal;
+    this.storyLaunchBtn = this.ui.storyLaunch;
+    this.pendingAssets = 0;
+    this.assetsReady = false;
+
     this.shipImages = {};
     Object.entries(SHIP_CONFIGS).forEach(([id, cfg]) => {
       const img = new Image();
       img.crossOrigin = "anonymous";
-      img.onload = () => {
+      this.registerAsset(img, () => {
         this.shipImages[id] = this.prepareShipSprite(img);
-      };
+      });
       img.src = cfg.src;
       this.shipImages[id] = img;
     });
@@ -492,9 +523,11 @@ class Game {
     PARALLAX_THEMES.forEach((theme) => {
       const bg = new Image();
       bg.crossOrigin = "anonymous";
+       this.registerAsset(bg);
       bg.src = theme.bg;
       const fg = new Image();
       fg.crossOrigin = "anonymous";
+       this.registerAsset(fg);
       fg.src = theme.fg;
       this.themeImages[theme.id] = { bg, fg };
     });
@@ -503,6 +536,7 @@ class Game {
     BOSS_ARTS.forEach((art) => {
       const img = new Image();
       img.crossOrigin = "anonymous";
+      this.registerAsset(img);
       img.src = art.src;
       this.bossArtImages[art.level] = img;
     });
@@ -564,6 +598,7 @@ class Game {
 
     this.explosionSheet = new Image();
     this.explosionSheet.crossOrigin = "anonymous";
+    this.registerAsset(this.explosionSheet);
     this.explosionSheet.src = EXPLOSION_SHEET.src;
 
     // spawn timers
@@ -577,6 +612,7 @@ class Game {
 
     this.bindUI();
     this.refreshMenu();
+    this.checkLoadingOverlay();
 
     // focus
     this.canvas.tabIndex = 0;
@@ -654,8 +690,7 @@ class Game {
       if (name) this.save.playerName = name;
       this.save.run = null;
       this.storeAndRefresh();
-      this.startNewRun();
-      this.focusGameCanvas();
+      this.handleLaunchRequest();
     });
 
     this.btnContinue.addEventListener("click", async () => {
@@ -663,9 +698,12 @@ class Game {
       const name = (this.ui.playerName.value || "").trim();
       if (name) this.save.playerName = name;
       this.storeAndRefresh();
-      if (this.save.run) this.continueRun();
-      else this.startNewRun();
-      this.focusGameCanvas();
+      if (this.save.run) {
+        this.continueRun();
+        this.focusGameCanvas();
+      } else {
+        this.handleLaunchRequest();
+      }
     });
 
     this.btnResetSave.addEventListener("click", () => {
@@ -689,6 +727,17 @@ class Game {
     this.btnBackToMenu3.addEventListener("click", () => this.stopToMenu(true));
     this.btnTryAgain.addEventListener("click", () => { this.restartLevel(); this.focusGameCanvas(); });
     this.btnNewRun.addEventListener("click", () => { this.startNewRun(); this.focusGameCanvas(); });
+
+    if (this.storyLaunchBtn) {
+      this.storyLaunchBtn.addEventListener("click", () => {
+        this.hideStoryModal();
+        if (this.pendingLaunch === "continue") {
+          this.startGameplayFlow(false);
+        } else {
+          this.startGameplayFlow(true);
+        }
+      });
+    }
 
     this.shipInputs.forEach((input) => {
       input.addEventListener("change", () => {
@@ -790,6 +839,34 @@ class Game {
     this.shipInputs.forEach(input => {
       input.checked = (input.value === shipId);
     });
+  }
+
+  handleLaunchRequest() {
+    const shipPicked = !!this.getSelectedShipId();
+    if (!shipPicked) return;
+    if (this.storyModal && !this.save.storySeen) {
+      this.pendingLaunch = "new";
+      this.showStoryModal();
+    } else {
+      this.startGameplayFlow(true);
+    }
+  }
+
+  showStoryModal() {
+    this.storyModal.classList.remove("hidden");
+    this.storyLaunchBtn?.focus();
+  }
+
+  hideStoryModal() {
+    this.storyModal?.classList.add("hidden");
+  }
+
+  startGameplayFlow(resetRun) {
+    if (resetRun) this.startNewRun();
+    else this.continueRun();
+    this.save.storySeen = true;
+    storeSave(this.save);
+    this.focusGameCanvas();
   }
 
   storeAndRefresh() {
@@ -1498,6 +1575,25 @@ class Game {
         hue: choice([185, 310, 95, 40])
       }));
     }
+  }
+
+  registerAsset(img, onLoad) {
+    this.pendingAssets = (this.pendingAssets ?? 0) + 1;
+    const finalize = () => {
+      if (onLoad) onLoad();
+      this.pendingAssets = Math.max(0, this.pendingAssets - 1);
+      this.checkLoadingOverlay();
+    };
+    img.addEventListener("load", finalize, { once: true });
+    img.addEventListener("error", finalize, { once: true });
+  }
+
+  checkLoadingOverlay() {
+    if (!this.loadingOverlay) return;
+    if (this.pendingAssets > 0) return;
+    if (this.assetsReady) return;
+    this.assetsReady = true;
+    requestAnimationFrame(() => this.loadingOverlay.classList.add("hidden"));
   }
 
   startBossFinale(cx, cy) {

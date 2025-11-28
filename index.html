@@ -11,6 +11,35 @@
 
 <body>
   <div id="app">
+    <div id="loadingOverlay" aria-live="polite" aria-label="Loading assets">
+      <div class="loadingInner">
+        <img src="./assets/ui/logo.svg" alt="Type-R 198X" class="loadingLogo" />
+        <div class="loadingSpinner"></div>
+        <p class="loadingText">Spooling hyperspace lanes…</p>
+      </div>
+    </div>
+
+    <div
+      id="storyModal"
+      class="modalOverlay hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="storyTitle"
+    >
+      <div class="modalInner">
+        <p class="modalEyebrow">Mission Briefing</p>
+        <h2 id="storyTitle" class="neon-text">WordStorm Protocol</h2>
+        <div class="modalBody">
+          <p>In 198X, the world’s neon skyways are protected by the TypeGrid—an arcade-era defense network that keeps the city’s air-lanes stable by continuously “spelling” the right commands into reality.</p>
+          <p>Then the WordStorm hits. Letters break loose. Words mutate into swarms. Boss-ships the size of buildings roll in like floating billboards, monorails, and glitching arcade cabinets—each broadcasting corrupted phrases that rewrite the sky into chaos.</p>
+          <p>You are a rookie pilot plugged into the last working TypeGrid interceptor: the Keystream. Your weapon isn’t ammo—it’s accuracy. Every correct keystroke fires a laser. Every completed word shatters enemy code. Every boss is a living headline you have to type back into submission.</p>
+          <p>Clear 10 sectors, reclaim the High Score, and punch through the final signal: the Electromancer Empress, source of the WordStorm, who’s trying to overwrite the world with a single unstoppable message.</p>
+          <p><strong>Type fast. Type clean. Save the city—one letter at a time.</strong></p>
+        </div>
+        <button id="btnStoryLaunch" class="btn-arcade primary">Launch the Keystream</button>
+      </div>
+    </div>
+
     <header id="topBar" class="neon-panel">
       <div class="brand">
         <img src="./assets/ui/logo.svg" alt="Type-R 198X" />
