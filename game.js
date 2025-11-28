@@ -517,6 +517,8 @@ class Game {
     this.levelT = 0;
     this.inBoss = false;
     this.bossClear = null;
+    this.bossFinaleBursts = [];
+    this.bossFinaleOrigin = null;
 
     this.player = {
       x: 160,
@@ -834,6 +836,8 @@ class Game {
     this.parallax.fgOffset = 0;
 
     this.bossClear = null;
+    this.bossFinaleBursts.length = 0;
+    this.bossFinaleOrigin = null;
     this.enemies.length = 0;
     this.powerups.length = 0;
     this.particles.length = 0;
@@ -983,14 +987,23 @@ class Game {
 
         if (this.boss.done) {
           // boss defeated
+          const centerX = this.boss.x - 150;
+          const centerY = this.boss.y;
           this.sfx.explosion();
           this.screenShake(10);
-          this.addExplosion(this.boss.x - 150, this.boss.y, 40);
-          for (let i = 0; i < 3; i++) {
+          this.addExplosion(centerX, centerY, 120);
+          for (let i = 0; i < 9; i++) {
             this.addExplosionSprite(
-              this.boss.x - 150 + rand(-60, 60),
-              this.boss.y + rand(-70, 70),
+              centerX + rand(-140, 140),
+              centerY + rand(-120, 120),
               "large"
+            );
+          }
+          for (let i = 0; i < 6; i++) {
+            this.addExplosionSprite(
+              centerX + rand(-220, 220),
+              centerY + rand(-200, 200),
+              "medium"
             );
           }
 
@@ -1012,6 +1025,7 @@ class Game {
             level: completedLevel,
             bossName: LEVELS[this.levelIndex].boss.name
           };
+          this.startBossFinale(centerX, centerY);
         }
       } else {
         this.onWrongKey();
@@ -1354,9 +1368,15 @@ class Game {
 
     if (this.bossClear) {
       this.bossClear.t += dt;
-      if (this.bossClear.t >= 2.6) {
+      while (this.bossFinaleBursts.length && this.bossFinaleBursts[0].time <= this.bossClear.t) {
+        const burst = this.bossFinaleBursts.shift();
+        this.runBossFinaleBurst(burst);
+      }
+      if (this.bossClear.t >= 6.3) {
         const info = this.bossClear;
         this.bossClear = null;
+        this.bossFinaleBursts.length = 0;
+        this.bossFinaleOrigin = null;
         if (info.target === "victory") this.onVictory();
         else this.onLevelComplete(info.bonus);
       }
@@ -1449,6 +1469,50 @@ class Game {
         size: rand(1.2, 4.5),
         hue: choice([185, 310, 95, 40])
       }));
+    }
+  }
+
+  startBossFinale(cx, cy) {
+    this.bossFinaleOrigin = { x: cx, y: cy };
+    this.bossFinaleBursts = [];
+    const finaleDuration = 6;
+    const interval = 0.3;
+    for (let t = 0; t <= finaleDuration; t += interval) {
+      const step = Math.floor(t / interval) % 3;
+      if (step === 0) this.bossFinaleBursts.push({ time: t, kind: "shock" });
+      else if (step === 1) this.bossFinaleBursts.push({ time: t, kind: "large" });
+      else this.bossFinaleBursts.push({ time: t, kind: "medium" });
+    }
+  }
+
+  runBossFinaleBurst(burst) {
+    const origin = this.bossFinaleOrigin || { x: this.player.x + 20, y: this.player.y };
+    const ox = origin.x;
+    const oy = origin.y;
+    switch (burst.kind) {
+      case "shock":
+        this.addExplosion(ox + rand(-40, 40), oy + rand(-40, 40), 140);
+        this.screenShake(6);
+        this.sfx.explosion();
+        break;
+      case "medium":
+        for (let i = 0; i < 3; i++) {
+          this.addExplosionSprite(
+            ox + rand(-260, 260),
+            oy + rand(-220, 220),
+            "medium"
+          );
+        }
+        break;
+      default:
+        for (let i = 0; i < 4; i++) {
+          this.addExplosionSprite(
+            ox + rand(-200, 200),
+            oy + rand(-160, 160),
+            "large"
+          );
+        }
+        break;
     }
   }
 
@@ -1873,39 +1937,43 @@ class Game {
     ctx.fillStyle = g;
     ctx.fillRect(0,0,this.w,this.h);
     ctx.restore();
+  }
 
-    if (this.bossClear) {
-      ctx.save();
-      const t = this.bossClear.t || 0;
-      const alpha = clamp(0.35 + t * 0.25, 0, 0.9);
-      ctx.fillStyle = `rgba(9,12,24,${alpha * 0.6})`;
-      ctx.fillRect(0, this.h * 0.35, this.w, this.h * 0.3);
+  drawBossClearBackdrop(ctx) {
+    ctx.save();
+    const t = this.bossClear?.t || 0;
+    const alpha = clamp(0.35 + t * 0.25, 0, 0.85);
+    ctx.fillStyle = `rgba(9,12,24,${alpha * 0.5})`;
+    ctx.fillRect(0, this.h * 0.35, this.w, this.h * 0.3);
 
-      const art = this.getBossArtForLevel(this.bossClear.level);
-      if (art && art.complete && art.naturalWidth > 0) {
-        const targetH = this.h * 0.5;
-        const scale = targetH / art.naturalHeight;
-        const targetW = art.naturalWidth * scale;
-        ctx.drawImage(art, (this.w - targetW) / 2, this.h * 0.25, targetW, targetH);
-      }
-
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.font = "bold 64px 'Orbitron', 'Segoe UI', sans-serif";
-      ctx.fillStyle = "rgba(255, 247, 216, 0.95)";
-      ctx.strokeStyle = "rgba(255,120,80,0.85)";
-      ctx.lineWidth = 3;
-      const cx = this.w / 2;
-      const cy = this.h * 0.5 - 10;
-      ctx.strokeText("BOSS DEFEATED", cx, cy);
-      ctx.fillText("BOSS DEFEATED", cx, cy);
-
-      ctx.font = "24px 'Segoe UI', sans-serif";
-      ctx.fillStyle = "rgba(168,255,120,0.92)";
-      const sub = this.bossClear.target === "victory" ? "Congratulations!" : `${this.bossClear.bossName} neutralized.`;
-      ctx.fillText(sub, cx, cy + 60);
-      ctx.restore();
+    const art = this.getBossArtForLevel(this.bossClear?.level);
+    if (art && art.complete && art.naturalWidth > 0) {
+      const targetH = this.h * 0.5;
+      const scale = targetH / art.naturalHeight;
+      const targetW = art.naturalWidth * scale;
+      ctx.drawImage(art, (this.w - targetW) / 2, this.h * 0.25, targetW, targetH);
     }
+    ctx.restore();
+  }
+
+  drawBossClearText(ctx) {
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = "bold 64px 'Orbitron', 'Segoe UI', sans-serif";
+    ctx.fillStyle = "rgba(255, 247, 216, 0.95)";
+    ctx.strokeStyle = "rgba(255,120,80,0.85)";
+    ctx.lineWidth = 3;
+    const cx = this.w / 2;
+    const cy = this.h * 0.5 - 10;
+    ctx.strokeText("BOSS DEFEATED", cx, cy);
+    ctx.fillText("BOSS DEFEATED", cx, cy);
+
+    ctx.font = "24px 'Segoe UI', sans-serif";
+    ctx.fillStyle = "rgba(168,255,120,0.92)";
+    const sub = this.bossClear?.target === "victory" ? "Congratulations!" : `${this.bossClear?.bossName || ""} neutralized.`;
+    ctx.fillText(sub, cx, cy + 60);
+    ctx.restore();
   }
 
   getBossArtForLevel(level) {
@@ -1936,10 +2004,12 @@ class Game {
     if (this.inBoss && this.boss) this.drawBoss(ctx, this.boss);
 
     this.drawShip(ctx);
+    if (this.bossClear) this.drawBossClearBackdrop(ctx);
     this.drawExplosionSprites(ctx);
     this.drawParticles(ctx);
 
     this.drawHUDOverlays(ctx);
+    if (this.bossClear) this.drawBossClearText(ctx);
 
     ctx.restore();
   }
