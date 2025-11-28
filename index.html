@@ -185,9 +185,18 @@
       <section id="screenVictory" class="screen neon-panel hidden">
         <div class="screenInner">
           <h2 class="neon-text">Victory</h2>
+          <p id="endingStage" class="endingStage hidden"></p>
+          <div class="dialogueWindow">
+            <div class="dialogueHeader">
+              <span id="endingSpeaker" class="dialogueLabel hidden"></span>
+            </div>
+            <p id="endingLine" class="dialogueLine"></p>
+          </div>
           <p class="small" id="victoryText"></p>
-          <div class="grid2">
-            <button id="btnNewRun" class="btn-arcade">New Run</button>
+          <p id="creditsLine" class="creditsText hidden">Thank you from Christopher Bradford for work well done!</p>
+          <div class="endingActions">
+            <button id="btnEndingNext" class="btn-arcade">Advance Dialogue</button>
+            <button id="btnNewRun" class="btn-arcade hidden">Play Again</button>
             <button id="btnBackToMenu3" class="btn-arcade">Back to Menu</button>
           </div>
         </div>

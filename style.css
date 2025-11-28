@@ -119,6 +119,60 @@ html, body {
   margin-bottom: 0;
 }
 
+.dialogueWindow {
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 16px;
+  background: linear-gradient(145deg, rgba(7,8,16,0.9), rgba(20,24,44,0.85));
+  padding: 20px 24px;
+  margin: 20px 0;
+  min-height: 140px;
+  position: relative;
+}
+
+.dialogueHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.dialogueLabel {
+  font-size: 0.75rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: rgba(168,255,120,0.8);
+}
+
+.dialogueLine {
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: rgba(255,255,255,0.9);
+  min-height: 96px;
+}
+
+.endingActions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+.creditsText {
+  margin-top: 8px;
+  font-style: italic;
+  text-align: center;
+  color: rgba(255,255,255,0.85);
+}
+
+.endingStage {
+  font-size: 0.8rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.65);
+  text-align: center;
+}
+
 * { box-sizing: border-box; }
 
 #app {

@@ -1,15 +1,5 @@
 import { SFX } from "./assets/audio/sfx.js";
 
-/**
- * TypeR 198X
- * Offline HTML/CSS/JS shmup-typing game.
- * - Canvas gameplay, HUD in HTML.
- * - Lock-on typing system: first char selects target; complete string to destroy.
- * - 10 levels, each ends in a boss fight.
- * - Powerups: SPREAD, PIERCE, RAPID, SHIELD, MULTI
- * - Save state in localStorage; supports Continue.
- */
-
 // ----------------------------- Utilities -----------------------------
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -473,6 +463,11 @@ class Game {
       levelCompleteText: document.getElementById("levelCompleteText"),
       gameOverText: document.getElementById("gameOverText"),
       victoryText: document.getElementById("victoryText"),
+      endingStage: document.getElementById("endingStage"),
+      endingSpeaker: document.getElementById("endingSpeaker"),
+      endingLine: document.getElementById("endingLine"),
+      endingNext: document.getElementById("btnEndingNext"),
+      creditsLine: document.getElementById("creditsLine"),
       crtOverlay: document.getElementById("crtOverlay"),
       loading: document.getElementById("loadingOverlay"),
       storyModal: document.getElementById("storyModal"),
@@ -507,6 +502,8 @@ class Game {
     this.storyLaunchBtn = this.ui.storyLaunch;
     this.pendingAssets = 0;
     this.assetsReady = false;
+    this.endingScript = getVictoryScript();
+    this.endingIndex = 0;
 
     this.shipImages = {};
     Object.entries(SHIP_CONFIGS).forEach(([id, cfg]) => {
@@ -727,6 +724,10 @@ class Game {
     this.btnBackToMenu3.addEventListener("click", () => this.stopToMenu(true));
     this.btnTryAgain.addEventListener("click", () => { this.restartLevel(); this.focusGameCanvas(); });
     this.btnNewRun.addEventListener("click", () => { this.startNewRun(); this.focusGameCanvas(); });
+
+    if (this.ui.endingNext) {
+      this.ui.endingNext.addEventListener("click", () => this.advanceEndingDialogue());
+    }
 
     if (this.storyLaunchBtn) {
       this.storyLaunchBtn.addEventListener("click", () => {
@@ -1282,6 +1283,8 @@ class Game {
     this.setMode("victory");
     const acc = this.getAccuracyPct();
     this.ui.victoryText.textContent = `You beat all 10 levels! Score: ${formatInt(this.stats.score)} • Accuracy: ${acc}%`;
+    this.resetEndingDialogue();
+    this.advanceEndingDialogue();
     this.commitHighScore();
     this.save.run = null;
     storeSave(this.save);
