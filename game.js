@@ -17,6 +17,42 @@ const rand = (a, b) => a + Math.random() * (b - a);
 const randi = (a, b) => Math.floor(rand(a, b + 1));
 const choice = (arr) => arr[randi(0, arr.length - 1)];
 
+const EXPLOSION_SHEET = {
+  src: "./assets/explosions/explosions.png",
+  width: 2048,
+  height: 1117
+};
+
+const EXPLOSION_FRAMES = [
+  { x: 586, y: 118, w: 164, h: 162 },
+  { x: 353, y: 135, w: 147, h: 144 },
+  { x: 127, y: 154, w: 135, h: 126 },
+  { x: 1647, y: 393, w: 255, h: 332 },
+  { x: 1325, y: 403, w: 261, h: 321 },
+  { x: 1008, y: 416, w: 273, h: 309 },
+  { x: 703, y: 456, w: 249, h: 268 },
+  { x: 368, y: 502, w: 268, h: 221 },
+  { x: 2280, y: 555, w: 242, h: 170 },
+  { x: 111, y: 562, w: 207, h: 162 },
+  { x: 1233, y: 598, w: 23, h: 22 },
+  { x: 1513, y: 890, w: 293, h: 312 },
+  { x: 967, y: 913, w: 506, h: 515 },
+  { x: 1894, y: 937, w: 219, h: 236 },
+  { x: 486, y: 1018, w: 419, h: 409 },
+  { x: 81, y: 1106, w: 379, h: 321 },
+  { x: 1531, y: 1177, w: 96, h: 85 },
+  { x: 2138, y: 1232, w: 520, h: 195 },
+  { x: 2557, y: 1243, w: 43, h: 41 },
+  { x: 1535, y: 1265, w: 578, h: 162 },
+  { x: 2656, y: 1422, w: 14, h: 7 }
+];
+
+const EXPLOSION_SETS = {
+  small: { frames: [0, 1, 2, 10], scale: 0.9, frameTime: 0.05 },
+  medium: { frames: [3, 4, 5, 6, 7, 8, 9], scale: 1.0, frameTime: 0.065 },
+  large: { frames: [11, 12, 14, 15, 17, 19, 20], scale: 1.15, frameTime: 0.075 }
+};
+
 const SHIP_CONFIGS = {
   coconut: {
     id: "coconut",
@@ -254,6 +290,49 @@ class Bullet {
   alive() { return this.t < this.life; }
 }
 
+class ExplosionSprite {
+  constructor({ x, y, type = "small", sheet }) {
+    this.x = x;
+    this.y = y;
+    this.sheet = sheet;
+    const cfg = EXPLOSION_SETS[type] || EXPLOSION_SETS.small;
+    this.frames = cfg.frames;
+    this.frameIndex = 0;
+    this.scale = cfg.scale ?? 1;
+    this.frameTime = 0;
+    this.perFrame = cfg.frameTime ?? 0.06;
+    this.done = false;
+  }
+  update(dt) {
+    if (this.done) return;
+    this.frameTime += dt;
+    while (this.frameTime >= this.perFrame) {
+      this.frameTime -= this.perFrame;
+      this.frameIndex++;
+      if (this.frameIndex >= this.frames.length) {
+        this.done = true;
+        break;
+      }
+    }
+  }
+  draw(ctx) {
+    if (this.done || !this.sheet) return;
+    const ready = this.sheet.complete && this.sheet.naturalWidth > 0;
+    if (!ready) return;
+
+    const frameIdx = this.frames[Math.min(this.frameIndex, this.frames.length - 1)];
+    const frame = EXPLOSION_FRAMES[frameIdx];
+    if (!frame) return;
+    const { x, y, w, h } = frame;
+    const dw = w * this.scale;
+    const dh = h * this.scale;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.drawImage(this.sheet, x, y, w, h, this.x - dw / 2, this.y - dh / 2, dw, dh);
+    ctx.restore();
+  }
+}
+
 class Particle {
   constructor({ x, y, vx, vy, life, size, hue }) {
     this.x = x; this.y = y;
@@ -444,6 +523,7 @@ class Game {
     this.powerups = [];
     this.particles = [];
     this.bullets = [];
+    this.explosions = [];
     this.boss = null;
 
     this.lock = null; // { kind: "enemy"|"powerup"|"boss", id: objectRef }
@@ -456,6 +536,10 @@ class Game {
 
     this.currentTheme = getThemeForLevel(0);
     this.parallax = { bgOffset: 0, fgOffset: 0 };
+
+    this.explosionSheet = new Image();
+    this.explosionSheet.crossOrigin = "anonymous";
+    this.explosionSheet.src = EXPLOSION_SHEET.src;
 
     // spawn timers
     this.spawnAcc = 0;
@@ -872,6 +956,13 @@ class Game {
           this.sfx.explosion();
           this.screenShake(10);
           this.addExplosion(this.boss.x - 150, this.boss.y, 40);
+          for (let i = 0; i < 3; i++) {
+            this.addExplosionSprite(
+              this.boss.x - 150 + rand(-60, 60),
+              this.boss.y + rand(-70, 70),
+              "large"
+            );
+          }
 
           this.endBossFight(true);
 
@@ -1004,6 +1095,7 @@ class Game {
     this.stats.score += gained;
 
     this.addExplosion(en.x, en.y, 14 + en.text.length * 2);
+    this.addExplosionSprite(en.x, en.y, this.getExplosionTypeForEnemy(en));
     this.sfx.explosion();
     this.screenShake(4);
 
@@ -1184,6 +1276,7 @@ class Game {
         en.alive = false;
         this.takeDamage(12 + Math.min(12, en.text.length * 2));
         this.addExplosion(this.player.x + 40, en.y, 18);
+        this.addExplosionSprite(this.player.x + 40, en.y, this.getExplosionTypeForEnemy(en));
       }
     }
 
@@ -1210,6 +1303,7 @@ class Game {
 
     // Particles
     this.particles = this.particles.filter(p => (p.update(dt), p.alive()));
+    this.explosions = this.explosions.filter(ex => (ex.update(dt), !ex.done));
 
     // Clean dead arrays occasionally
     this.enemies = this.enemies.filter(e => e.alive);
@@ -1312,6 +1406,17 @@ class Game {
         hue: choice([185, 310, 95, 40])
       }));
     }
+  }
+
+  addExplosionSprite(x, y, type = "small") {
+    if (!this.explosionSheet) return;
+    this.explosions.push(new ExplosionSprite({ x, y, type, sheet: this.explosionSheet }));
+  }
+
+  getExplosionTypeForEnemy(en) {
+    if (!en) return "small";
+    if (en.text.length <= 3 || en.kind === "bossMinion") return "small";
+    return "medium";
   }
 
   drawBackground(ctx) {
@@ -1688,6 +1793,12 @@ class Game {
     }
   }
 
+  drawExplosionSprites(ctx) {
+    for (const ex of this.explosions) {
+      ex.draw(ctx);
+    }
+  }
+
   drawHUDOverlays(ctx) {
     // subtle flash on wrong key
     if (this.flash > 0) {
@@ -1731,6 +1842,7 @@ class Game {
     if (this.inBoss && this.boss) this.drawBoss(ctx, this.boss);
 
     this.drawShip(ctx);
+    this.drawExplosionSprites(ctx);
     this.drawParticles(ctx);
 
     this.drawHUDOverlays(ctx);
