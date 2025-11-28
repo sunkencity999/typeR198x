@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Type-R 198X</title>
+  <link rel="stylesheet" href="./assets/style/tokens.css" />
+  <link rel="stylesheet" href="./style.css" />
+  <link rel="icon" type="image/svg+xml" href="./assets/ui/logo.svg" />
+</head>
+
+<body>
+  <div id="app">
+    <header id="topBar" class="neon-panel">
+      <div class="brand">
+        <img src="./assets/ui/logo.svg" alt="Type-R 198X" />
+      </div>
+
+      <div class="topControls">
+        <button id="btnMute" class="btn-arcade" title="Toggle audio">Mute</button>
+        <button id="btnCRT" class="btn-arcade" title="Toggle CRT overlay">CRT</button>
+        <button id="btnPause" class="btn-arcade" title="Pause / open menu">Pause</button>
+        <button id="btnStop" class="btn-arcade" title="Stop & return to menu">Stop</button>
+      </div>
+    </header>
+
+    <main id="main">
+      <canvas id="game" width="1280" height="720" aria-label="TypeR Game Canvas"></canvas>
+
+      <section id="hud" class="neon-panel">
+        <div class="hudRow">
+          <div><span class="label">Pilot</span> <span id="hudName" class="mono"></span></div>
+          <div><span class="label">Level</span> <span id="hudLevel" class="mono"></span></div>
+          <div><span class="label">Score</span> <span id="hudScore" class="mono"></span></div>
+          <div><span class="label">Combo</span> <span id="hudCombo" class="mono"></span></div>
+          <div><span class="label">Acc</span> <span id="hudAcc" class="mono"></span></div>
+          <div><span class="label">HP</span> <span id="hudHP" class="mono"></span></div>
+        </div>
+        <div id="bossBar" class="bossBar hidden">
+          <div class="bossTitle">
+            <span class="label">BOSS</span>
+            <span id="bossName" class="mono"></span>
+            <span id="bossSegment" class="mono small"></span>
+          </div>
+          <div class="bossMeter">
+            <div id="bossFill"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Screens -->
+      <section id="screenMenu" class="screen neon-panel">
+        <div class="screenInner">
+          <h1 class="neon-text">Type-R 198X</h1>
+          <p class="small">Type to fire. Lock-on by typing the first letter of an enemy. Finish its string to destroy it.</p>
+
+          <div class="formRow">
+            <label class="label" for="playerName">Pilot Name</label>
+            <input id="playerName" class="input" placeholder="Your name" maxlength="24" autocomplete="off" />
+          </div>
+
+          <div class="formRow">
+            <label class="label">Select Your Ship</label>
+            <div class="shipGrid" role="radiogroup" aria-label="Ship selection">
+              <label class="shipCard">
+                <input type="radio" name="shipChoice" value="coconut" />
+                <div class="shipCardInner">
+                  <img data-ship-id="coconut" src="./assets/ships/S_S_Coconut.png" alt="The S.S. Coconut" />
+                  <span class="shipName">The S.S. Coconut</span>
+                </div>
+              </label>
+
+              <label class="shipCard">
+                <input type="radio" name="shipChoice" value="little-dark-one" />
+                <div class="shipCardInner">
+                  <img data-ship-id="little-dark-one" src="./assets/ships/S_S_littledarkone.png" alt="The S.S. Little Dark One" />
+                  <span class="shipName">The S.S. Little Dark One</span>
+                </div>
+              </label>
+
+              <label class="shipCard">
+                <input type="radio" name="shipChoice" value="sofrito" />
+                <div class="shipCardInner">
+                  <img data-ship-id="sofrito" src="./assets/ships/S_S_Sofrito.png" alt="The S.S. Sofrito" />
+                  <span class="shipName">The S.S. Sofrito</span>
+                </div>
+              </label>
+
+              <label class="shipCard">
+                <input type="radio" name="shipChoice" value="honeybee" />
+                <div class="shipCardInner">
+                  <img data-ship-id="honeybee" src="./assets/ships/S_S_honeyBee.png" alt="The S.S. HoneyBee" />
+                  <span class="shipName">The S.S. HoneyBee</span>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <div class="grid2">
+            <button id="btnStart" class="btn-arcade">Start New Run</button>
+            <button id="btnContinue" class="btn-arcade">Continue</button>
+            <button id="btnResetSave" class="btn-arcade danger">Reset Save</button>
+            <div class="stats neon-panel">
+              <div class="statRow"><span class="label">High Score</span> <span id="statHigh" class="mono"></span></div>
+              <div class="statRow"><span class="label">Unlocked</span> <span id="statUnlocked" class="mono"></span></div>
+              <div class="statRow"><span class="label">Tips</span> <span class="mono small">Esc opens pause menu</span></div>
+            </div>
+          </div>
+
+          <details class="help">
+            <summary>How it works</summary>
+            <ul>
+              <li>Enemies are letters and words. Type to shoot.</li>
+              <li>If you type the first character of an enemy, you lock-on.</li>
+              <li>Keep typing to complete that enemy’s string.</li>
+              <li>Powerups float in—type their label to collect.</li>
+              <li>Each level ends with a boss made of word segments.</li>
+            </ul>
+          </details>
+        </div>
+      </section>
+
+      <section id="screenPaused" class="screen neon-panel hidden">
+        <div class="screenInner">
+          <h2 class="neon-text">Paused</h2>
+          <p class="small">Press Esc to toggle the menu or resume.</p>
+          <div class="grid2">
+            <button id="btnResume" class="btn-arcade">Resume</button>
+            <button id="btnRestart" class="btn-arcade">Restart Level</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="screenLevelComplete" class="screen neon-panel hidden">
+        <div class="screenInner">
+          <h2 class="neon-text">Level Complete</h2>
+          <p class="small" id="levelCompleteText"></p>
+          <div class="grid2">
+            <button id="btnNextLevel" class="btn-arcade">Next Level</button>
+            <button id="btnBackToMenu1" class="btn-arcade">Back to Menu</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="screenGameOver" class="screen neon-panel hidden">
+        <div class="screenInner">
+          <h2 class="neon-text">Game Over</h2>
+          <p class="small" id="gameOverText"></p>
+          <div class="grid2">
+            <button id="btnTryAgain" class="btn-arcade">Try Again</button>
+            <button id="btnBackToMenu2" class="btn-arcade">Back to Menu</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="screenVictory" class="screen neon-panel hidden">
+        <div class="screenInner">
+          <h2 class="neon-text">Victory</h2>
+          <p class="small" id="victoryText"></p>
+          <div class="grid2">
+            <button id="btnNewRun" class="btn-arcade">New Run</button>
+            <button id="btnBackToMenu3" class="btn-arcade">Back to Menu</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- CRT overlay -->
+      <div id="crtOverlay">
+        <div id="crtNoise"></div>
+      </div>
+    </main>
+
+    <footer class="footer small">
+      Offline game. Open <span class="mono">index.html</span> locally to play.
+    </footer>
+  </div>
+
+  <script type="module" src="./game.js"></script>
+</body>
+</html>
