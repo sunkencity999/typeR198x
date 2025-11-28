@@ -938,6 +938,9 @@ class Game {
     const cfg = LEVELS[this.levelIndex];
 
     this.currentTheme = getThemeForLevel(this.levelIndex);
+    if (this.sfx && !this.save.settings.muted) {
+      this.sfx.playMusic();
+    }
     this.parallax.bgOffset = 0;
     this.parallax.fgOffset = 0;
 
@@ -981,12 +984,14 @@ class Game {
     this.power.rapid = 0;
     this.power.multiplier = 0;
     this.startLevel(this.levelIndex, true, null);
+    if (this.sfx && !this.save.settings.muted) this.sfx.playMusic();
   }
 
   advanceLevel() {
     if (this.levelIndex >= 9) return;
     this.levelIndex++;
     this.startLevel(this.levelIndex, true);
+    if (this.sfx && !this.save.settings.muted) this.sfx.playMusic();
   }
 
   stopToMenu(saveRun = true) {
@@ -1098,6 +1103,7 @@ class Game {
           this.sfx.explosion();
           this.screenShake(10);
           this.addExplosion(centerX, centerY, 120);
+          this.sfx.bossExplosion();
           for (let i = 0; i < 9; i++) {
             this.addExplosionSprite(
               centerX + rand(-140, 140),

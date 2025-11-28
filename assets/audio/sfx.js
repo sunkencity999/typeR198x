@@ -10,6 +10,34 @@ export class SFX {
     this.ctx = null;
     this.master = null;
     this.muted = false;
+    this.musicGain = null;
+    this.music = null;
+    this.musicTracks = [
+      "./assets/audio/Galactic_High_Score_1.wav",
+      "./assets/audio/Galactic_High_Score_2.wav",
+      "./assets/audio/Galactic_High_Score_3.wav",
+      "./assets/audio/Galactic_High_Score_4.wav",
+      "./assets/audio/Galactic_High_Score_5.wav",
+      "./assets/audio/Galactic_High_Score_6.wav"
+    ];
+    this.currentMusicBuffer = null;
+    this.pendingTrack = null;
+    this.musicLoaded = {};
+    this.bigExplosionBuffer = null;
+  }
+
+  bossExplosion() {
+    if (!this.ctx || this.muted || !this.bigExplosionBuffer) {
+      this.explosion();
+      return;
+    }
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.bigExplosionBuffer;
+    const gain = this.ctx.createGain();
+    gain.gain.value = 0.7;
+    src.connect(gain);
+    gain.connect(this.master);
+    src.start();
   }
 
   async unlock() {
@@ -20,6 +48,15 @@ export class SFX {
     this.master.gain.value = 0.65;
     this.master.connect(this.ctx.destination);
 
+    this.musicGain = this.ctx.createGain();
+    this.musicGain.gain.value = 0.55;
+    this.musicGain.connect(this.master);
+
+    await Promise.all([
+      this._preloadMusic(),
+      this._loadBigExplosion()
+    ]);
+
     if (this.ctx.state === "suspended") await this.ctx.resume();
   }
 
@@ -27,6 +64,66 @@ export class SFX {
     this.muted = !!m;
     if (!this.master) return;
     this.master.gain.value = this.muted ? 0 : 0.65;
+    if (this.musicGain) this.musicGain.gain.value = this.muted ? 0 : 0.55;
+  }
+
+  async _preloadMusic() {
+    if (!this.ctx) return;
+    const loads = this.musicTracks.map(async (src) => {
+      if (this.musicLoaded[src] && this.musicLoaded[src] !== "loading") return;
+      this.musicLoaded[src] = "loading";
+      const resp = await fetch(src);
+      const buf = await resp.arrayBuffer();
+      this.musicLoaded[src] = await this.ctx.decodeAudioData(buf);
+    });
+    await Promise.all(loads);
+    if (this.pendingTrack) {
+      const next = this.musicLoaded[this.pendingTrack];
+      if (next && next !== "loading") this.playMusic(this.pendingTrack);
+      this.pendingTrack = null;
+    }
+  }
+
+  async _loadBigExplosion() {
+    if (!this.ctx || this.bigExplosionBuffer) return;
+    try {
+      const resp = await fetch("./assets/audio/bigexplosion.wav");
+      const buf = await resp.arrayBuffer();
+      this.bigExplosionBuffer = await this.ctx.decodeAudioData(buf);
+    } catch (err) {
+      console.warn("Failed to load big explosion sample", err);
+    }
+  }
+
+  _pickMusicTrack() {
+    return this.musicTracks[Math.floor(Math.random() * this.musicTracks.length)];
+  }
+
+  playMusic(trackSrc) {
+    if (!this.ctx) return;
+    const src = trackSrc || this._pickMusicTrack();
+    const buffer = this.musicLoaded[src];
+    if (!buffer || buffer === "loading") {
+      this.pendingTrack = src;
+      return;
+    }
+    if (this.music) {
+      try { this.music.stop(); } catch (_) {}
+      this.music.disconnect();
+    }
+    const node = this.ctx.createBufferSource();
+    node.buffer = buffer;
+    node.loop = true;
+    node.connect(this.musicGain || this.master);
+    if (!this.muted) node.start();
+    this.music = node;
+  }
+
+  stopMusic() {
+    if (!this.music) return;
+    try { this.music.stop(); } catch (_) {}
+    this.music.disconnect();
+    this.music = null;
   }
 
   _now() { return this.ctx.currentTime; }
