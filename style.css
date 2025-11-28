@@ -1,3 +1,8 @@
+:root {
+  --break-tablet: 1024px;
+  --break-phone: 640px;
+}
+
 html, body {
   height: 100%;
   margin: 0;
@@ -6,6 +11,8 @@ html, body {
               linear-gradient(180deg, var(--bg2), var(--bg0));
   color: rgba(255,255,255,0.90);
   font-family: var(--font-ui);
+  min-width: 320px;
+  overflow-x: hidden;
 }
 
 #loadingOverlay {
@@ -92,6 +99,11 @@ html, body {
   padding: 32px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
   color: #f6f7ff;
+}
+
+.modalInner.compact {
+  max-width: 420px;
+  padding: 24px;
 }
 
 .modalEyebrow {
@@ -181,6 +193,8 @@ html, body {
   grid-template-rows: auto 1fr auto;
   gap: 10px;
   padding: 10px;
+  max-width: 1440px;
+  margin: 0 auto;
 }
 
 #topBar {
@@ -208,14 +222,19 @@ html, body {
   position: relative;
   overflow: hidden;
   border-radius: var(--r-lg);
+  max-width: 1280px;
+  margin: 0 auto;
+  aspect-ratio: 16 / 9;
+  background: linear-gradient(180deg, rgba(7,10,20,0.4), rgba(7,10,20,0.85));
 }
 
 #game {
   width: 100%;
-  height: auto;
+  height: 100%;
   display: block;
   border-radius: var(--r-lg);
   background: linear-gradient(180deg, rgba(7,10,20,0.0), rgba(7,10,20,0.65));
+  object-fit: contain;
 }
 
 #hud {
@@ -292,6 +311,8 @@ html, body {
 .screenInner {
   width: min(720px, 96vw);
   padding: 18px;
+  max-height: 90vh;
+  overflow-y: auto;
 }
 
 h1, h2 {
@@ -471,7 +492,86 @@ h1, h2 {
   100% { transform: translate3d(-12px, 8px, 0); }
 }
 
+@media (max-width: 1200px) {
+  #app { padding: 8px; }
+  #main { border-radius: var(--r-md); }
+  #game { border-radius: var(--r-md); }
+  .brand img { height: 60px; }
+}
+
+@media (max-width: 1024px) {
+  #app { grid-template-rows: auto auto 1fr auto; }
+  #topBar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .topControls {
+    width: 100%;
+    justify-content: center;
+  }
+  #main {
+    aspect-ratio: auto;
+    min-height: 520px;
+  }
+  #game {
+    height: auto;
+  }
+  #hud {
+    position: static;
+    margin-top: 10px;
+  }
+  .hudRow {
+    gap: 10px;
+    justify-content: flex-start;
+  }
+  .grid2 { grid-template-columns: 1fr; }
+}
+
 @media (max-width: 860px) {
   .grid2 { grid-template-columns: 1fr; }
   .brand img { height: 56px; }
+}
+
+@media (max-width: 820px) {
+  #app { padding: 6px; }
+  .brand img { height: 54px; }
+  #main { min-height: 420px; }
+  .hudRow {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .bossTitle { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .shipGrid { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
+  .modalInner { padding: 24px; }
+  .dialogueWindow { min-height: 110px; }
+}
+
+@media (max-width: 640px) {
+  body { font-size: 14px; }
+  #app { gap: 6px; }
+  #topBar { align-items: stretch; }
+  .topControls { flex-wrap: wrap; gap: 6px; }
+  .topControls .btn-arcade { flex: 1; min-width: 48%; }
+  #main {
+    min-height: 360px;
+  }
+  #hud {
+    padding: 8px;
+    border-radius: var(--r-md);
+  }
+  .screen { padding: 10px; }
+  .screenInner { padding: 14px; }
+  .dialogueLine { font-size: 0.95rem; }
+  .endingActions { flex-direction: column; }
+}
+
+@media (max-width: 480px) {
+  #app { padding: 4px; }
+  #main { min-height: 300px; }
+  .brand img { height: 46px; margin: 0 auto; }
+  .shipCardInner { min-height: 150px; padding: 8px; }
+  #hud .label { font-size: 10px; }
+  .modalInner { padding: 18px; }
+  .modalBody { max-height: 260px; }
 }

@@ -178,6 +178,7 @@ const defaultSave = () => ({
   highScore: 0,
   lastUnlockedLevel: 1, // 1..10
   storySeen: false,
+  keyboardHintSeen: false,
   settings: { muted: false, crt: true },
   run: null // { levelIndex, score, hp, seed, shipId, powerups, stats, time, ... }
 });
@@ -496,10 +497,12 @@ class Game {
       endingLine: document.getElementById("endingLine"),
       endingNext: document.getElementById("btnEndingNext"),
       creditsLine: document.getElementById("creditsLine"),
+      keyboardHint: document.getElementById("keyboardHint"),
       crtOverlay: document.getElementById("crtOverlay"),
       loading: document.getElementById("loadingOverlay"),
       storyModal: document.getElementById("storyModal"),
       storyLaunch: document.getElementById("btnStoryLaunch"),
+      keyboardHintDismiss: document.getElementById("btnKeyboardHint"),
       shipChoices: document.querySelectorAll("input[name='shipChoice']")
     };
 
@@ -528,6 +531,8 @@ class Game {
     this.loadingOverlay = this.ui.loading;
     this.storyModal = this.ui.storyModal;
     this.storyLaunchBtn = this.ui.storyLaunch;
+    this.keyboardHintModal = this.ui.keyboardHint;
+    this.keyboardHintBtn = this.ui.keyboardHintDismiss;
     this.pendingAssets = 0;
     this.assetsReady = false;
     this.endingScript = getVictoryScript();
@@ -638,6 +643,7 @@ class Game {
     this.bindUI();
     this.refreshMenu();
     this.checkLoadingOverlay();
+    this.maybeShowKeyboardHint();
 
     // focus
     this.canvas.tabIndex = 0;
@@ -755,6 +761,10 @@ class Game {
 
     if (this.ui.endingNext) {
       this.ui.endingNext.addEventListener("click", () => this.advanceEndingDialogue());
+    }
+
+    if (this.keyboardHintBtn) {
+      this.keyboardHintBtn.addEventListener("click", () => this.dismissKeyboardHint());
     }
 
     if (this.storyLaunchBtn) {
@@ -896,6 +906,21 @@ class Game {
     this.save.storySeen = true;
     storeSave(this.save);
     this.focusGameCanvas();
+  }
+
+  maybeShowKeyboardHint() {
+    if (this.save.keyboardHintSeen) return;
+    const prefersTouch = ("maxTouchPoints" in navigator && navigator.maxTouchPoints > 1) ||
+      /android|iphone|ipad|ipod/i.test(navigator.userAgent);
+    const narrow = window.matchMedia("(max-width: 820px)").matches;
+    if (!(prefersTouch || narrow)) return;
+    this.keyboardHintModal?.classList.remove("hidden");
+  }
+
+  dismissKeyboardHint() {
+    this.keyboardHintModal?.classList.add("hidden");
+    this.save.keyboardHintSeen = true;
+    storeSave(this.save);
   }
 
   storeAndRefresh() {
