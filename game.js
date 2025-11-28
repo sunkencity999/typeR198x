@@ -1023,7 +1023,9 @@ class Game {
             target,
             bonus,
             level: completedLevel,
-            bossName: LEVELS[this.levelIndex].boss.name
+            bossName: LEVELS[this.levelIndex].boss.name,
+            levelIndex: this.levelIndex,
+            nextLevelIndex: target === "level" ? Math.min(this.levelIndex + 1, 9) : null
           };
           this.startBossFinale(centerX, centerY);
         }
@@ -1223,6 +1225,32 @@ class Game {
     this.lastSaveAt = t;
 
     if (this.mode === "menu" || this.mode === "victory" || this.mode === "gameOver") return;
+
+    if (this.bossClear) {
+      if (this.bossClear.target === "victory") {
+        this.save.run = null;
+        storeSave(this.save);
+        return;
+      }
+      const nextIndex = clamp(this.bossClear.nextLevelIndex ?? (this.levelIndex + 1), 0, 9);
+      const run = {
+        levelIndex: nextIndex,
+        levelT: 0,
+        inBoss: false,
+        hp: this.player.hp,
+        shield: this.player.shield,
+        power: { ...this.power },
+        stats: { ...this.stats },
+        spawnAcc: 0,
+        powerAcc: 0,
+        minionAcc: 0,
+        hazardAcc: 0,
+        shipId: this.player.shipId || this.getSelectedShipId()
+      };
+      this.save.run = run;
+      storeSave(this.save);
+      return;
+    }
 
     const run = {
       levelIndex: this.levelIndex,
