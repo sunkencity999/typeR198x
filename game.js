@@ -53,6 +53,19 @@ const EXPLOSION_SETS = {
   large: { frames: [11, 12, 14, 15, 17, 19, 20], scale: 1.15, frameTime: 0.075 }
 };
 
+const BOSS_ARTS = [
+  { level: 1, src: "./assets/boss_ships/firstlevelBoss.png" },
+  { level: 2, src: "./assets/boss_ships/secondlevelboss.png" },
+  { level: 3, src: "./assets/boss_ships/thirdlevelboss.png" },
+  { level: 4, src: "./assets/boss_ships/fourthevelboss.png" },
+  { level: 5, src: "./assets/boss_ships/fifthlevelboss.png" },
+  { level: 6, src: "./assets/boss_ships/sixthlevelboss.png" },
+  { level: 7, src: "./assets/boss_ships/seventhlevelboss.png" },
+  { level: 8, src: "./assets/boss_ships/eigthlevelboss.png" },
+  { level: 9, src: "./assets/boss_ships/ninthlevelboss.png" },
+  { level: 10, src: "./assets/boss_ships/10thlevelboss.png" }
+];
+
 const SHIP_CONFIGS = {
   coconut: {
     id: "coconut",
@@ -354,7 +367,7 @@ class Particle {
 }
 
 class Boss {
-  constructor({ name, segments }) {
+  constructor({ name, segments, artLevel }) {
     this.kind = "boss";
     this.name = name;
     this.segments = segments.map(s => s.toLowerCase());
@@ -366,6 +379,7 @@ class Boss {
     this.phaseT = 0;
     this.flash = 0;
     this.alive = true;
+    this.artLevel = artLevel;
   }
   get segment() { return this.segments[this.segmentIndex] || null; }
   get remaining() {
@@ -485,6 +499,14 @@ class Game {
       this.themeImages[theme.id] = { bg, fg };
     });
 
+    this.bossArtImages = {};
+    BOSS_ARTS.forEach((art) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.src = art.src;
+      this.bossArtImages[art.level] = img;
+    });
+
     // Save
     this.save = loadSave();
     this.applySettings();
@@ -494,6 +516,7 @@ class Game {
     this.levelIndex = 0;
     this.levelT = 0;
     this.inBoss = false;
+    this.bossClear = null;
 
     this.player = {
       x: 160,
@@ -810,6 +833,7 @@ class Game {
     this.parallax.bgOffset = 0;
     this.parallax.fgOffset = 0;
 
+    this.bossClear = null;
     this.enemies.length = 0;
     this.powerups.length = 0;
     this.particles.length = 0;
@@ -911,11 +935,16 @@ class Game {
     const cfg = LEVELS[this.levelIndex];
     this.inBoss = true;
     this.lock = null;
+    this.bossClear = null;
 
     this.enemies.length = 0;
     this.powerups.length = 0;
 
-    this.boss = new Boss({ name: cfg.boss.name, segments: cfg.boss.segments });
+    this.boss = new Boss({
+      name: cfg.boss.name,
+      segments: cfg.boss.segments,
+      artLevel: cfg.level
+    });
     this.ui.bossBar.classList.remove("hidden");
     this.ui.bossName.textContent = cfg.boss.name;
     this.ui.bossSegment.textContent = "";
@@ -931,6 +960,7 @@ class Game {
 
   // ------------------------- Typing -------------------------
   handleTyped(ch) {
+    if (this.bossClear) return;
     this.stats.total++;
 
     // Boss priority: if inBoss, we type against boss (lock implied).
@@ -974,12 +1004,14 @@ class Game {
           // bonus
           const bonus = 2500 + completedLevel * 450;
           this.stats.score += bonus;
-
-          if (this.levelIndex >= 9) {
-            this.onVictory();
-          } else {
-            this.onLevelComplete(bonus);
-          }
+          const target = (this.levelIndex >= 9) ? "victory" : "level";
+          this.bossClear = {
+            t: 0,
+            target,
+            bonus,
+            level: completedLevel,
+            bossName: LEVELS[this.levelIndex].boss.name
+          };
         }
       } else {
         this.onWrongKey();
@@ -1232,7 +1264,9 @@ class Game {
     this.player.shield = Math.max(0, this.player.shield - dt);
 
     // Spawning
-    if (!this.inBoss) {
+    const celebrating = !!this.bossClear;
+
+    if (!this.inBoss && !celebrating) {
       this.spawnAcc += dt * cfg.spawnRate * (this.power.rapid > 0 ? 1.10 : 1.0);
       while (this.spawnAcc >= 1) { this.spawnAcc -= 1; this.spawnEnemy(); }
 
@@ -1244,7 +1278,7 @@ class Game {
       if (this.levelT >= cfg.duration) {
         this.beginBossFight();
       }
-    } else {
+    } else if (this.inBoss) {
       // Boss: minions and hazards
       if (cfg.boss.minionRate > 0) {
         this.minionAcc += dt * cfg.boss.minionRate;
@@ -1317,6 +1351,16 @@ class Game {
 
     // HUD
     this.updateHUD();
+
+    if (this.bossClear) {
+      this.bossClear.t += dt;
+      if (this.bossClear.t >= 2.6) {
+        const info = this.bossClear;
+        this.bossClear = null;
+        if (info.target === "victory") this.onVictory();
+        else this.onLevelComplete(info.bonus);
+      }
+    }
   }
 
   updateHUD() {
@@ -1702,6 +1746,18 @@ class Game {
     const h = 190;
 
     ctx.save();
+
+    const art = this.getBossArtForLevel(boss.artLevel);
+    if (art && art.complete && art.naturalWidth > 0) {
+      const maxH = this.h * 0.65;
+      const scale = Math.min(maxH / art.naturalHeight, 0.7);
+      const artH = art.naturalHeight * scale;
+      const artW = art.naturalWidth * scale;
+      const drawX = x - artW * 0.35;
+      const drawY = y - artH * 0.45;
+      ctx.drawImage(art, drawX, drawY, artW, artH);
+    }
+
     ctx.shadowBlur = 26;
     ctx.shadowColor = "rgba(255,57,209,0.20)";
     ctx.fillStyle = "rgba(10,16,32,0.78)";
@@ -1817,6 +1873,44 @@ class Game {
     ctx.fillStyle = g;
     ctx.fillRect(0,0,this.w,this.h);
     ctx.restore();
+
+    if (this.bossClear) {
+      ctx.save();
+      const t = this.bossClear.t || 0;
+      const alpha = clamp(0.35 + t * 0.25, 0, 0.9);
+      ctx.fillStyle = `rgba(9,12,24,${alpha * 0.6})`;
+      ctx.fillRect(0, this.h * 0.35, this.w, this.h * 0.3);
+
+      const art = this.getBossArtForLevel(this.bossClear.level);
+      if (art && art.complete && art.naturalWidth > 0) {
+        const targetH = this.h * 0.5;
+        const scale = targetH / art.naturalHeight;
+        const targetW = art.naturalWidth * scale;
+        ctx.drawImage(art, (this.w - targetW) / 2, this.h * 0.25, targetW, targetH);
+      }
+
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.font = "bold 64px 'Orbitron', 'Segoe UI', sans-serif";
+      ctx.fillStyle = "rgba(255, 247, 216, 0.95)";
+      ctx.strokeStyle = "rgba(255,120,80,0.85)";
+      ctx.lineWidth = 3;
+      const cx = this.w / 2;
+      const cy = this.h * 0.5 - 10;
+      ctx.strokeText("BOSS DEFEATED", cx, cy);
+      ctx.fillText("BOSS DEFEATED", cx, cy);
+
+      ctx.font = "24px 'Segoe UI', sans-serif";
+      ctx.fillStyle = "rgba(168,255,120,0.92)";
+      const sub = this.bossClear.target === "victory" ? "Congratulations!" : `${this.bossClear.bossName} neutralized.`;
+      ctx.fillText(sub, cx, cy + 60);
+      ctx.restore();
+    }
+  }
+
+  getBossArtForLevel(level) {
+    if (!level) return null;
+    return this.bossArtImages?.[level] || null;
   }
 
   render(dt) {
