@@ -56,6 +56,34 @@ const BOSS_ARTS = [
   { level: 10, src: "./assets/boss_ships/10thlevelboss.png" }
 ];
 
+function getVictoryScript() {
+  return [
+    { speaker: "SYSTEM // TYPEGRID", text: "SIGNAL RESTORED…" },
+    { speaker: "SYSTEM // TYPEGRID", text: "WORDSTORM COLLAPSING…" },
+    { speaker: "SYSTEM // TYPEGRID", text: "CHECKSUM: CLEAN" },
+    { speaker: "PILOT (YOU)", text: "…Did I just spell-check a god?" },
+    { speaker: "TYPEGRID", text: "CONFIRMATION: YES. NICE WORK, PILOT." },
+    { speaker: "ELECTROMANCER EMPRESS", text: "Impossible. My message was perfect. My syntax was law." },
+    { speaker: "PILOT (YOU)", text: "Your syntax was… aggressive." },
+    { speaker: "ELECTROMANCER EMPRESS", text: "You think you won because you typed faster? No— You won because you typed clean." },
+    { speaker: "TYPEGRID", text: "TRANSLATION: ‘ACCURACY > ATTITUDE.’" },
+    { speaker: "PILOT (YOU)", text: "Yeah. Turns out the universe prefers correct punctuation." },
+    { speaker: "ELECTROMANCER EMPRESS", text: "I only wanted to be heard. To become the headline. To fill every screen… with me." },
+    { speaker: "PILOT (YOU)", text: "The city’s got plenty of screens. Just… maybe don’t annex reality next time." },
+    { speaker: "ELECTROMANCER EMPRESS", text: "…Accepted." },
+    { speaker: "TYPEGRID", text: "HOSTILE MESSAGE DISARMED. EXECUTING PATCH: ‘HUMILITY v1.0’" },
+    { speaker: "PILOT (YOU)", text: "That’s a patch note I’d frame." },
+    { speaker: "TYPEGRID", text: "SECTOR 10 CLEARED. TYPEGRID ONLINE. SKYWAYS SAFE." },
+    { speaker: "CONTROL (RADIO)", text: "Keystream—this is Control. The billboards stopped screaming. The monorails stopped rhyming. The arcade cabinets… stopped judging us." },
+    { speaker: "PILOT (YOU)", text: "Tell them I’m available for… proofreading." },
+    { speaker: "CONTROL (RADIO)", text: "Pilot… you saved the city. We’re uploading your score to every screen from here to forever." },
+    { speaker: "TYPEGRID", text: "HIGH SCORE CONFIRMED. LEGEND STATUS GRANTED. PLEASE DO NOT LET IT GO TO YOUR HEAD." },
+    { speaker: "PILOT (YOU)", text: "No promises." },
+    { speaker: "SYSTEM // TYPEGRID", text: "ONE LAST PROMPT: ‘PRESS START TO PLAY AGAIN.’" },
+    { speaker: "PILOT (YOU)", text: "…Okay. One more run." }
+  ];
+}
+
 const SHIP_CONFIGS = {
   coconut: {
     id: "coconut",
