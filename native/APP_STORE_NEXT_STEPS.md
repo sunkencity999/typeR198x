@@ -6,6 +6,7 @@ The Swift scaffolding is in place. Follow these concrete steps to finish the App
 
 1. `bash native/sync-web.sh`
 2. In each Xcode project, remove the previous `www` folder reference (if any) and add the freshly synced `native/shared/www` as a folder reference set to "Create folder references".
+3. Copy the generated icons from `assets/icons/generated/ios` and `assets/icons/generated/macos` into your `.xcassets` catalogs (see sections below).
 
 ## 2. Configure the iOS/iPadOS Project
 
@@ -15,7 +16,7 @@ The Swift scaffolding is in place. Follow these concrete steps to finish the App
 4. Turn on Mac Catalyst support if desired.
 5. Set the deployment targets (iPadOS 16+, iOS 16+ optional) and restrict orientations to Landscape.
 6. Provide:
-   - App icons (1024, 180, 167, 152, etc.).
+   - App icons using the pre-generated PNGs in `assets/icons/generated/ios` (drag them into an `AppIcon` set).
    - Launch Screen storyboard or SwiftUI view that mirrors the neon splash.
    - Privacy manifest with `NSPrivacyCollectedDataTypes` = empty (no tracking).
 7. Enable `App Sandbox` (default) and disable background modes you don’t need.
@@ -30,7 +31,7 @@ The Swift scaffolding is in place. Follow these concrete steps to finish the App
 4. Enable App Sandbox with:
    - `com.apple.security.network.client`
    - `com.apple.security.device.audio-input` (optional if you plan to capture mic)
-5. Provide macOS icon set (512, 256, 128, etc.).
+5. Provide macOS icon set by dragging the PNGs in `assets/icons/generated/macos` into an `AppIcon` asset.
 6. Hardened Runtime on, disable automatic termination, support fullscreen.
 7. Test on Intel (Rosetta) + Apple Silicon (native) if possible.
 
