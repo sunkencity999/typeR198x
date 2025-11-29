@@ -5,6 +5,10 @@
 //   await sfx.unlock(); // call this on first user gesture (Start button)
 //   sfx.laser(); sfx.hit(); sfx.explosion(); sfx.powerup(); sfx.error(); sfx.bossSiren();
 
+const LASER_SRC = "./assets/audio/laser.wav";
+const AUDIO_VERSION = "2025-11-29";
+const versioned = (src) => `${src}?v=${AUDIO_VERSION}`;
+
 export class SFX {
   constructor() {
     this.ctx = null;
@@ -100,7 +104,7 @@ export class SFX {
   async _loadLaser() {
     if (!this.ctx || this.laserBuffer) return;
     try {
-      const resp = await fetch("./assets/audio/laser.wav");
+      const resp = await fetch(versioned(LASER_SRC));
       const buf = await resp.arrayBuffer();
       this.laserBuffer = await this.ctx.decodeAudioData(buf);
     } catch (err) {
@@ -167,7 +171,7 @@ export class SFX {
       const src = this.ctx.createBufferSource();
       src.buffer = this.laserBuffer;
       const gain = this.ctx.createGain();
-      gain.gain.value = 0.8;
+      gain.gain.value = 1.2;
       src.connect(gain);
       gain.connect(this.master);
       src.start();

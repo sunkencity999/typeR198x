@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Type-R 198X Privacy Policy</title>
+  <link rel="stylesheet" href="./style.css" />
+  <style>
+    body {
+      background: #05070b;
+      color: #f4f4f4;
+      font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
+      padding: 2rem 1rem 4rem;
+      line-height: 1.6;
+    }
+    .privacy-wrapper {
+      max-width: 900px;
+      margin: 0 auto;
+      background: rgba(8, 12, 20, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      padding: 2.5rem;
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+    }
+    h1, h2, h3 {
+      font-family: "Space Grotesk", "Inter", sans-serif;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #f15be0;
+    }
+    a {
+      color: #31d9ff;
+    }
+    ul {
+      padding-left: 1.4rem;
+    }
+    .meta {
+      font-size: 0.9rem;
+      color: #9ba6c1;
+    }
+  </style>
+</head>
+<body>
+  <main class="privacy-wrapper">
+    <h1>Privacy Policy</h1>
+    <p class="meta">Effective date: November 29, 2025</p>
+
+    <p>Type-R 198X is a single-player typing shooter published by Christopher Bradford. This policy describes what data the web build, iOS/iPadOS build (including Mac Catalyst), and macOS build collect and how that data is used.</p>
+
+    <h2>What We Collect</h2>
+    <ul>
+      <li><strong>Gameplay preferences stored locally.</strong> Pilot name, ship selection, unlocked levels, and settings (mute/CRT toggles) are saved inside the browser or the embedded WKWebView via <code>localStorage</code>. The data never leaves your device.</li>
+      <li><strong>Run progress cache.</strong> If you pause mid-run, the game stores your current stats in the same local storage namespace (<code>typesmup198x.save.v1</code>) so you can continue later.</li>
+      <li><strong>No personal identifiers.</strong> We do not collect email addresses, analytics IDs, IP-based telemetry, or crash reports.</li>
+    </ul>
+
+    <h2>What We Do Not Collect</h2>
+    <ul>
+      <li>No account creation or authentication.</li>
+      <li>No network calls to third-party APIs while you play.</li>
+      <li>No advertising SDKs, attribution trackers, or fingerprinting techniques.</li>
+    </ul>
+
+    <h2>Offline-First Design</h2>
+    <p>The native apps bundle the entire web experience and run it offline through <code>WKWebView</code> (iOS/iPadOS) or <code>WKWebView</code> on macOS. All assets and scripts ship inside the binary. An internet connection is only required for initial download, TestFlight updates, or when you explicitly visit <a href="https://typer198x.com" target="_blank" rel="noopener">typer198x.com</a>.</p>
+
+    <h2>Your Controls</h2>
+    <ul>
+      <li>You can reset all locally stored data from the in-game Options menu ("Reset Save"), which clears the <code>localStorage</code> key.</li>
+      <li>You may also delete the app or clear your browser storage to remove all data.</li>
+    </ul>
+
+    <h2>Children</h2>
+    <p>The game is rated for ages 9+ (mild fantasy violence). We intentionally avoid collecting data from anyone, including children under 13.</p>
+
+    <h2>Contact</h2>
+    <p>Questions about privacy can be sent to <a href="mailto:contact@typer198x.com">contact@typer198x.com</a>.</p>
+
+    <p class="meta">Last updated: November 29, 2025</p>
+  </main>
+</body>
+</html>

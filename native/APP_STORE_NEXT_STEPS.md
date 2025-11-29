@@ -17,7 +17,7 @@ The Swift scaffolding is in place. Follow these concrete steps to finish the App
 5. Set the deployment targets (iPadOS 16+, iOS 16+ optional) and restrict orientations to Landscape.
 6. Provide:
    - App icons using the pre-generated PNGs in `assets/icons/generated/ios` (drag them into an `AppIcon` set).
-   - Launch Screen storyboard or SwiftUI view that mirrors the neon splash.
+   - Launch Screen: either import the provided SwiftUI view (`native/ios/LaunchScreenView.swift`) and set it as the Launch Screen view in the General tab, or copy `native/LaunchScreen.storyboard` if you prefer storyboard-based splash screens. Remember to add `assets/icons/launch_logo.png` to your asset catalog as `LaunchLogo` so the view can display it.
    - Privacy manifest with `NSPrivacyCollectedDataTypes` = empty (no tracking).
 7. Enable `App Sandbox` (default) and disable background modes you don’t need.
 8. Sign with your Apple Developer Team + bundle ID `com.yourteam.typer198x` (adjust accordingly).
