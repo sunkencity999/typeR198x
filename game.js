@@ -115,6 +115,32 @@ const SHIP_CONFIGS = {
 };
 
 const getShipConfig = (id) => SHIP_CONFIGS[id] || SHIP_CONFIGS.coconut;
+
+function getResumeLevelIndex(save) {
+  if (save.run) {
+    return clamp(save.run.levelIndex ?? 0, 0, 9);
+  }
+  const unlocked = clamp((save.lastUnlockedLevel || 1) - 1, 0, 9);
+  return unlocked > 0 ? unlocked : null;
+}
+
+function buildResumeRun(levelIndex, maxHp, shipId) {
+  return {
+    levelIndex: clamp(levelIndex, 0, 9),
+    levelT: 0,
+    inBoss: false,
+    hp: maxHp,
+    shield: 0,
+    power: { spread: 0, pierce: 0, rapid: 0, multiplier: 0 },
+    stats: { score: 0, combo: 0, mult: 1, correct: 0, total: 0 },
+    spawnAcc: 0,
+    powerAcc: 0,
+    minionAcc: 0,
+    hazardAcc: 0,
+    shipId
+  };
+}
+
 const PARALLAX_THEMES = [
   {
     id: "first",
@@ -763,9 +789,17 @@ class Game {
       if (this.save.run) {
         this.continueRun();
         this.focusGameCanvas();
-      } else {
-        this.handleLaunchRequest();
+        return;
       }
+      const resumeIndex = getResumeLevelIndex(this.save);
+      if (resumeIndex !== null) {
+        this.save.run = buildResumeRun(resumeIndex, this.player.maxHp, this.getSelectedShipId());
+        storeSave(this.save);
+        this.continueRun();
+        this.focusGameCanvas();
+        return;
+      }
+      this.handleLaunchRequest();
     });
 
     this.btnResetSave.addEventListener("click", () => {
@@ -904,7 +938,10 @@ class Game {
     this.ui.playerName.value = this.save.playerName || "";
     this.ui.statHigh.textContent = formatInt(this.save.highScore || 0);
     this.ui.statUnlocked.textContent = `${this.save.lastUnlockedLevel || 1}/10`;
-    this.btnContinue.disabled = !this.save.run;
+    const resumeIndex = getResumeLevelIndex(this.save);
+    const canContinue = resumeIndex !== null;
+    this.btnContinue.disabled = !canContinue;
+    this.btnContinue.classList.toggle("disabled", !canContinue);
     const shipId = this.getSelectedShipId();
     this.shipInputs.forEach(input => {
       input.checked = (input.value === shipId);
@@ -982,7 +1019,8 @@ class Game {
     if (!r) return this.startNewRun();
     this.levelIndex = clamp(r.levelIndex ?? 0, 0, 9);
     this.stats = { ...this.stats, ...(r.stats || {}) };
-    this.player.hp = clamp(r.hp ?? this.player.maxHp, 0, this.player.maxHp);
+    const restoredHp = clamp(r.hp ?? this.player.maxHp, 0, this.player.maxHp);
+    this.player.hp = restoredHp > 0 ? restoredHp : this.player.maxHp;
     this.player.shield = r.shield ?? 0;
     this.power = { ...this.power, ...(r.power || {}) };
     this.setPlayerShip(r.shipId || this.getSelectedShipId());
@@ -1369,7 +1407,12 @@ class Game {
     const acc = this.getAccuracyPct();
     this.ui.gameOverText.textContent = `Final score: ${formatInt(this.stats.score)} • Accuracy: ${acc}%`;
     this.commitHighScore();
-    this.save.run = null; // end run
+    const resumeIndex = getResumeLevelIndex(this.save);
+    if (resumeIndex !== null) {
+      this.save.run = buildResumeRun(resumeIndex, this.player.maxHp, this.getSelectedShipId());
+    } else {
+      this.save.run = null;
+    }
     storeSave(this.save);
   }
 
@@ -1407,11 +1450,12 @@ class Game {
         return;
       }
       const nextIndex = clamp(this.bossClear.nextLevelIndex ?? (this.levelIndex + 1), 0, 9);
+      const safeHp = clamp(Math.round(this.player.hp ?? this.player.maxHp), 1, this.player.maxHp);
       const run = {
         levelIndex: nextIndex,
         levelT: 0,
         inBoss: false,
-        hp: this.player.hp,
+        hp: safeHp,
         shield: this.player.shield,
         power: { ...this.power },
         stats: { ...this.stats },
@@ -1426,11 +1470,12 @@ class Game {
       return;
     }
 
+    const safeHp = clamp(Math.round(this.player.hp ?? this.player.maxHp), 1, this.player.maxHp);
     const run = {
       levelIndex: this.levelIndex,
       levelT: this.levelT,
       inBoss: this.inBoss,
-      hp: this.player.hp,
+      hp: safeHp,
       shield: this.player.shield,
       power: { ...this.power },
       stats: { ...this.stats },
