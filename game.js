@@ -7,6 +7,13 @@ const rand = (a, b) => a + Math.random() * (b - a);
 const randi = (a, b) => Math.floor(rand(a, b + 1));
 const choice = (arr) => arr[randi(0, arr.length - 1)];
 
+const ASSET_VERSION = "v20251129a";
+const withAssetVersion = (path) => {
+  if (!path) return path;
+  const sep = path.includes("?") ? "&" : "?";
+  return `${path}${sep}${ASSET_VERSION}`;
+};
+
 const EXPLOSION_SHEET = {
   src: "./assets/explosions/explosions.png",
   width: 2048,
@@ -206,17 +213,28 @@ function storeSave(save) {
 // ----------------------------- Content -----------------------------
 const WORDS_EASY = [
   "neon","arcade","laser","shift","type","pilot","score","combo","spark","wave","nova","drift","glow","bolt","trail",
-  "vita","kana","pixel","grid","chrome","vapor","retro","japan","tokyo","speed","boost","hype","dash","flame"
+  "vita","kana","pixel","grid","chrome","vapor","retro","japan","tokyo","speed","boost","hype","dash","flame",
+  "pulse","turbo","synth","glyph","flux","radar","orbit","phase","metro","rhythm","drive","glide","storm","blitz","trace",
+  "flash","macro","byte","logic","gloss","cyber","tempo","sparkle","vector","arc","beam","ionic","jolt","zeta","strobe",
+  "nimbus","hover","zen","flow","flare","vibe","silk","digi","lumen","vivid","aero","retrobit","plasma","rocket","saber",
+  "chrono","booster","neutrino","pixelate","analog","scroll","novae","lazer","analog","mecha","sparkplug","polystar","warp","glitch"
 ];
 
 const WORDS_MED = [
   "afterburn","synthesis","hologram","cyberline","starlight","turbowave","polychrome","flicker","overdrive","nighttrain",
-  "skybridge","magnetic","chromatic","vectorized","hyperjump","nanoforge","rainmaker","phasegate","sideload","monorail"
+  "skybridge","magnetic","chromatic","vectorized","hyperjump","nanoforge","rainmaker","phasegate","sideload","monorail",
+  "neonforge","photonic","datastream","holomatrix","retroshock","geostorm","ionlanes","spectralink","quantaflux","metadrift",
+  "midnight","laserbank","typhoon","palindrome","dreamline","tachyon","citylight","afterglow","retrograde","hyperlane",
+  "dataglide","omnivoid","nanoloom","stormrail","polyverse","synthwave","neutrify","skyforge","holopunk","bytecycle"
 ];
 
 const WORDS_HARD = [
   "interference","electrostatic","parallaxing","synchronizer","microprocessor","hyperspectral","transcontinental",
-  "neuroplastic","deterministic","antigravity","spectrograph","electromancer","autocorrelation","metachronistic"
+  "neuroplastic","deterministic","antigravity","spectrograph","electromancer","autocorrelation","metachronistic",
+  "ultrachromatic","dimensional","polyharmonics","omnidirectional","chronoelastic","retrotransmission","technocratic",
+  "phosphorescent","vectorization","megalopolitan","interstellar","spectrophonic","metallurgical","hypervectorial",
+  "telekinetics","chronostatic","nanofabrication","bioelectric","vibrosensing","quantumspliced","aerolithics",
+  "transnebulous","astrocartography","thermodynamic","luminescence","neurotransmitter","tachyometric","photogrammetric"
 ];
 
 // Boss segments per level (stylized phrases; avoid punctuation that is annoying to type)
@@ -238,20 +256,31 @@ const BOSS_WORD_POOL = [
   "matrix","gamma","cypher","shadow","omega","binary","cadence","volt",
   "nova","spirit","core","zenith","rift","cipher","delta","glyph",
   "static","echo","sable","flux","lumen","aether","cinder","pulse",
-  "aurora","glitch","cursor","plinth","bastion","spire","ember","auric"
+  "aurora","glitch","cursor","plinth","bastion","spire","ember","auric",
+  "radiant","specter","lattice","ionstorm","solstice","parallax","carbon","crystal",
+  "hyperion","omega","solenoid","paladin","cathedral","symphony","monolith","oblivion",
+  "zenithal","transistor","oscillation","helix","redshift","sunflare","midnight","membrane"
 ];
+
+const shuffle = (arr) => {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+};
 
 function buildBossSegments(level) {
   const base = (BOSS_SEGMENT_BASE[level - 1] || ["neon", "boss"]).map(w => w.toLowerCase());
   const needed = (base.length * 2) + Math.max(0, (level - 1) * 5);
-  const segments = [...base];
-  let cursor = level * 3;
-  while (segments.length < needed) {
-    const word = BOSS_WORD_POOL[cursor % BOSS_WORD_POOL.length] || "nova";
-    segments.push(word.toLowerCase());
-    cursor += 4;
+  const extraNeeded = Math.max(0, needed - base.length);
+  const pool = shuffle([...BOSS_WORD_POOL]);
+  const extras = [];
+  while (extras.length < extraNeeded) {
+    if (pool.length === 0) shuffle(pool);
+    extras.push((pool.shift() || "nova").toLowerCase());
   }
-  return segments;
+  return [...base, ...extras];
 }
 
 // ----------------------------- Level Config -----------------------------
@@ -277,7 +306,6 @@ const LEVELS = Array.from({ length: 10 }, (_, i) => {
     duration,
     boss: {
       name: bossName,
-      segments: buildBossSegments(level),
       minionRate: lerp(0.35, 0.75, i / 9),
       hazardRate: lerp(0.0, 0.55, i / 9) // starting from level 1 no hazards
     }
@@ -359,6 +387,8 @@ class ExplosionSprite {
   }
   update(dt) {
     if (this.done) return;
+    const ready = this.sheet && this.sheet.complete && this.sheet.naturalWidth > 0;
+    if (!ready) return;
     this.frameTime += dt;
     while (this.frameTime >= this.perFrame) {
       this.frameTime -= this.perFrame;
@@ -545,7 +575,7 @@ class Game {
       this.registerAsset(img, () => {
         this.shipImages[id] = this.prepareShipSprite(img);
       });
-      img.src = cfg.src;
+      img.src = withAssetVersion(cfg.src);
       this.shipImages[id] = img;
     });
 
@@ -554,11 +584,11 @@ class Game {
       const bg = new Image();
       bg.crossOrigin = "anonymous";
        this.registerAsset(bg);
-      bg.src = theme.bg;
+      bg.src = withAssetVersion(theme.bg);
       const fg = new Image();
       fg.crossOrigin = "anonymous";
        this.registerAsset(fg);
-      fg.src = theme.fg;
+      fg.src = withAssetVersion(theme.fg);
       this.themeImages[theme.id] = { bg, fg };
     });
 
@@ -567,7 +597,7 @@ class Game {
       const img = new Image();
       img.crossOrigin = "anonymous";
       this.registerAsset(img);
-      img.src = art.src;
+      img.src = withAssetVersion(art.src);
       this.bossArtImages[art.level] = img;
     });
 
@@ -587,8 +617,8 @@ class Game {
     this.player = {
       x: 160,
       y: 360,
-      hp: 100,
-      maxHp: 100,
+      hp: 200,
+      maxHp: 200,
       shield: 0, // seconds
       shipId: this.save.selectedShip || "coconut"
     };
@@ -618,6 +648,7 @@ class Game {
     this.lock = null; // { kind: "enemy"|"powerup"|"boss", id: objectRef }
     this.shake = 0;
     this.flash = 0;
+    this.damagePulse = 0;
 
     // background parallax
     this.stars = this.makeStars(180);
@@ -629,7 +660,7 @@ class Game {
     this.explosionSheet = new Image();
     this.explosionSheet.crossOrigin = "anonymous";
     this.registerAsset(this.explosionSheet);
-    this.explosionSheet.src = EXPLOSION_SHEET.src;
+    this.explosionSheet.src = withAssetVersion(EXPLOSION_SHEET.src);
 
     // spawn timers
     this.spawnAcc = 0;
@@ -1082,7 +1113,7 @@ class Game {
 
     this.boss = new Boss({
       name: cfg.boss.name,
-      segments: cfg.boss.segments,
+      segments: buildBossSegments(cfg.level),
       artLevel: cfg.level
     });
     this.ui.bossBar.classList.remove("hidden");
@@ -1292,10 +1323,12 @@ class Game {
   }
 
   collectPowerup(p) {
+    if (!p.alive) return;
     p.alive = false;
     p.locked = false;
     this.sfx.powerup();
     this.addExplosion(p.x, p.y, 22);
+    this.addExplosionSprite(p.x, p.y, "small");
     this.stats.score += 120 * this.stats.mult;
 
     const seconds = 9;
@@ -1315,8 +1348,10 @@ class Game {
       return;
     }
     this.player.hp -= amount;
-    this.screenShake(8);
-    this.flash = 0.14;
+    this.screenShake(12);
+    this.flash = Math.max(this.flash, 0.35);
+    this.damagePulse = 1;
+    this.sfx.hit();
     if (this.player.hp <= 0) {
       this.player.hp = 0;
       this.onGameOver();
@@ -1436,6 +1471,7 @@ class Game {
     }
     this.flash = Math.max(0, this.flash - dt * 3);
     this.shake = Math.max(0, this.shake - dt * 12);
+    this.damagePulse = Math.max(0, this.damagePulse - dt * 1.8);
 
     // powerups durations
     this.power.spread = Math.max(0, this.power.spread - dt);
@@ -1678,6 +1714,7 @@ class Game {
     switch (burst.kind) {
       case "shock":
         this.addExplosion(ox + rand(-40, 40), oy + rand(-40, 40), 140);
+        this.addExplosionSprite(ox + rand(-40, 40), oy + rand(-40, 40), "large");
         this.screenShake(6);
         this.sfx.explosion();
         break;
@@ -2111,6 +2148,14 @@ class Game {
       const a = clamp(this.flash * 3, 0, 0.18);
       ctx.save();
       ctx.fillStyle = `rgba(255,77,109,${a})`;
+      ctx.fillRect(0, 0, this.w, this.h);
+      ctx.restore();
+    }
+
+    if (this.damagePulse > 0) {
+      const a = clamp(this.damagePulse * 0.4, 0, 0.35);
+      ctx.save();
+      ctx.fillStyle = `rgba(255,0,34,${a})`;
       ctx.fillRect(0, 0, this.w, this.h);
       ctx.restore();
     }
