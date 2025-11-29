@@ -24,6 +24,7 @@ export class SFX {
     this.pendingTrack = null;
     this.musicLoaded = {};
     this.bigExplosionBuffer = null;
+    this.laserBuffer = null;
   }
 
   bossExplosion() {
@@ -54,7 +55,8 @@ export class SFX {
 
     await Promise.all([
       this._preloadMusic(),
-      this._loadBigExplosion()
+      this._loadBigExplosion(),
+      this._loadLaser()
     ]);
 
     if (this.ctx.state === "suspended") await this.ctx.resume();
@@ -92,6 +94,17 @@ export class SFX {
       this.bigExplosionBuffer = await this.ctx.decodeAudioData(buf);
     } catch (err) {
       console.warn("Failed to load big explosion sample", err);
+    }
+  }
+
+  async _loadLaser() {
+    if (!this.ctx || this.laserBuffer) return;
+    try {
+      const resp = await fetch("./assets/audio/laser.wav");
+      const buf = await resp.arrayBuffer();
+      this.laserBuffer = await this.ctx.decodeAudioData(buf);
+    } catch (err) {
+      console.warn("Failed to load laser sample", err);
     }
   }
 
@@ -150,27 +163,31 @@ export class SFX {
 
   laser() {
     if (!this.ctx || this.muted) return;
-    const t0 = this._now();
-
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    const filter = this.ctx.createBiquadFilter();
-
-    osc.type = "sawtooth";
-    filter.type = "highpass";
-    filter.frequency.setValueAtTime(900, t0);
-
-    osc.frequency.setValueAtTime(1400, t0);
-    osc.frequency.exponentialRampToValueAtTime(520, t0 + 0.08);
-
-    this._env(gain, t0, 0.003, 0.02, 0.20, 0.10);
-
-    osc.connect(filter);
-    filter.connect(gain);
-    gain.connect(this.master);
-
-    osc.start(t0);
-    osc.stop(t0 + 0.14);
+    if (this.laserBuffer) {
+      const src = this.ctx.createBufferSource();
+      src.buffer = this.laserBuffer;
+      const gain = this.ctx.createGain();
+      gain.gain.value = 0.8;
+      src.connect(gain);
+      gain.connect(this.master);
+      src.start();
+    } else {
+      const t0 = this._now();
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      const filter = this.ctx.createBiquadFilter();
+      osc.type = "sawtooth";
+      filter.type = "highpass";
+      filter.frequency.setValueAtTime(900, t0);
+      osc.frequency.setValueAtTime(1400, t0);
+      osc.frequency.exponentialRampToValueAtTime(520, t0 + 0.08);
+      this._env(gain, t0, 0.003, 0.02, 0.20, 0.10);
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.master);
+      osc.start(t0);
+      osc.stop(t0 + 0.14);
+    }
   }
 
   hit() {
