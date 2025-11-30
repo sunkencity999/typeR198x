@@ -7,7 +7,7 @@ const rand = (a, b) => a + Math.random() * (b - a);
 const randi = (a, b) => Math.floor(rand(a, b + 1));
 const choice = (arr) => arr[randi(0, arr.length - 1)];
 
-const ASSET_VERSION = "v20251129a";
+const ASSET_VERSION = "v20251130b";
 const withAssetVersion = (path) => {
   if (!path) return path;
   const sep = path.includes("?") ? "&" : "?";
