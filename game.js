@@ -194,6 +194,47 @@ const PARALLAX_THEMES = [
     bgSpeed: 22,
     fgSpeed: 62,
     fgHeight: 0.64
+  },
+  {
+    id: "sixth",
+    bg: "./assets/backgrounds/sixthlevelbg.png",
+    fg: "./assets/foregrounds/sixthlevelFG.png",
+    bgSpeed: 24,
+    fgSpeed: 66,
+    fgHeight: 0.66
+  },
+  {
+    id: "seventh",
+    bg: "./assets/backgrounds/seventhlevelbg.png",
+    fg: "./assets/foregrounds/seventhlevelFG.png",
+    bgSpeed: 25,
+    fgSpeed: 70,
+    fgHeight: 0.68
+  },
+  {
+    id: "eighth",
+    bg: "./assets/backgrounds/eighthlevelbg.png",
+    fg: "./assets/foregrounds/eighthlevelFG.png",
+    bgSpeed: 27,
+    fgSpeed: 74,
+    fgHeight: 0.7
+  },
+  {
+    id: "ninth",
+    bg: "./assets/backgrounds/ninthlevelbg.png",
+    fg: "./assets/foregrounds/ninthlevelFG.png",
+    bgSpeed: 28,
+    fgSpeed: 78,
+    fgHeight: 0.72
+  },
+  {
+    id: "tenth",
+    bg: "./assets/backgrounds/tenthlevelbg.png",
+    fg: "./assets/foregrounds/tenthlevelFG.png",
+    bgSpeed: 30,
+    fgSpeed: 82,
+    fgHeight: 0.74,
+    tileFg: false
   }
 ];
 const getThemeForLevel = (index) => {
@@ -1397,6 +1438,7 @@ class Game {
   }
 
   takeDamage(amount) {
+    if (this.bossClear) return;
     if (this.player.shield > 0) {
       this.player.shield = Math.max(0, this.player.shield - amount * 0.1);
       this.screenShake(4);
@@ -1595,7 +1637,7 @@ class Game {
       if (!en.alive) continue;
       en.update(dt);
       // If enemy reaches the player line, it damages.
-      if (en.x < this.player.x + 35) {
+      if (!celebrating && en.x < this.player.x + 35) {
         en.alive = false;
         this.takeDamage(12 + Math.min(12, en.text.length * 2));
         this.addExplosion(this.player.x + 40, en.y, 18);
