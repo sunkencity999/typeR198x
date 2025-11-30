@@ -23,6 +23,20 @@ struct WebGameView: UIViewRepresentable {
         configuration.limitsNavigationsToAppBoundDomains = true
         configuration.mediaTypesRequiringUserActionForPlayback = []
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
+        
+        // Enable file access for local modules
+        configuration.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
+
+        // Inject Error Handler
+        let errorScript = WKUserScript(source: """
+            window.onerror = function(msg, url, line, col, error) {
+                alert("JS Error: " + msg + "\\n" + url + ":" + line);
+            };
+            window.addEventListener('unhandledrejection', function(e) {
+                alert("JS Promise Rejection: " + e.reason);
+            });
+        """, injectionTime: .atDocumentStart, forMainFrameOnly: false)
+        configuration.userContentController.addUserScript(errorScript)
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
@@ -38,14 +52,18 @@ struct WebGameView: UIViewRepresentable {
 
     private func loadGame(into webView: WKWebView) {
         guard let resourceBase = Bundle.main.resourceURL?.appendingPathComponent("www", isDirectory: true) else {
+            print("Error: 'www' folder missing from bundle.")
             webView.loadHTMLString(Self.missingBundleHTML, baseURL: nil)
             return
         }
 
         let indexURL = resourceBase.appendingPathComponent("index.html")
+        print("Attempting to load: \(indexURL.path)")
+        
         if FileManager.default.fileExists(atPath: indexURL.path) {
             webView.loadFileURL(indexURL, allowingReadAccessTo: resourceBase)
         } else {
+            print("Error: File not found at \(indexURL.path)")
             webView.loadHTMLString(Self.missingBundleHTML, baseURL: nil)
         }
     }

@@ -22,6 +22,22 @@ struct WebGameView: NSViewRepresentable {
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
         configuration.mediaTypesRequiringUserActionForPlayback = []
         configuration.suppressesIncrementalRendering = false
+        
+        // Enable file access for local modules/assets
+        configuration.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
+        // Enable inspector
+        configuration.preferences.setValue(true, forKey: "developerExtrasEnabled")
+
+        // Inject Error Handler
+        let errorScript = WKUserScript(source: """
+            window.onerror = function(msg, url, line, col, error) {
+                alert("JS Error: " + msg + "\\n" + url + ":" + line);
+            };
+            window.addEventListener('unhandledrejection', function(e) {
+                alert("JS Promise Rejection: " + e.reason);
+            });
+        """, injectionTime: .atDocumentStart, forMainFrameOnly: false)
+        configuration.userContentController.addUserScript(errorScript)
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
@@ -37,14 +53,18 @@ struct WebGameView: NSViewRepresentable {
 
     private func loadGame(into webView: WKWebView) {
         guard let baseURL = Bundle.main.resourceURL?.appendingPathComponent("www", isDirectory: true) else {
+            print("Error: Could not find 'www' folder in Bundle Resources.")
             webView.loadHTMLString(Self.missingBundleHTML, baseURL: nil)
             return
         }
 
         let indexURL = baseURL.appendingPathComponent("index.html")
+        print("Loading game from: \(indexURL.path)")
+        
         if FileManager.default.fileExists(atPath: indexURL.path) {
             webView.loadFileURL(indexURL, allowingReadAccessTo: baseURL)
         } else {
+            print("Error: index.html not found at \(indexURL.path)")
             webView.loadHTMLString(Self.missingBundleHTML, baseURL: nil)
         }
     }
