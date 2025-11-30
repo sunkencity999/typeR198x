@@ -438,13 +438,7 @@
 			path = assets;
 			sourceTree = "<group>";
 		};
-		39E48A0F2EDAA3CD0068E00A /* www */ = {
-			isa = PBXFileReference;
-			lastKnownFileType = folder;
-			name = www;
-			path = ../../shared/www;
-			sourceTree = SOURCE_ROOT;
-		};
+		39E48A0F2EDAA3CD0068E00A /* www */ = {isa = PBXFileReference; lastKnownFileType = folder; path = www; sourceTree = "<group>"; };
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */

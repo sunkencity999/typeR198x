@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="220" viewBox="0 0 820 220">
+  <defs>
+    <linearGradient id="g" x1="0" x2="1">
+      <stop offset="0" stop-color="#39F5FF"/>
+      <stop offset="0.55" stop-color="#FF39D1"/>
+      <stop offset="1" stop-color="#A8FF3A"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect x="12" y="16" width="796" height="188" rx="28" fill="rgba(10,16,32,0.65)" stroke="rgba(57,245,255,0.35)"/>
+
+  <g filter="url(#glow)">
+    <path d="M110 70 H220" stroke="url(#g)" stroke-width="14" stroke-linecap="round"/>
+    <path d="M165 70 V165" stroke="url(#g)" stroke-width="14" stroke-linecap="round"/>
+    <path d="M250 165 V70" stroke="url(#g)" stroke-width="14" stroke-linecap="round"/>
+    <path d="M250 70 L310 120 L370 70 V165" stroke="url(#g)" stroke-width="14" stroke-linecap="round" fill="none" stroke-linejoin="round"/>
+  </g>
+
+  <text x="410" y="110" text-anchor="middle"
+        font-family="ui-monospace, Menlo, Monaco, Consolas, monospace"
+        font-size="42" letter-spacing="3"
+        fill="rgba(255,255,255,0.92)" filter="url(#glow)">
+    TYPE-R 198X
+  </text>
+
+  <text x="410" y="150" text-anchor="middle"
+        font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial"
+        font-size="16" letter-spacing="2"
+        fill="rgba(57,245,255,0.78)">
+    TYPE-R HOMAGE • NEON LASERS • WORD BOSSES
+  </text>
+</svg>

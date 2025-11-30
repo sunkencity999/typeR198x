@@ -79,7 +79,7 @@ struct WebGameView: NSViewRepresentable {
     private static let missingBundleHTML = """
     <html><body style='font-family:-apple-system;text-align:center;padding:2rem;background:#05070B;color:#f2f2f2;'>
     <h1>Bundle Missing</h1>
-    <p>Add the synced <code>www</code> folder to the macOS target (see native/sync-web.sh).</p>
+    <p>Ensure <code>www</code> is synced to <code>native/macos/typer198xMac/www</code> and included in the target.</p>
     </body></html>
     """
 }

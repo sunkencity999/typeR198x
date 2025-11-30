@@ -7,11 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		3927F8362EDAE352007953CA /* www in Resources */ = {isa = PBXBuildFile; fileRef = 3927F82F2EDAE352007953CA /* www */; };
 		3927F9112EDAE352007953CA /* TypeR198XMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3927F9012EDAE352007953CA /* TypeR198XMacApp.swift */; };
 		3927F9122EDAE352007953CA /* WebGameView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3927F9022EDAE352007953CA /* WebGameView.swift */; };
 		3927F9132EDAE352007953CA /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3927F9032EDAE352007953CA /* Assets.xcassets */; };
 		3927F9152EDAE352007953CA /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 3927F9052EDAE352007953CA /* PrivacyInfo.xcprivacy */; };
-		3927F8362EDAE352007953CA /* www in Resources */ = {isa = PBXBuildFile; fileRef = 3927F82F2EDAE352007953CA /* www */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -32,23 +32,18 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		3927F7A52EDADD8E007953CA /* typer198xMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = typer198xMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		3927F7B32EDADD8F007953CA /* typer198xMacTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = typer198xMacTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		3927F7BD2EDADD8F007953CA /* typer198xMacUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = typer198xMacUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		3927F82F2EDAE352007953CA /* www */ = {isa = PBXFileReference; lastKnownFileType = folder; path = www; sourceTree = "<group>"; };
 		3927F9012EDAE352007953CA /* TypeR198XMacApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypeR198XMacApp.swift; sourceTree = "<group>"; };
 		3927F9022EDAE352007953CA /* WebGameView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebGameView.swift; sourceTree = "<group>"; };
 		3927F9032EDAE352007953CA /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		3927F9042EDAE352007953CA /* typer198xMac.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = typer198xMac.entitlements; sourceTree = "<group>"; };
 		3927F9052EDAE352007953CA /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
-		3927F7A52EDADD8E007953CA /* typer198xMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = typer198xMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		3927F7B32EDADD8F007953CA /* typer198xMacTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = typer198xMacTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		3927F7BD2EDADD8F007953CA /* typer198xMacUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = typer198xMacUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		3927F82F2EDAE352007953CA /* www */ = {isa = PBXFileReference; lastKnownFileType = folder; name = www; path = ../../shared/www; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		3927F7A72EDADD8E007953CA /* typer198xMac */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = typer198xMac;
-			sourceTree = "<group>";
-		};
 		3927F7B62EDADD8F007953CA /* typer198xMacTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = typer198xMacTests;
@@ -86,18 +81,6 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		3927F7A72EDADD8E007953CA /* typer198xMac */ = {
-			isa = PBXGroup;
-			children = (
-				3927F9012EDAE352007953CA /* TypeR198XMacApp.swift */,
-				3927F9022EDAE352007953CA /* WebGameView.swift */,
-				3927F9032EDAE352007953CA /* Assets.xcassets */,
-				3927F9042EDAE352007953CA /* typer198xMac.entitlements */,
-				3927F9052EDAE352007953CA /* PrivacyInfo.xcprivacy */,
-			);
-			path = typer198xMac;
-			sourceTree = "<group>";
-		};
 		3927F79C2EDADD8E007953CA = {
 			isa = PBXGroup;
 			children = (
@@ -117,6 +100,18 @@
 				3927F7BD2EDADD8F007953CA /* typer198xMacUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		3927F7A72EDADD8E007953CA /* typer198xMac */ = {
+			isa = PBXGroup;
+			children = (
+				3927F9012EDAE352007953CA /* TypeR198XMacApp.swift */,
+				3927F9022EDAE352007953CA /* WebGameView.swift */,
+				3927F9032EDAE352007953CA /* Assets.xcassets */,
+				3927F9042EDAE352007953CA /* typer198xMac.entitlements */,
+				3927F9052EDAE352007953CA /* PrivacyInfo.xcprivacy */,
+			);
+			path = typer198xMac;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -440,7 +435,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.5;
+				MARKETING_VERSION = 1.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.bradford.typeR198x.typer198xMac;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -470,7 +465,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.5;
+				MARKETING_VERSION = 1.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.bradford.typeR198x.typer198xMac;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
