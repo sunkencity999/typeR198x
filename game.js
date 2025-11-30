@@ -137,9 +137,21 @@ function buildResumeRun(levelIndex, maxHp, shipId) {
     powerAcc: 0,
     minionAcc: 0,
     hazardAcc: 0,
-    shipId
+    shipId,
+    maxHp
   };
 }
+
+function clampPlayerHp(player) {
+  player.hp = clamp(player.hp, 0, player.maxHp);
+}
+
+function getHpBonusForLevel(levelNumber) {
+  return BASE_PLAYER_HP + Math.max(0, (levelNumber - 1)) * LEVEL_HP_BONUS;
+}
+
+const BASE_PLAYER_HP = 200;
+const LEVEL_HP_BONUS = 100;
 
 const PARALLAX_THEMES = [
   {
@@ -164,7 +176,8 @@ const PARALLAX_THEMES = [
     fg: "./assets/foregrounds/thirdlevelFG.png",
     bgSpeed: 19,
     fgSpeed: 54,
-    fgHeight: 0.6
+    fgHeight: 0.6,
+    tileFg: false
   },
   {
     id: "fourth",
@@ -643,8 +656,8 @@ class Game {
     this.player = {
       x: 160,
       y: 360,
-      hp: 200,
-      maxHp: 200,
+      hp: BASE_PLAYER_HP,
+      maxHp: BASE_PLAYER_HP,
       shield: 0, // seconds
       shipId: this.save.selectedShip || "coconut"
     };
@@ -1000,6 +1013,7 @@ class Game {
   startNewRun() {
     this.setPlayerShip(this.getSelectedShipId());
     this.levelIndex = 0;
+    this.player.maxHp = BASE_PLAYER_HP;
     this.stats.score = 0;
     this.stats.combo = 0;
     this.stats.mult = 1;
@@ -1019,6 +1033,9 @@ class Game {
     if (!r) return this.startNewRun();
     this.levelIndex = clamp(r.levelIndex ?? 0, 0, 9);
     this.stats = { ...this.stats, ...(r.stats || {}) };
+    if (typeof r.maxHp === "number" && r.maxHp > 0) {
+      this.player.maxHp = Math.max(BASE_PLAYER_HP, r.maxHp);
+    }
     const restoredHp = clamp(r.hp ?? this.player.maxHp, 0, this.player.maxHp);
     this.player.hp = restoredHp > 0 ? restoredHp : this.player.maxHp;
     this.player.shield = r.shield ?? 0;
@@ -1399,6 +1416,7 @@ class Game {
   onLevelComplete(bonus) {
     this.setMode("levelComplete");
     this.ui.levelCompleteText.textContent = `Level ${LEVELS[this.levelIndex].level} cleared! Bonus +${formatInt(bonus)}.`;
+    this.applyLevelHpBonus();
     this.saveRun(true);
   }
 
@@ -1459,7 +1477,8 @@ class Game {
         powerAcc: 0,
         minionAcc: 0,
         hazardAcc: 0,
-        shipId: this.player.shipId || this.getSelectedShipId()
+        shipId: this.player.shipId || this.getSelectedShipId(),
+        maxHp: this.player.maxHp
       };
       this.save.run = run;
       storeSave(this.save);
@@ -1479,7 +1498,8 @@ class Game {
       powerAcc: this.powerAcc,
       minionAcc: this.minionAcc,
       hazardAcc: this.hazardAcc,
-      shipId: this.player.shipId || this.getSelectedShipId()
+      shipId: this.player.shipId || this.getSelectedShipId(),
+      maxHp: this.player.maxHp
     };
 
     this.save.playerName = this.save.playerName || this.ui.playerName.value || "";
@@ -1667,11 +1687,13 @@ class Game {
   fireLaserTo(tx, ty, color) {
     // Multi-shot if spread or rapid: create extra beams to nearby points
     const shots = [];
-    shots.push({ tx, ty, color, width: 3 });
+    const baseWidth = 3 + this.levelIndex * 0.7;
+    const spreadWidth = Math.max(2, baseWidth * 0.65);
+    shots.push({ tx, ty, color, width: baseWidth });
 
     if (this.power.spread > 0) {
-      shots.push({ tx: tx + rand(-20, 20), ty: ty + rand(-80, -20), color: "magenta", width: 2 });
-      shots.push({ tx: tx + rand(-20, 20), ty: ty + rand(20, 80), color: "magenta", width: 2 });
+      shots.push({ tx: tx + rand(-20, 20), ty: ty + rand(-80, -20), color: "magenta", width: spreadWidth });
+      shots.push({ tx: tx + rand(-20, 20), ty: ty + rand(20, 80), color: "magenta", width: spreadWidth });
     }
 
     for (const s of shots) {
@@ -1850,7 +1872,13 @@ class Game {
       const scale = targetHeight / fgImg.naturalHeight;
       const y = this.h - targetHeight;
       ctx.globalAlpha = 0.95;
-      this.drawTiledImage(ctx, fgImg, scale, y, this.parallax.fgOffset);
+      if (theme?.tileFg === false) {
+        const width = fgImg.naturalWidth * scale;
+        const x = (this.w - width) / 2;
+        ctx.drawImage(fgImg, 0, 0, fgImg.naturalWidth, fgImg.naturalHeight, x, y, width, targetHeight);
+      } else {
+        this.drawTiledImage(ctx, fgImg, scale, y, this.parallax.fgOffset);
+      }
     } else {
       // fallback to neon highway
       const trackY = this.h * 0.72;
