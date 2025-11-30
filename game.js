@@ -1415,8 +1415,10 @@ class Game {
 
   onLevelComplete(bonus) {
     this.setMode("levelComplete");
-    this.ui.levelCompleteText.textContent = `Level ${LEVELS[this.levelIndex].level} cleared! Bonus +${formatInt(bonus)}.`;
-    this.applyLevelHpBonus();
+    const levelNumber = LEVELS[this.levelIndex].level;
+    this.applyLevelHpBonus(levelNumber);
+    const hpMessage = `Max HP boosted to ${this.player.maxHp}!`;
+    this.ui.levelCompleteText.textContent = `Level ${levelNumber} cleared! Bonus +${formatInt(bonus)} • ${hpMessage}`;
     this.saveRun(true);
   }
 
@@ -1439,6 +1441,15 @@ class Game {
     this.commitHighScore();
     this.save.run = null;
     storeSave(this.save);
+  }
+
+  applyLevelHpBonus(levelNumber) {
+    const nextLevel = clamp(Math.min(levelNumber + 1, 10), 1, 10);
+    const targetMax = getHpBonusForLevel(nextLevel);
+    if (targetMax > this.player.maxHp) {
+      this.player.maxHp = targetMax;
+    }
+    this.player.hp = this.player.maxHp;
   }
 
   commitHighScore() {
