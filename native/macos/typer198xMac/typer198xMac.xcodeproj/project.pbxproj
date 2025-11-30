@@ -13,7 +13,7 @@
 		3927F8332EDAE352007953CA /* laser.wav in Resources */ = {isa = PBXBuildFile; fileRef = 3927F7DB2EDAE352007953CA /* laser.wav */; };
 		3927F8342EDAE352007953CA /* Icon-App-16.png in Resources */ = {isa = PBXBuildFile; fileRef = 3927F80E2EDAE352007953CA /* Icon-App-16.png */; };
 		3927F8352EDAE352007953CA /* Icon-App-256.png in Resources */ = {isa = PBXBuildFile; fileRef = 3927F8122EDAE352007953CA /* Icon-App-256.png */; };
-		3927F8362EDAE352007953CA /* index.html in Resources */ = {isa = PBXBuildFile; fileRef = 3927F82D2EDAE352007953CA /* index.html */; };
+		3927F8362EDAE352007953CA /* www in Resources */ = {isa = PBXBuildFile; fileRef = 3927F82F2EDAE352007953CA /* www */; };
 		3927F8372EDAE352007953CA /* Icon-App-1024.png in Resources */ = {isa = PBXBuildFile; fileRef = 3927F80C2EDAE352007953CA /* Icon-App-1024.png */; };
 		3927F8382EDAE352007953CA /* secondlevelbg.png in Resources */ = {isa = PBXBuildFile; fileRef = 3927F7E12EDAE352007953CA /* secondlevelbg.png */; };
 		3927F8392EDAE352007953CA /* Icon-App-40@3x.png in Resources */ = {isa = PBXBuildFile; fileRef = 3927F8062EDAE352007953CA /* Icon-App-40@3x.png */; };
@@ -436,13 +436,8 @@
 			sourceTree = "<group>";
 		};
 		3927F82F2EDAE352007953CA /* www */ = {
-			isa = PBXGroup;
-			children = (
-				3927F82B2EDAE352007953CA /* assets */,
-				3927F82C2EDAE352007953CA /* game.js */,
-				3927F82D2EDAE352007953CA /* index.html */,
-				3927F82E2EDAE352007953CA /* style.css */,
-			);
+			isa = PBXFileReference;
+			lastKnownFileType = folder;
 			name = www;
 			path = ../../shared/www;
 			sourceTree = SOURCE_ROOT;
@@ -567,64 +562,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				3927F8312EDAE352007953CA /* bigexplosion.wav in Resources */,
-				3927F8322EDAE352007953CA /* hud_frame.svg in Resources */,
-				3927F8332EDAE352007953CA /* laser.wav in Resources */,
-				3927F8362EDAE352007953CA /* index.html in Resources */,
-				3927F8382EDAE352007953CA /* secondlevelbg.png in Resources */,
-				3927F83A2EDAE352007953CA /* play.svg in Resources */,
-				3927F83C2EDAE352007953CA /* mute.svg in Resources */,
-				3927F8402EDAE352007953CA /* fifthlevelFG.png in Resources */,
-				3927F8412EDAE352007953CA /* explosions.png in Resources */,
-				3927F8422EDAE352007953CA /* tokens.css in Resources */,
-				3927F8452EDAE352007953CA /* sixthlevelbg.png in Resources */,
-				3927F8462EDAE352007953CA /* S_S_honeyBee.png in Resources */,
-				3927F8472EDAE352007953CA /* firstlevelbg.png in Resources */,
-				3927F8482EDAE352007953CA /* S_S_littledarkone.png in Resources */,
-				3927F8492EDAE352007953CA /* Galactic_High_Score_4.wav in Resources */,
-				3927F84A2EDAE352007953CA /* fourthevelboss.png in Resources */,
-				3927F84B2EDAE352007953CA /* Galactic_High_Score_2.wav in Resources */,
-				3927F84C2EDAE352007953CA /* S_S_Coconut.png in Resources */,
-				3927F84D2EDAE352007953CA /* thirdlevelboss.png in Resources */,
-				3927F84E2EDAE352007953CA /* eigthlevelboss.png in Resources */,
-				3927F84F2EDAE352007953CA /* thirdlevelbg.png in Resources */,
-				3927F8502EDAE352007953CA /* logo.svg in Resources */,
-				3927F8512EDAE352007953CA /* thirdlevelFG.png in Resources */,
-				3927F8522EDAE352007953CA /* Galactic_High_Score_6.wav in Resources */,
-				3927F8532EDAE352007953CA /* frame_03.png in Resources */,
-				3927F8542EDAE352007953CA /* frame_00.png in Resources */,
-				3927F8552EDAE352007953CA /* frame_04.png in Resources */,
-				3927F8562EDAE352007953CA /* frame_01.png in Resources */,
-				3927F8572EDAE352007953CA /* firstlevelFG.png in Resources */,
-				3927F85A2EDAE352007953CA /* powerup.svg in Resources */,
-				3927F85C2EDAE352007953CA /* palette.json in Resources */,
-				3927F85F2EDAE352007953CA /* secondlevelFG.png in Resources */,
-				3927F8602EDAE352007953CA /* frame_07.png in Resources */,
-				3927F8612EDAE352007953CA /* game.js in Resources */,
-				3927F8622EDAE352007953CA /* Galactic_High_Score_5.wav in Resources */,
-				3927F8632EDAE352007953CA /* Galactic_High_Score_3.wav in Resources */,
-				3927F8642EDAE352007953CA /* frame_02.png in Resources */,
-				3927F8652EDAE352007953CA /* sixthlevelboss.png in Resources */,
-				3927F8662EDAE352007953CA /* sfx.js in Resources */,
-				3927F8672EDAE352007953CA /* fourthlevelFG.png in Resources */,
-				3927F8682EDAE352007953CA /* typer_icon.png in Resources */,
-				3927F8692EDAE352007953CA /* ninthlevelboss.png in Resources */,
-				3927F86A2EDAE352007953CA /* firstlevelBoss.png in Resources */,
-				3927F86B2EDAE352007953CA /* sixthlevelFG.png in Resources */,
-				3927F86D2EDAE352007953CA /* secondlevelboss.png in Resources */,
-				3927F86F2EDAE352007953CA /* pause.svg in Resources */,
-				3927F8702EDAE352007953CA /* seventhlevelboss.png in Resources */,
-				3927F8712EDAE352007953CA /* Galactic_High_Score_1.wav in Resources */,
-				3927F8732EDAE352007953CA /* fifthlevelboss.png in Resources */,
-				3927F8742EDAE352007953CA /* S_S_Sofrito.png in Resources */,
-				3927F8752EDAE352007953CA /* typer_icon_square.png in Resources */,
-				3927F8762EDAE352007953CA /* screenshot.png in Resources */,
-				3927F8772EDAE352007953CA /* frame_06.png in Resources */,
-				3927F8782EDAE352007953CA /* fourthlevelbg.png in Resources */,
-				3927F8792EDAE352007953CA /* 10thlevelboss.png in Resources */,
-				3927F87A2EDAE352007953CA /* frame_05.png in Resources */,
-				3927F87B2EDAE352007953CA /* style.css in Resources */,
-				3927F87C2EDAE352007953CA /* fifthlevelbg.png in Resources */,
+				3927F8362EDAE352007953CA /* www in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

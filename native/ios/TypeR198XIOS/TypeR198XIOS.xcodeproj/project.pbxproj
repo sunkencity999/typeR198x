@@ -17,7 +17,7 @@
 		39E48A162EDAA3CD0068E00A /* Icon-App-1024.png in Resources */ = {isa = PBXBuildFile; fileRef = 39E489F42EDAA3CD0068E00A /* Icon-App-1024.png */; };
 		39E48A172EDAA3CD0068E00A /* tokens.css in Resources */ = {isa = PBXBuildFile; fileRef = 39E48A002EDAA3CD0068E00A /* tokens.css */; };
 		39E48A182EDAA3CD0068E00A /* explosions.png in Resources */ = {isa = PBXBuildFile; fileRef = 39E489D02EDAA3CD0068E00A /* explosions.png */; };
-		39E48A192EDAA3CD0068E00A /* index.html in Resources */ = {isa = PBXBuildFile; fileRef = 39E48A0D2EDAA3CD0068E00A /* index.html */; };
+		39E48A192EDAA3CD0068E00A /* www in Resources */ = {isa = PBXBuildFile; fileRef = 39E48A0F2EDAA3CD0068E00A /* www */; };
 		39E48A1A2EDAA3CD0068E00A /* frame_00.png in Resources */ = {isa = PBXBuildFile; fileRef = 39E489D12EDAA3CD0068E00A /* frame_00.png */; };
 		39E48A1B2EDAA3CD0068E00A /* Icon-App-29@3x.png in Resources */ = {isa = PBXBuildFile; fileRef = 39E489E42EDAA3CD0068E00A /* Icon-App-29@3x.png */; };
 		39E48A1C2EDAA3CD0068E00A /* Icon-App-60@3x.png in Resources */ = {isa = PBXBuildFile; fileRef = 39E489E82EDAA3CD0068E00A /* Icon-App-60@3x.png */; };
@@ -439,13 +439,8 @@
 			sourceTree = "<group>";
 		};
 		39E48A0F2EDAA3CD0068E00A /* www */ = {
-			isa = PBXGroup;
-			children = (
-				39E48A0B2EDAA3CD0068E00A /* assets */,
-				39E48A0C2EDAA3CD0068E00A /* game.js */,
-				39E48A0D2EDAA3CD0068E00A /* index.html */,
-				39E48A0E2EDAA3CD0068E00A /* style.css */,
-			);
+			isa = PBXFileReference;
+			lastKnownFileType = folder;
 			name = www;
 			path = ../../shared/www;
 			sourceTree = SOURCE_ROOT;
@@ -570,77 +565,9 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				39E48A102EDAA3CD0068E00A /* frame_03.png in Resources */,
-				39E48A112EDAA3CD0068E00A /* hud_frame.svg in Resources */,
-				39E48A122EDAA3CD0068E00A /* firstlevelbg.png in Resources */,
-				39E48A132EDAA3CD0068E00A /* play.svg in Resources */,
-				39E48A142EDAA3CD0068E00A /* Icon-App-40@3x.png in Resources */,
-				39E48A152EDAA3CD0068E00A /* ninthlevelboss.png in Resources */,
-				39E48A162EDAA3CD0068E00A /* Icon-App-1024.png in Resources */,
-				39E48A172EDAA3CD0068E00A /* tokens.css in Resources */,
-				39E48A182EDAA3CD0068E00A /* explosions.png in Resources */,
-				39E48A192EDAA3CD0068E00A /* index.html in Resources */,
-				39E48A1A2EDAA3CD0068E00A /* frame_00.png in Resources */,
-				39E48A1B2EDAA3CD0068E00A /* Icon-App-29@3x.png in Resources */,
-				39E48A1C2EDAA3CD0068E00A /* Icon-App-60@3x.png in Resources */,
-				39E48A1D2EDAA3CD0068E00A /* seventhlevelboss.png in Resources */,
-				39E48A1E2EDAA3CD0068E00A /* pause.svg in Resources */,
-				39E48A1F2EDAA3CD0068E00A /* 10thlevelboss.png in Resources */,
-				39E48A202EDAA3CD0068E00A /* Icon-App-64.png in Resources */,
-				39E48A212EDAA3CD0068E00A /* mute.svg in Resources */,
-				39E48A222EDAA3CD0068E00A /* thirdlevelbg.png in Resources */,
-				39E48A232EDAA3CD0068E00A /* fifthlevelFG.png in Resources */,
-				39E48A242EDAA3CD0068E00A /* sixthlevelFG.png in Resources */,
-				39E48A252EDAA3CD0068E00A /* palette.json in Resources */,
-				39E48A262EDAA3CD0068E00A /* fourthevelboss.png in Resources */,
-				39E48A272EDAA3CD0068E00A /* bigexplosion.wav in Resources */,
-				39E48A282EDAA3CD0068E00A /* Galactic_High_Score_2.wav in Resources */,
-				39E48A292EDAA3CD0068E00A /* Galactic_High_Score_1.wav in Resources */,
-				39E48A2A2EDAA3CD0068E00A /* Galactic_High_Score_4.wav in Resources */,
-				39E48A2B2EDAA3CD0068E00A /* fourthlevelbg.png in Resources */,
-				39E48A2C2EDAA3CD0068E00A /* powerup.svg in Resources */,
-				39E48A2D2EDAA3CD0068E00A /* game.js in Resources */,
-				39E48A2E2EDAA3CD0068E00A /* eigthlevelboss.png in Resources */,
-				39E48A2F2EDAA3CD0068E00A /* firstlevelBoss.png in Resources */,
-				39E48A302EDAA3CD0068E00A /* Icon-App-1024.png in Resources */,
-				39E48A312EDAA3CD0068E00A /* Icon-App-40@2x.png in Resources */,
-				39E48A322EDAA3CD0068E00A /* Icon-App-256.png in Resources */,
-				39E48A332EDAA3CD0068E00A /* thirdlevelFG.png in Resources */,
-				39E48A342EDAA3CD0068E00A /* Icon-App-32.png in Resources */,
-				39E48A352EDAA3CD0068E00A /* Icon-App-83.5@2x.png in Resources */,
-				39E48A362EDAA3CD0068E00A /* Galactic_High_Score_3.wav in Resources */,
-				39E48A372EDAA3CD0068E00A /* Icon-App-76@1x.png in Resources */,
-				39E48A382EDAA3CD0068E00A /* typer_icon.png in Resources */,
-				39E48A392EDAA3CD0068E00A /* S_S_littledarkone.png in Resources */,
-				39E48A3A2EDAA3CD0068E00A /* sfx.js in Resources */,
-				39E48A3B2EDAA3CD0068E00A /* laser.wav in Resources */,
-				39E48A3C2EDAA3CD0068E00A /* style.css in Resources */,
+				39E48A192EDAA3CD0068E00A /* www in Resources */,
 				3927F8A12EDC849F007953CA /* PrivacyInfo.xcprivacy in Resources */,
-				39E48A3D2EDAA3CD0068E00A /* sixthlevelboss.png in Resources */,
-				39E48A3E2EDAA3CD0068E00A /* S_S_Sofrito.png in Resources */,
-				39E48A3F2EDAA3CD0068E00A /* fourthlevelFG.png in Resources */,
-				39E48A402EDAA3CD0068E00A /* sixthlevelbg.png in Resources */,
-				39E48A412EDAA3CD0068E00A /* frame_05.png in Resources */,
-				39E48A422EDAA3CD0068E00A /* frame_01.png in Resources */,
-				39E48A432EDAA3CD0068E00A /* secondlevelbg.png in Resources */,
-				39E48A442EDAA3CD0068E00A /* Galactic_High_Score_6.wav in Resources */,
-				39E48A452EDAA3CD0068E00A /* secondlevelFG.png in Resources */,
-				39E48A462EDAA3CD0068E00A /* Icon-App-128.png in Resources */,
-				39E48A472EDAA3CD0068E00A /* Icon-App-76@2x.png in Resources */,
-				39E48A482EDAA3CD0068E00A /* Galactic_High_Score_5.wav in Resources */,
-				39E48A492EDAA3CD0068E00A /* fifthlevelboss.png in Resources */,
-				39E48A4A2EDAA3CD0068E00A /* screenshot.png in Resources */,
-				39E48A4B2EDAA3CD0068E00A /* thirdlevelboss.png in Resources */,
-				39E48A4C2EDAA3CD0068E00A /* S_S_Coconut.png in Resources */,
-				39E48A4D2EDAA3CD0068E00A /* typer_icon_square.png in Resources */,
-				39E48A4E2EDAA3CD0068E00A /* Icon-App-16.png in Resources */,
-				39E48A4F2EDAA3CD0068E00A /* frame_07.png in Resources */,
-				39E48A502EDAA3CD0068E00A /* secondlevelboss.png in Resources */,
-				39E48A512EDAA3CD0068E00A /* Icon-App-29@2x.png in Resources */,
-				39E48A522EDAA3CD0068E00A /* Icon-App-20@2x.png in Resources */,
-				39E48A532EDAA3CD0068E00A /* Icon-App-20@3x.png in Resources */,
-				39E48A542EDAA3CD0068E00A /* Icon-App-512.png in Resources */,
-				39E48A552EDAA3CD0068E00A /* logo.svg in Resources */,
+			);
 				39E48A562EDAA3CD0068E00A /* frame_02.png in Resources */,
 				39E48A572EDAA3CD0068E00A /* firstlevelFG.png in Resources */,
 				39E48A582EDAA3CD0068E00A /* frame_06.png in Resources */,
