@@ -1,0 +1,27 @@
+{
+  "name": "TypeR 198X Neon Palette",
+  "bg": {
+    "space0": "#05060B",
+    "space1": "#070A14",
+    "space2": "#0B1030"
+  },
+  "neon": {
+    "cyan": "#39F5FF",
+    "magenta": "#FF39D1",
+    "lime": "#A8FF3A",
+    "amber": "#FFC14A",
+    "violet": "#B86BFF"
+  },
+  "ui": {
+    "chrome0": "rgba(255,255,255,0.06)",
+    "chrome1": "rgba(255,255,255,0.12)",
+    "glass0": "rgba(10,16,32,0.55)",
+    "glass1": "rgba(10,16,32,0.75)",
+    "border": "rgba(57,245,255,0.35)"
+  },
+  "fx": {
+    "glowStrong": "rgba(57,245,255,0.75)",
+    "glowSoft": "rgba(255,57,209,0.35)",
+    "danger": "#FF4D6D"
+  }
+}

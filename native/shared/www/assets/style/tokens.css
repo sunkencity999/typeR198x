@@ -1,0 +1,81 @@
+:root {
+  /* Core palette */
+  --bg0: #05060B;
+  --bg1: #070A14;
+  --bg2: #0B1030;
+
+  --neon-cyan: #39F5FF;
+  --neon-magenta: #FF39D1;
+  --neon-lime: #A8FF3A;
+  --neon-amber: #FFC14A;
+  --neon-violet: #B86BFF;
+  --danger: #FF4D6D;
+
+  /* UI materials */
+  --glass0: rgba(10,16,32,0.55);
+  --glass1: rgba(10,16,32,0.75);
+  --chrome0: rgba(255,255,255,0.06);
+  --chrome1: rgba(255,255,255,0.12);
+  --border: rgba(57,245,255,0.35);
+
+  /* Glow + shadow */
+  --glow-strong: 0 0 18px rgba(57,245,255,0.55), 0 0 42px rgba(255,57,209,0.18);
+  --glow-soft: 0 0 10px rgba(255,57,209,0.25);
+
+  /* Type */
+  --font-ui: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+  /* Spacing */
+  --r-lg: 18px;
+  --r-md: 12px;
+  --pad-1: 10px;
+  --pad-2: 14px;
+  --pad-3: 18px;
+
+  /* CRT overlay intensities (tweakable) */
+  --scanline-alpha: 0.18;
+  --vignette-alpha: 0.30;
+  --crt-noise-alpha: 0.06;
+}
+
+/* Neon UI utility */
+.neon-panel {
+  background: linear-gradient(180deg, var(--glass0), var(--glass1));
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--glow-soft);
+  backdrop-filter: blur(10px);
+}
+
+.neon-text {
+  text-shadow: 0 0 10px rgba(57,245,255,0.35), 0 0 18px rgba(255,57,209,0.18);
+}
+
+.btn-arcade {
+  font-family: var(--font-mono);
+  letter-spacing: 0.06em;
+  border-radius: var(--r-md);
+  padding: 10px 14px;
+  border: 1px solid rgba(57,245,255,0.45);
+  background: linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.04));
+  color: rgba(255,255,255,0.90);
+  box-shadow: 0 0 0 1px rgba(255,57,209,0.10) inset, var(--glow-soft);
+  cursor: pointer;
+  user-select: none;
+}
+
+.btn-arcade:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--glow-strong);
+}
+
+.btn-arcade:active {
+  transform: translateY(0px);
+  filter: brightness(1.06);
+}
+
+.small {
+  font-size: 12px;
+  opacity: 0.85;
+}
