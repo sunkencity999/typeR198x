@@ -26,14 +26,21 @@ struct WebGameView: UIViewRepresentable {
         
         // Enable file access for local modules
         configuration.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
+        configuration.preferences.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
 
         // Inject Error Handler
         let errorScript = WKUserScript(source: """
+            function showDebugError(msg) {
+                var errDiv = document.createElement('div');
+                errDiv.style.cssText = 'position:fixed;top:0;left:0;width:100%;background:rgba(0,0,0,0.9);color:#ff5555;z-index:99999;padding:20px;font-family:monospace;font-size:16px;white-space:pre-wrap;overflow:auto;height:100vh;';
+                errDiv.textContent = 'DEBUG ERROR:\\n' + msg;
+                document.body.appendChild(errDiv);
+            }
             window.onerror = function(msg, url, line, col, error) {
-                alert("JS Error: " + msg + "\\n" + url + ":" + line);
+                showDebugError(msg + "\\n" + url + ":" + line);
             };
             window.addEventListener('unhandledrejection', function(e) {
-                alert("JS Promise Rejection: " + e.reason);
+                showDebugError("Promise Rejection: " + e.reason);
             });
         """, injectionTime: .atDocumentStart, forMainFrameOnly: false)
         configuration.userContentController.addUserScript(errorScript)
