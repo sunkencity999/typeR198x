@@ -1,5 +1,3 @@
 .DS_Store
-native/ios/
-native/macos/
 native/shared/www/
 native/APP_STORE_NEXT_STEPS.md
