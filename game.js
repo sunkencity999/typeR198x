@@ -1071,7 +1071,7 @@ class Game {
 
   restartLevel() {
     // Keep overall score and stats, but reset level-specific spawns
-    this.player.hp = clamp(this.player.hp, 0, this.player.maxHp);
+    this.player.hp = this.player.maxHp;
     this.player.shield = 0;
     this.power.spread = 0;
     this.power.pierce = 0;
@@ -1407,12 +1407,8 @@ class Game {
     const acc = this.getAccuracyPct();
     this.ui.gameOverText.textContent = `Final score: ${formatInt(this.stats.score)} • Accuracy: ${acc}%`;
     this.commitHighScore();
-    const resumeIndex = getResumeLevelIndex(this.save);
-    if (resumeIndex !== null) {
-      this.save.run = buildResumeRun(resumeIndex, this.player.maxHp, this.getSelectedShipId());
-    } else {
-      this.save.run = null;
-    }
+    const shipId = this.player.shipId || this.getSelectedShipId();
+    this.save.run = buildResumeRun(this.levelIndex, this.player.maxHp, shipId);
     storeSave(this.save);
   }
 
