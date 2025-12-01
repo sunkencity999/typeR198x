@@ -836,7 +836,11 @@ class Game {
 
   bindUI() {
     this.btnStart.addEventListener("click", async () => {
-      await this.ensureAudio();
+      try {
+        await this.ensureAudio();
+      } catch (e) {
+        console.warn("Audio failed to load (native fetch restriction), continuing without audio:", e);
+      }
       const name = (this.ui.playerName.value || "").trim();
       if (name) this.save.playerName = name;
       this.save.run = null;
@@ -845,7 +849,11 @@ class Game {
     });
 
     this.btnContinue.addEventListener("click", async () => {
-      await this.ensureAudio();
+      try {
+        await this.ensureAudio();
+      } catch (e) {
+        console.warn("Audio failed to load (native fetch restriction), continuing without audio:", e);
+      }
       const name = (this.ui.playerName.value || "").trim();
       if (name) this.save.playerName = name;
       this.storeAndRefresh();
