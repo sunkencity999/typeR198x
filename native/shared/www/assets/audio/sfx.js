@@ -78,9 +78,14 @@ export class SFX {
     const loads = this.musicTracks.map(async (src) => {
       if (this.musicLoaded[src] && this.musicLoaded[src] !== "loading") return;
       this.musicLoaded[src] = "loading";
-      const resp = await fetch(src);
-      const buf = await resp.arrayBuffer();
-      this.musicLoaded[src] = await this.ctx.decodeAudioData(buf);
+      try {
+        const resp = await fetch(src);
+        const buf = await resp.arrayBuffer();
+        this.musicLoaded[src] = await this.ctx.decodeAudioData(buf);
+      } catch (e) {
+        console.warn("SFX: Failed to load music track (native/offline mode):", src);
+        this.musicLoaded[src] = null;
+      }
     });
     await Promise.all(loads);
     if (this.pendingTrack) {
@@ -97,7 +102,7 @@ export class SFX {
       const buf = await resp.arrayBuffer();
       this.bigExplosionBuffer = await this.ctx.decodeAudioData(buf);
     } catch (err) {
-      console.warn("Failed to load big explosion sample", err);
+      console.warn("SFX: Failed to load big explosion sample", err);
     }
   }
 
@@ -108,7 +113,7 @@ export class SFX {
       const buf = await resp.arrayBuffer();
       this.laserBuffer = await this.ctx.decodeAudioData(buf);
     } catch (err) {
-      console.warn("Failed to load laser sample", err);
+      console.warn("SFX: Failed to load laser sample (using synth fallback)", err);
     }
   }
 
