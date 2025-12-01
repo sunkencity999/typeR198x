@@ -4,7 +4,7 @@ import WebKit
 struct WebGameView: NSViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, WKNavigationDelegate {
-        func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void) {
             switch navigationAction.request.url?.scheme {
             case "http", "https":
                 decisionHandler(.cancel)
@@ -39,6 +39,7 @@ struct WebGameView: NSViewRepresentable {
         Coordinator()
     }
 
+    @MainActor
     func makeNSView(context: Context) -> WebViewContainer {
         let configuration = WKWebViewConfiguration()
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
