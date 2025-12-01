@@ -7,11 +7,11 @@ const rand = (a, b) => a + Math.random() * (b - a);
 const randi = (a, b) => Math.floor(rand(a, b + 1));
 const choice = (arr) => arr[randi(0, arr.length - 1)];
 
-const ASSET_VERSION = "v20251130b";
+const ASSET_VERSION = "20251130b";
 const withAssetVersion = (path) => {
   if (!path) return path;
   const sep = path.includes("?") ? "&" : "?";
-  return `${path}${sep}${ASSET_VERSION}`;
+  return `${path}${sep}v=${ASSET_VERSION}`;
 };
 
 const EXPLOSION_SHEET = {
@@ -152,6 +152,8 @@ function getHpBonusForLevel(levelNumber) {
 
 const BASE_PLAYER_HP = 200;
 const LEVEL_HP_BONUS = 100;
+const GAME_SPEED_FACTOR = 0.75;
+const GAME_DURATION_FACTOR = 1 / GAME_SPEED_FACTOR;
 
 const PARALLAX_THEMES = [
   {
@@ -366,13 +368,13 @@ function buildBossSegments(level) {
 // ----------------------------- Level Config -----------------------------
 const LEVELS = Array.from({ length: 10 }, (_, i) => {
   const level = i + 1;
-  const baseSpeed = lerp(95, 210, i / 9);              // px/s
-  const spawnRate = lerp(0.75, 1.8, i / 9);            // enemies/second
+  const baseSpeed = lerp(95, 210, i / 9) * GAME_SPEED_FACTOR;              // px/s
+  const spawnRate = lerp(0.75, 1.8, i / 9) * GAME_SPEED_FACTOR;            // enemies/second
   const maxEnemies = Math.round(lerp(6, 14, i / 9));
   const wordMin = Math.round(lerp(3, 7, i / 9));
   const wordMax = Math.round(lerp(5, 12, i / 9));
   const letterRatio = lerp(0.78, 0.25, i / 9);         // early more letters
-  const duration = Math.round(lerp(26, 38, i / 9)) * 3;    // three waves before boss
+  const duration = Math.round(lerp(26, 38, i / 9) * GAME_DURATION_FACTOR) * 3;    // three waves before boss
   const bossName = ["SIGNAL WRAITH","VECTOR OGRE","PLASMA SHOGUN","HOLO TITAN","CHROME MONOLITH","SYNC LEVIATHAN","STATIC EMPRESS","LOGIC DRAGON","NIGHT ENGINE","FINAL ELECTROMANCER"][i];
 
   return {
@@ -386,8 +388,8 @@ const LEVELS = Array.from({ length: 10 }, (_, i) => {
     duration,
     boss: {
       name: bossName,
-      minionRate: lerp(0.35, 0.75, i / 9),
-      hazardRate: lerp(0.0, 0.55, i / 9) // starting from level 1 no hazards
+      minionRate: lerp(0.35, 0.75, i / 9) * GAME_SPEED_FACTOR,
+      hazardRate: lerp(0.0, 0.55, i / 9) * GAME_SPEED_FACTOR // starting from level 1 no hazards
     }
   };
 });
@@ -693,6 +695,7 @@ class Game {
     this.bossClear = null;
     this.bossFinaleBursts = [];
     this.bossFinaleOrigin = null;
+    this.bossIntro = null;
 
     this.player = {
       x: 160,
@@ -1207,6 +1210,8 @@ class Game {
     this.enemies.length = 0;
     this.powerups.length = 0;
 
+    this.triggerBossIntro(cfg.boss.name);
+
     this.boss = new Boss({
       name: cfg.boss.name,
       segments: buildBossSegments(cfg.level),
@@ -1314,7 +1319,7 @@ class Game {
 
     // Acquire a new lock: check powerups first (reward), then enemies.
     const candPower = this.powerups
-      .filter(p => p.alive && p.nextChar() === ch)
+      .filter(p => p.alive && this.isEntityVisible(p) && p.nextChar() === ch)
       .sort((a,b) => a.x - b.x)[0];
 
     if (candPower) {
@@ -1325,7 +1330,7 @@ class Game {
     }
 
     const candEnemy = this.enemies
-      .filter(en => en.alive && en.nextChar() === ch)
+      .filter(en => en.alive && this.isEntityVisible(en) && en.nextChar() === ch)
       .sort((a,b) => a.x - b.x)[0];
 
     if (candEnemy) {
@@ -1698,6 +1703,11 @@ class Game {
         else this.onLevelComplete(info.bonus);
       }
     }
+
+    if (this.bossIntro) {
+      this.bossIntro.t += dt;
+      if (this.bossIntro.t >= 2.6) this.bossIntro = null;
+    }
   }
 
   updateHUD() {
@@ -1735,6 +1745,21 @@ class Game {
 
   screenShake(amount) {
     this.shake = Math.max(this.shake, amount);
+  }
+
+  isEntityVisible(obj, padding = 20) {
+    if (!obj) return false;
+    const x = obj.x ?? 0;
+    const y = obj.y ?? 0;
+    const radius = obj.radius ?? 20;
+    return (x + radius) >= -padding && (x - radius) <= (this.w + padding) && y >= -padding && y <= (this.h + padding);
+  }
+
+  triggerBossIntro(name) {
+    this.flash = Math.max(this.flash, 0.45);
+    this.damagePulse = 1;
+    this.screenShake(14);
+    this.bossIntro = { t: 0, name };
   }
 
   fireLaserTo(tx, ty, color) {
@@ -2363,7 +2388,25 @@ class Game {
 
     this.drawHUDOverlays(ctx);
     if (this.bossClear) this.drawBossClearText(ctx);
+    if (this.bossIntro) this.drawBossIntro(ctx);
 
+    ctx.restore();
+  }
+
+  drawBossIntro(ctx) {
+    const info = this.bossIntro;
+    if (!info) return;
+    ctx.save();
+    const alpha = clamp(1 - (info.t / 2.6), 0, 0.9);
+    ctx.fillStyle = `rgba(5,6,18,${alpha * 0.7})`;
+    ctx.fillRect(0, this.h * 0.3, this.w, this.h * 0.4);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+    ctx.font = "48px 'Orbitron', sans-serif";
+    ctx.fillText("INCOMING BOSS", this.w / 2, this.h * 0.42);
+    ctx.font = "32px 'Segoe UI', sans-serif";
+    ctx.fillText(info.name ?? "UNKNOWN", this.w / 2, this.h * 0.52);
     ctx.restore();
   }
 }
