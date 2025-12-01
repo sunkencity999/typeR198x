@@ -2,6 +2,7 @@ import SwiftUI
 import WebKit
 
 struct WebGameView: NSViewRepresentable {
+    @MainActor
     final class Coordinator: NSObject, WKNavigationDelegate {
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
             switch navigationAction.request.url?.scheme {
