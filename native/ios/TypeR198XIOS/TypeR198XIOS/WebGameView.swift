@@ -46,10 +46,6 @@ struct WebGameView: UIViewRepresentable {
         configuration.mediaTypesRequiringUserActionForPlayback = []
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
         
-        // Enable file access for local modules
-        configuration.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
-        configuration.preferences.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
-
         // Inject Error Handler
         let errorScript = WKUserScript(source: """
             function showDebugError(msg) {

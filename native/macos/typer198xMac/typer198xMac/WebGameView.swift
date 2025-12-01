@@ -55,12 +55,6 @@ struct WebGameView: NSViewRepresentable {
             configuration.mediaTypesRequiringUserActionForPlayback = []
             configuration.suppressesIncrementalRendering = false
             
-            // Enable file access for local modules/assets
-            configuration.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
-            configuration.preferences.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
-            // Enable inspector
-            configuration.preferences.setValue(true, forKey: "developerExtrasEnabled")
-
             // Inject Error Handler
             let errorScript = WKUserScript(source: """
                 function showDebugError(msg) {
