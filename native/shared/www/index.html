@@ -231,5 +231,20 @@
   </div>
 
   <script type="module" src="./game.js?v=20251130a"></script>
+  
+  <!-- DEBUG: Visual Click Feedback -->
+  <script>
+    window.addEventListener('click', (e) => {
+      const d = document.createElement('div');
+      d.style.cssText = `position:fixed;left:${e.clientX-10}px;top:${e.clientY-10}px;width:20px;height:20px;background:rgba(255,0,0,0.7);border:2px solid white;border-radius:50%;z-index:999999;pointer-events:none;transform:scale(0);transition:transform 0.2s ease-out;`;
+      document.body.appendChild(d);
+      requestAnimationFrame(() => d.style.transform = "scale(1)");
+      setTimeout(() => d.remove(), 500);
+      
+      if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.log) {
+          window.webkit.messageHandlers.log.postMessage("Clicked: " + e.target.tagName);
+      }
+    }, true); // Capture phase to ensure we see it even if propagation stops
+  </script>
 </body>
 </html>
