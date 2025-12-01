@@ -15,11 +15,19 @@ struct WebGameView: NSViewRepresentable {
     }
 
     class WebViewContainer: NSView {
-        let webView: WKWebView
+        var webView: WKWebView?
 
-        init(webView: WKWebView) {
+        override init(frame: CGRect) {
+            super.init(frame: frame)
+        }
+
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
+
+        @MainActor
+        func injectWebView(_ webView: WKWebView) {
             self.webView = webView
-            super.init(frame: .zero)
             webView.translatesAutoresizingMaskIntoConstraints = false
             self.addSubview(webView)
             NSLayoutConstraint.activate([
@@ -29,10 +37,6 @@ struct WebGameView: NSViewRepresentable {
                 webView.bottomAnchor.constraint(equalTo: self.bottomAnchor)
             ])
         }
-
-        required init?(coder: NSCoder) {
-            fatalError("init(coder:) has not been implemented")
-        }
     }
 
     func makeCoordinator() -> Coordinator {
@@ -41,43 +45,50 @@ struct WebGameView: NSViewRepresentable {
 
     @MainActor
     func makeNSView(context: Context) -> WebViewContainer {
-        let configuration = WKWebViewConfiguration()
-        configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
-        configuration.mediaTypesRequiringUserActionForPlayback = []
-        configuration.suppressesIncrementalRendering = false
+        let container = WebViewContainer(frame: .zero)
         
-        // Enable file access for local modules/assets
-        configuration.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
-        configuration.preferences.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
-        // Enable inspector
-        configuration.preferences.setValue(true, forKey: "developerExtrasEnabled")
+        // Defer WKWebView creation to the next run loop tick to avoid 
+        // SwiftUI Observation race conditions during initial layout.
+        DispatchQueue.main.async {
+            let configuration = WKWebViewConfiguration()
+            configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
+            configuration.mediaTypesRequiringUserActionForPlayback = []
+            configuration.suppressesIncrementalRendering = false
+            
+            // Enable file access for local modules/assets
+            configuration.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
+            configuration.preferences.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
+            // Enable inspector
+            configuration.preferences.setValue(true, forKey: "developerExtrasEnabled")
 
-        // Inject Error Handler
-        let errorScript = WKUserScript(source: """
-            function showDebugError(msg) {
-                var errDiv = document.createElement('div');
-                errDiv.style.cssText = 'position:fixed;top:0;left:0;width:100%;background:rgba(0,0,0,0.9);color:#ff5555;z-index:99999;padding:20px;font-family:monospace;font-size:16px;white-space:pre-wrap;overflow:auto;height:100vh;';
-                errDiv.textContent = 'DEBUG ERROR:\\n' + msg;
-                document.body.appendChild(errDiv);
-            }
-            window.onerror = function(msg, url, line, col, error) {
-                showDebugError(msg + "\\n" + url + ":" + line);
-            };
-            window.addEventListener('unhandledrejection', function(e) {
-                showDebugError("Promise Rejection: " + e.reason);
-            });
-        """, injectionTime: .atDocumentStart, forMainFrameOnly: false)
-        configuration.userContentController.addUserScript(errorScript)
+            // Inject Error Handler
+            let errorScript = WKUserScript(source: """
+                function showDebugError(msg) {
+                    var errDiv = document.createElement('div');
+                    errDiv.style.cssText = 'position:fixed;top:0;left:0;width:100%;background:rgba(0,0,0,0.9);color:#ff5555;z-index:99999;padding:20px;font-family:monospace;font-size:16px;white-space:pre-wrap;overflow:auto;height:100vh;';
+                    errDiv.textContent = 'DEBUG ERROR:\\n' + msg;
+                    document.body.appendChild(errDiv);
+                }
+                window.onerror = function(msg, url, line, col, error) {
+                    showDebugError(msg + "\\n" + url + ":" + line);
+                };
+                window.addEventListener('unhandledrejection', function(e) {
+                    showDebugError("Promise Rejection: " + e.reason);
+                });
+            """, injectionTime: .atDocumentStart, forMainFrameOnly: false)
+            configuration.userContentController.addUserScript(errorScript)
 
-        let webView = WKWebView(frame: .zero, configuration: configuration)
-        webView.navigationDelegate = context.coordinator
-        webView.allowsMagnification = true
-        webView.allowsBackForwardNavigationGestures = false
-        webView.customUserAgent = "TypeR198X-macOS"
+            let webView = WKWebView(frame: .zero, configuration: configuration)
+            webView.navigationDelegate = context.coordinator
+            webView.allowsMagnification = true
+            webView.allowsBackForwardNavigationGestures = false
+            webView.customUserAgent = "TypeR198X-macOS"
 
-        loadGame(into: webView)
+            self.loadGame(into: webView)
+            container.injectWebView(webView)
+        }
         
-        return WebViewContainer(webView: webView)
+        return container
     }
 
     func updateNSView(_ nsView: WebViewContainer, context: Context) {}
