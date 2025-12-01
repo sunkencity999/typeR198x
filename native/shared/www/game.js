@@ -9,10 +9,12 @@ const choice = (arr) => arr[randi(0, arr.length - 1)];
 
 const ASSET_VERSION = "20251130b";
 const withAssetVersion = (path) => {
-  if (!path) return path;
-  const sep = path.includes("?") ? "&" : "?";
-  return `${path}${sep}v=${ASSET_VERSION}`;
+  // In the native app (file://), query strings can break file lookups.
+  // Since assets are bundled, we don't need cache busting.
+  return path; 
 };
+
+console.log("Game.js starting...");
 
 const EXPLOSION_SHEET = {
   src: "./assets/explosions/explosions.png",
