@@ -11,7 +11,7 @@ const ASSET_VERSION = "20251130b";
 const withAssetVersion = (path) => {
   if (!path) return path;
   const sep = path.includes("?") ? "&" : "?";
-  return `${path}${sep}v=${ASSET_VERSION}`;
+  return path;
 };
 
 const EXPLOSION_SHEET = {
