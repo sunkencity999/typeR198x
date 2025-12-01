@@ -773,6 +773,9 @@ class Game {
     // main loop
     this.prev = nowMs();
     requestAnimationFrame(this.loop.bind(this));
+
+    // Expose for native wrapper debugging
+    window.game = this;
   }
 
   getSelectedShipId() {
