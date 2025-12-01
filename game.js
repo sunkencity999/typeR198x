@@ -1,4 +1,7 @@
-import { SFX } from "./assets/audio/sfx.js";
+const SFX = (typeof window !== "undefined" && window.SFX) ? window.SFX : null;
+if (!SFX) {
+  throw new Error("SFX module not available; ensure assets/audio/sfx.js is loaded before game.js");
+}
 
 // ----------------------------- Utilities -----------------------------
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -13,6 +16,10 @@ const withAssetVersion = (path) => {
   const sep = path.includes("?") ? "&" : "?";
   return `${path}${sep}v=${ASSET_VERSION}`;
 };
+
+const IS_FILE_ORIGIN = typeof window !== "undefined" && window.location && window.location.protocol === "file:";
+const IS_NATIVE_SHELL = typeof navigator !== "undefined" && /TypeR198X-(macOS|iOS)/i.test(navigator.userAgent || "");
+const SKIP_CORS_IMAGES = IS_FILE_ORIGIN || IS_NATIVE_SHELL;
 
 const EXPLOSION_SHEET = {
   src: "./assets/explosions/explosions.png",
@@ -654,7 +661,7 @@ class Game {
     this.shipImages = {};
     Object.entries(SHIP_CONFIGS).forEach(([id, cfg]) => {
       const img = new Image();
-      img.crossOrigin = "anonymous";
+      if (!SKIP_CORS_IMAGES) img.crossOrigin = "anonymous";
       this.registerAsset(img, () => {
         this.shipImages[id] = this.prepareShipSprite(img);
       });
@@ -665,11 +672,11 @@ class Game {
     this.themeImages = {};
     PARALLAX_THEMES.forEach((theme) => {
       const bg = new Image();
-      bg.crossOrigin = "anonymous";
+      if (!SKIP_CORS_IMAGES) bg.crossOrigin = "anonymous";
        this.registerAsset(bg);
       bg.src = withAssetVersion(theme.bg);
       const fg = new Image();
-      fg.crossOrigin = "anonymous";
+      if (!SKIP_CORS_IMAGES) fg.crossOrigin = "anonymous";
        this.registerAsset(fg);
       fg.src = withAssetVersion(theme.fg);
       this.themeImages[theme.id] = { bg, fg };
@@ -678,7 +685,7 @@ class Game {
     this.bossArtImages = {};
     BOSS_ARTS.forEach((art) => {
       const img = new Image();
-      img.crossOrigin = "anonymous";
+      if (!SKIP_CORS_IMAGES) img.crossOrigin = "anonymous";
       this.registerAsset(img);
       img.src = withAssetVersion(art.src);
       this.bossArtImages[art.level] = img;
@@ -742,7 +749,7 @@ class Game {
     this.parallax = { bgOffset: 0, fgOffset: 0 };
 
     this.explosionSheet = new Image();
-    this.explosionSheet.crossOrigin = "anonymous";
+    if (!SKIP_CORS_IMAGES) this.explosionSheet.crossOrigin = "anonymous";
     this.registerAsset(this.explosionSheet);
     this.explosionSheet.src = withAssetVersion(EXPLOSION_SHEET.src);
 
@@ -790,6 +797,7 @@ class Game {
   }
 
   prepareShipSprite(img) {
+    if (SKIP_CORS_IMAGES) return img;
     const canvas = document.createElement("canvas");
     const w = img.naturalWidth || img.width;
     const h = img.naturalHeight || img.height;
