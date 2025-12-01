@@ -639,6 +639,7 @@ class Game {
 
     // audio
     this.sfx = new SFX();
+    this.audioUnavailable = false;
 
     this.loadingOverlay = this.ui.loading;
     this.storyModal = this.ui.storyModal;
@@ -773,9 +774,6 @@ class Game {
     // main loop
     this.prev = nowMs();
     requestAnimationFrame(this.loop.bind(this));
-
-    // Expose for native wrapper debugging
-    window.game = this;
   }
 
   getSelectedShipId() {
@@ -833,11 +831,7 @@ class Game {
 
   bindUI() {
     this.btnStart.addEventListener("click", async () => {
-      try {
-        await this.ensureAudio();
-      } catch (e) {
-        console.warn("Audio failed to load (native fetch restriction), continuing without audio:", e);
-      }
+      await this.ensureAudio();
       const name = (this.ui.playerName.value || "").trim();
       if (name) this.save.playerName = name;
       this.save.run = null;
@@ -846,11 +840,7 @@ class Game {
     });
 
     this.btnContinue.addEventListener("click", async () => {
-      try {
-        await this.ensureAudio();
-      } catch (e) {
-        console.warn("Audio failed to load (native fetch restriction), continuing without audio:", e);
-      }
+      await this.ensureAudio();
       const name = (this.ui.playerName.value || "").trim();
       if (name) this.save.playerName = name;
       this.storeAndRefresh();
@@ -958,8 +948,14 @@ class Game {
   }
 
   async ensureAudio() {
-    await this.sfx.unlock();
-    this.sfx.setMuted(this.save.settings.muted);
+    if (this.audioUnavailable) return;
+    try {
+      await this.sfx.unlock();
+      this.sfx.setMuted(this.save.settings.muted);
+    } catch (err) {
+      console.warn("Audio init failed; continuing without sound", err);
+      this.audioUnavailable = true;
+    }
   }
 
   applySettings() {

@@ -7,7 +7,42 @@
 
 const LASER_SRC = "./assets/audio/laser.wav";
 const AUDIO_VERSION = "2025-11-29";
-const versioned = (src) => `${src}?v=${AUDIO_VERSION}`;
+
+const IS_FILE_ORIGIN = typeof window !== "undefined" && window.location && window.location.protocol === "file:";
+const IS_NATIVE_SHELL = typeof navigator !== "undefined" && /TypeR198X-macOS/i.test(navigator.userAgent || "");
+const USE_HTML_AUDIO = IS_FILE_ORIGIN || IS_NATIVE_SHELL;
+
+const versioned = (src) => (USE_HTML_AUDIO ? src : `${src}?v=${AUDIO_VERSION}`);
+
+const createHtmlAudio = (src, { loop = false, volume = 1 } = {}) => {
+  if (typeof Audio === "undefined") return null;
+  const audio = new Audio(src);
+  audio.preload = "auto";
+  audio.loop = loop;
+  audio.volume = volume;
+  audio.setAttribute("playsinline", "true");
+  audio.load();
+  return audio;
+};
+
+const waitForAudioReady = (audio) => new Promise((resolve) => {
+  if (!audio) {
+    resolve();
+    return;
+  }
+  const cleanup = () => {
+    audio.removeEventListener("canplaythrough", cleanup);
+    audio.removeEventListener("error", cleanup);
+    resolve();
+  };
+  if (audio.readyState >= 3) {
+    resolve();
+    return;
+  }
+  audio.addEventListener("canplaythrough", cleanup, { once: true });
+  audio.addEventListener("error", cleanup, { once: true });
+  setTimeout(cleanup, 1500);
+});
 
 export class SFX {
   constructor() {
@@ -29,9 +64,25 @@ export class SFX {
     this.musicLoaded = {};
     this.bigExplosionBuffer = null;
     this.laserBuffer = null;
+    this.useHtmlAudio = USE_HTML_AUDIO;
+    this.htmlMusicEls = [];
+    this.htmlMusicCurrent = null;
+    this.htmlBigExplosion = null;
+    this.htmlAudioReady = null;
   }
 
   bossExplosion() {
+    if (this.useHtmlAudio) {
+      if (!this.htmlBigExplosion || this.muted) {
+        this.explosion();
+        return;
+      }
+      try {
+        this.htmlBigExplosion.currentTime = 0;
+        this.htmlBigExplosion.play();
+      } catch (_) {}
+      return;
+    }
     if (!this.ctx || this.muted || !this.bigExplosionBuffer) {
       this.explosion();
       return;
@@ -46,35 +97,62 @@ export class SFX {
   }
 
   async unlock() {
-    if (this.ctx) return;
-    const Ctx = window.AudioContext || window.webkitAudioContext;
-    this.ctx = new Ctx();
-    this.master = this.ctx.createGain();
-    this.master.gain.value = 0.65;
-    this.master.connect(this.ctx.destination);
+    if (!this.ctx) {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (Ctx) {
+        this.ctx = new Ctx();
+        this.master = this.ctx.createGain();
+        this.master.gain.value = 0.65;
+        this.master.connect(this.ctx.destination);
 
-    this.musicGain = this.ctx.createGain();
-    this.musicGain.gain.value = 0.55;
-    this.musicGain.connect(this.master);
+        this.musicGain = this.ctx.createGain();
+        this.musicGain.gain.value = 0.55;
+        this.musicGain.connect(this.master);
+      }
+    }
 
-    await Promise.all([
-      this._preloadMusic(),
-      this._loadBigExplosion(),
-      this._loadLaser()
-    ]);
+    const loaders = [];
+    if (this.useHtmlAudio) {
+      loaders.push(this._setupHtmlAudioElements());
+    } else {
+      loaders.push(
+        this._preloadMusic(),
+        this._loadBigExplosion(),
+        this._loadLaser()
+      );
+    }
 
-    if (this.ctx.state === "suspended") await this.ctx.resume();
+    await Promise.all(loaders);
+
+    if (this.ctx && this.ctx.state === "suspended") {
+      await this.ctx.resume();
+    }
   }
 
   setMuted(m) {
     this.muted = !!m;
-    if (!this.master) return;
-    this.master.gain.value = this.muted ? 0 : 0.65;
-    if (this.musicGain) this.musicGain.gain.value = this.muted ? 0 : 0.55;
+    if (this.master) {
+      this.master.gain.value = this.muted ? 0 : 0.65;
+      if (this.musicGain) this.musicGain.gain.value = this.muted ? 0 : 0.55;
+    }
+    if (this.useHtmlAudio) {
+      const applyMute = (audio) => {
+        if (!audio) return;
+        audio.muted = this.muted;
+        if (this.muted) {
+          audio.pause();
+        }
+      };
+      this.htmlMusicEls.forEach(applyMute);
+      applyMute(this.htmlBigExplosion);
+      if (!this.muted && this.htmlMusicCurrent) {
+        this.htmlMusicCurrent.play().catch(() => {});
+      }
+    }
   }
 
   async _preloadMusic() {
-    if (!this.ctx) return;
+    if (!this.ctx || this.useHtmlAudio) return;
     const loads = this.musicTracks.map(async (src) => {
       if (this.musicLoaded[src] && this.musicLoaded[src] !== "loading") return;
       this.musicLoaded[src] = "loading";
@@ -91,7 +169,7 @@ export class SFX {
   }
 
   async _loadBigExplosion() {
-    if (!this.ctx || this.bigExplosionBuffer) return;
+    if (!this.ctx || this.bigExplosionBuffer || this.useHtmlAudio) return;
     try {
       const resp = await fetch("./assets/audio/bigexplosion.wav");
       const buf = await resp.arrayBuffer();
@@ -102,7 +180,7 @@ export class SFX {
   }
 
   async _loadLaser() {
-    if (!this.ctx || this.laserBuffer) return;
+    if (!this.ctx || this.laserBuffer || this.useHtmlAudio) return;
     try {
       const resp = await fetch(versioned(LASER_SRC));
       const buf = await resp.arrayBuffer();
@@ -112,11 +190,63 @@ export class SFX {
     }
   }
 
+  async _setupHtmlAudioElements() {
+    if (!this.useHtmlAudio) return;
+    if (this.htmlAudioReady) return this.htmlAudioReady;
+    const audios = [];
+    this.htmlMusicEls = this.musicTracks.map((src) => {
+      const audio = createHtmlAudio(src, { loop: true, volume: 0.45 });
+      if (!audio) return null;
+      if (audio.dataset) audio.dataset.src = src;
+      audio._trackSrc = src;
+      audios.push(audio);
+      return audio;
+    }).filter(Boolean);
+    this.htmlBigExplosion = createHtmlAudio("./assets/audio/bigexplosion.wav", { volume: 0.7 });
+    if (this.htmlBigExplosion) audios.push(this.htmlBigExplosion);
+
+    this.htmlAudioReady = Promise.all(audios.map(waitForAudioReady)).then(() => {
+      const punches = audios.map((a) => a.play()
+        .then(() => {
+          a.pause();
+          a.currentTime = 0;
+        })
+        .catch(() => {}));
+      return Promise.allSettled(punches);
+    });
+
+    return this.htmlAudioReady;
+  }
+
   _pickMusicTrack() {
     return this.musicTracks[Math.floor(Math.random() * this.musicTracks.length)];
   }
 
+  _playHtmlMusic(trackSrc) {
+    if (!this.htmlMusicEls.length) return;
+    const targetSrc = trackSrc || this._pickMusicTrack();
+    const node = this.htmlMusicEls.find((a) => {
+      const src = (a.dataset && a.dataset.src) || a._trackSrc;
+      return src === targetSrc;
+    }) || this.htmlMusicEls[0];
+    if (!node) return;
+    if (this.htmlMusicCurrent && this.htmlMusicCurrent !== node) {
+      this.htmlMusicCurrent.pause();
+      this.htmlMusicCurrent.currentTime = 0;
+    }
+    this.htmlMusicCurrent = node;
+    if (this.muted) return;
+    try {
+      node.currentTime = 0;
+      node.play();
+    } catch (_) {}
+  }
+
   playMusic(trackSrc) {
+    if (this.useHtmlAudio) {
+      this._playHtmlMusic(trackSrc);
+      return;
+    }
     if (!this.ctx) return;
     const src = trackSrc || this._pickMusicTrack();
     const buffer = this.musicLoaded[src];
@@ -137,6 +267,14 @@ export class SFX {
   }
 
   stopMusic() {
+    if (this.useHtmlAudio) {
+      if (this.htmlMusicCurrent) {
+        this.htmlMusicCurrent.pause();
+        this.htmlMusicCurrent.currentTime = 0;
+        this.htmlMusicCurrent = null;
+      }
+      return;
+    }
     if (!this.music) return;
     try { this.music.stop(); } catch (_) {}
     this.music.disconnect();

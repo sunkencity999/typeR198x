@@ -639,6 +639,7 @@ class Game {
 
     // audio
     this.sfx = new SFX();
+    this.audioUnavailable = false;
 
     this.loadingOverlay = this.ui.loading;
     this.storyModal = this.ui.storyModal;
@@ -947,8 +948,14 @@ class Game {
   }
 
   async ensureAudio() {
-    await this.sfx.unlock();
-    this.sfx.setMuted(this.save.settings.muted);
+    if (this.audioUnavailable) return;
+    try {
+      await this.sfx.unlock();
+      this.sfx.setMuted(this.save.settings.muted);
+    } catch (err) {
+      console.warn("Audio init failed; continuing without sound", err);
+      this.audioUnavailable = true;
+    }
   }
 
   applySettings() {
