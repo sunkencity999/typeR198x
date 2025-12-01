@@ -1818,13 +1818,22 @@ class Game {
 
   registerAsset(img, onLoad) {
     this.pendingAssets = (this.pendingAssets ?? 0) + 1;
+    let handled = false;
     const finalize = () => {
+      if (handled) return;
+      handled = true;
       if (onLoad) onLoad();
       this.pendingAssets = Math.max(0, this.pendingAssets - 1);
       this.checkLoadingOverlay();
     };
     img.addEventListener("load", finalize, { once: true });
-    img.addEventListener("error", finalize, { once: true });
+    img.addEventListener("error", () => {
+      console.warn("Failed to load asset:", img.src);
+      finalize();
+    }, { once: true });
+    
+    // Fallback timeout in case the browser engine hangs on a resource
+    setTimeout(finalize, 3000);
   }
 
   checkLoadingOverlay() {
