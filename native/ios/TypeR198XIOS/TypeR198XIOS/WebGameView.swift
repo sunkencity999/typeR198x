@@ -14,11 +14,32 @@ struct WebGameView: UIViewRepresentable {
         }
     }
 
+    class WebViewContainer: UIView {
+        let webView: WKWebView
+
+        init(webView: WKWebView) {
+            self.webView = webView
+            super.init(frame: .zero)
+            webView.translatesAutoresizingMaskIntoConstraints = false
+            self.addSubview(webView)
+            NSLayoutConstraint.activate([
+                webView.leadingAnchor.constraint(equalTo: self.leadingAnchor),
+                webView.trailingAnchor.constraint(equalTo: self.trailingAnchor),
+                webView.topAnchor.constraint(equalTo: self.topAnchor),
+                webView.bottomAnchor.constraint(equalTo: self.bottomAnchor)
+            ])
+        }
+
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
+    }
+
     func makeCoordinator() -> Coordinator {
         Coordinator()
     }
 
-    func makeUIView(context: Context) -> WKWebView {
+    func makeUIView(context: Context) -> WebViewContainer {
         let configuration = WKWebViewConfiguration()
         configuration.allowsInlineMediaPlayback = true
         configuration.limitsNavigationsToAppBoundDomains = true
@@ -53,10 +74,11 @@ struct WebGameView: UIViewRepresentable {
         webView.allowsLinkPreview = false
 
         loadGame(into: webView)
-        return webView
+        
+        return WebViewContainer(webView: webView)
     }
 
-    func updateUIView(_ uiView: WKWebView, context: Context) {}
+    func updateUIView(_ uiView: WebViewContainer, context: Context) {}
 
     private func loadGame(into webView: WKWebView) {
         guard let resourceBase = Bundle.main.resourceURL?.appendingPathComponent("www", isDirectory: true) else {
