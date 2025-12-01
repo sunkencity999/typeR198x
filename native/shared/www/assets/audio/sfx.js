@@ -7,7 +7,8 @@
 
 const LASER_SRC = "./assets/audio/laser.wav";
 const AUDIO_VERSION = "2025-11-29";
-const versioned = (src) => `${src}?v=${AUDIO_VERSION}`;
+// Native app doesn't need versioning
+const versioned = (src) => src; 
 
 export class SFX {
   constructor() {
@@ -15,7 +16,7 @@ export class SFX {
     this.master = null;
     this.muted = false;
     this.musicGain = null;
-    this.music = null;
+    this.music = null; // WebAudio buffer source or HTML5 Audio element
     this.musicTracks = [
       "./assets/audio/Galactic_High_Score_1.wav",
       "./assets/audio/Galactic_High_Score_2.wav",
@@ -26,36 +27,46 @@ export class SFX {
     ];
     this.currentMusicBuffer = null;
     this.pendingTrack = null;
-    this.musicLoaded = {};
-    this.bigExplosionBuffer = null;
-    this.laserBuffer = null;
+    this.musicLoaded = {}; // Stores AudioBuffer or HTMLAudioElement
+    this.bigExplosionBuffer = null; // AudioBuffer or HTMLAudioElement
+    this.laserBuffer = null; // AudioBuffer or HTMLAudioElement
   }
 
   bossExplosion() {
-    if (!this.ctx || this.muted || !this.bigExplosionBuffer) {
-      this.explosion();
-      return;
+    if (this.muted) return;
+    if (this.bigExplosionBuffer) {
+      if (this.bigExplosionBuffer instanceof AudioBuffer && this.ctx) {
+        const src = this.ctx.createBufferSource();
+        src.buffer = this.bigExplosionBuffer;
+        const gain = this.ctx.createGain();
+        gain.gain.value = 0.7;
+        src.connect(gain);
+        gain.connect(this.master);
+        src.start();
+      } else if (this.bigExplosionBuffer instanceof Audio) {
+        // HTML5 Audio fallback
+        const sound = this.bigExplosionBuffer.cloneNode();
+        sound.volume = 0.7;
+        sound.play().catch(e => console.warn("Play error", e));
+      }
+    } else {
+      this.explosion(); // synth fallback
     }
-    const src = this.ctx.createBufferSource();
-    src.buffer = this.bigExplosionBuffer;
-    const gain = this.ctx.createGain();
-    gain.gain.value = 0.7;
-    src.connect(gain);
-    gain.connect(this.master);
-    src.start();
   }
 
   async unlock() {
-    if (this.ctx) return;
+    // Init WebAudio Context if possible
     const Ctx = window.AudioContext || window.webkitAudioContext;
-    this.ctx = new Ctx();
-    this.master = this.ctx.createGain();
-    this.master.gain.value = 0.65;
-    this.master.connect(this.ctx.destination);
+    if (Ctx) {
+      this.ctx = new Ctx();
+      this.master = this.ctx.createGain();
+      this.master.gain.value = 0.65;
+      this.master.connect(this.ctx.destination);
 
-    this.musicGain = this.ctx.createGain();
-    this.musicGain.gain.value = 0.55;
-    this.musicGain.connect(this.master);
+      this.musicGain = this.ctx.createGain();
+      this.musicGain.gain.value = 0.55;
+      this.musicGain.connect(this.master);
+    }
 
     await Promise.all([
       this._preloadMusic(),
@@ -63,29 +74,57 @@ export class SFX {
       this._loadLaser()
     ]);
 
-    if (this.ctx.state === "suspended") await this.ctx.resume();
+    if (this.ctx && this.ctx.state === "suspended") await this.ctx.resume();
   }
 
   setMuted(m) {
     this.muted = !!m;
-    if (!this.master) return;
-    this.master.gain.value = this.muted ? 0 : 0.65;
-    if (this.musicGain) this.musicGain.gain.value = this.muted ? 0 : 0.55;
+    
+    // WebAudio Mute
+    if (this.master) {
+      this.master.gain.value = this.muted ? 0 : 0.65;
+      if (this.musicGain) this.musicGain.gain.value = this.muted ? 0 : 0.55;
+    }
+
+    // HTML5 Audio Mute
+    if (this.music instanceof Audio) {
+      this.music.muted = this.muted;
+    }
+  }
+
+  async _fetchAudio(src) {
+    // Try Fetch (WebAudio) first
+    if (this.ctx) {
+      try {
+        const resp = await fetch(src);
+        if (!resp.ok) throw new Error("Network response was not ok");
+        const buf = await resp.arrayBuffer();
+        return await this.ctx.decodeAudioData(buf);
+      } catch (e) {
+        console.warn(`SFX: Fetch/Decode failed for ${src}, falling back to HTML5 Audio.`, e);
+      }
+    }
+    
+    // Fallback: HTML5 Audio
+    return new Promise((resolve, reject) => {
+      const audio = new Audio(src);
+      audio.addEventListener('canplaythrough', () => resolve(audio), { once: true });
+      audio.addEventListener('error', (e) => {
+        console.warn(`SFX: HTML5 Audio failed for ${src}`, e);
+        resolve(null); // Resolve null to not block app start
+      }, { once: true });
+      audio.load();
+      // Timeout fallback just in case
+      setTimeout(() => resolve(audio), 2000); 
+    });
   }
 
   async _preloadMusic() {
-    if (!this.ctx) return;
     const loads = this.musicTracks.map(async (src) => {
       if (this.musicLoaded[src] && this.musicLoaded[src] !== "loading") return;
       this.musicLoaded[src] = "loading";
-      try {
-        const resp = await fetch(src);
-        const buf = await resp.arrayBuffer();
-        this.musicLoaded[src] = await this.ctx.decodeAudioData(buf);
-      } catch (e) {
-        console.warn("SFX: Failed to load music track (native/offline mode):", src);
-        this.musicLoaded[src] = null;
-      }
+      const result = await this._fetchAudio(src);
+      this.musicLoaded[src] = result;
     });
     await Promise.all(loads);
     if (this.pendingTrack) {
@@ -96,25 +135,13 @@ export class SFX {
   }
 
   async _loadBigExplosion() {
-    if (!this.ctx || this.bigExplosionBuffer) return;
-    try {
-      const resp = await fetch("./assets/audio/bigexplosion.wav");
-      const buf = await resp.arrayBuffer();
-      this.bigExplosionBuffer = await this.ctx.decodeAudioData(buf);
-    } catch (err) {
-      console.warn("SFX: Failed to load big explosion sample", err);
-    }
+    if (this.bigExplosionBuffer) return;
+    this.bigExplosionBuffer = await this._fetchAudio("./assets/audio/bigexplosion.wav");
   }
 
   async _loadLaser() {
-    if (!this.ctx || this.laserBuffer) return;
-    try {
-      const resp = await fetch(versioned(LASER_SRC));
-      const buf = await resp.arrayBuffer();
-      this.laserBuffer = await this.ctx.decodeAudioData(buf);
-    } catch (err) {
-      console.warn("SFX: Failed to load laser sample (using synth fallback)", err);
-    }
+    if (this.laserBuffer) return;
+    this.laserBuffer = await this._fetchAudio(LASER_SRC);
   }
 
   _pickMusicTrack() {
@@ -122,35 +149,50 @@ export class SFX {
   }
 
   playMusic(trackSrc) {
-    if (!this.ctx) return;
     const src = trackSrc || this._pickMusicTrack();
-    const buffer = this.musicLoaded[src];
-    if (!buffer || buffer === "loading") {
+    const asset = this.musicLoaded[src];
+    
+    if (!asset || asset === "loading") {
       this.pendingTrack = src;
       return;
     }
-    if (this.music) {
-      try { this.music.stop(); } catch (_) {}
-      this.music.disconnect();
+
+    // Stop current
+    this.stopMusic();
+
+    if (asset instanceof AudioBuffer && this.ctx) {
+      // WebAudio
+      const node = this.ctx.createBufferSource();
+      node.buffer = asset;
+      node.loop = true;
+      node.connect(this.musicGain || this.master);
+      if (!this.muted) node.start();
+      this.music = node;
+    } else if (asset instanceof Audio) {
+      // HTML5 Audio
+      this.music = asset;
+      this.music.loop = true;
+      this.music.muted = this.muted;
+      this.music.volume = 0.55;
+      this.music.currentTime = 0;
+      this.music.play().catch(e => console.warn("Music play failed", e));
     }
-    const node = this.ctx.createBufferSource();
-    node.buffer = buffer;
-    node.loop = true;
-    node.connect(this.musicGain || this.master);
-    if (!this.muted) node.start();
-    this.music = node;
   }
 
   stopMusic() {
     if (!this.music) return;
-    try { this.music.stop(); } catch (_) {}
-    this.music.disconnect();
+    try {
+      if (this.music.stop) this.music.stop(); // WebAudio
+      if (this.music.pause) this.music.pause(); // HTML5 Audio
+    } catch (_) {}
+    if (this.music.disconnect) this.music.disconnect();
     this.music = null;
   }
 
-  _now() { return this.ctx.currentTime; }
+  _now() { return this.ctx ? this.ctx.currentTime : 0; }
 
   _env(gainNode, t0, a, d, s, r) {
+    if (!this.ctx) return;
     const g = gainNode.gain;
     g.cancelScheduledValues(t0);
     g.setValueAtTime(0.0001, t0);
@@ -160,6 +202,7 @@ export class SFX {
   }
 
   _noise(duration = 0.12) {
+    if (!this.ctx) return null;
     const sr = this.ctx.sampleRate;
     const len = Math.max(1, Math.floor(sr * duration));
     const buf = this.ctx.createBuffer(1, len, sr);
@@ -171,16 +214,24 @@ export class SFX {
   }
 
   laser() {
-    if (!this.ctx || this.muted) return;
+    if (this.muted) return;
     if (this.laserBuffer) {
-      const src = this.ctx.createBufferSource();
-      src.buffer = this.laserBuffer;
-      const gain = this.ctx.createGain();
-      gain.gain.value = 1.2;
-      src.connect(gain);
-      gain.connect(this.master);
-      src.start();
+      if (this.laserBuffer instanceof AudioBuffer && this.ctx) {
+        const src = this.ctx.createBufferSource();
+        src.buffer = this.laserBuffer;
+        const gain = this.ctx.createGain();
+        gain.gain.value = 1.2;
+        src.connect(gain);
+        gain.connect(this.master);
+        src.start();
+      } else if (this.laserBuffer instanceof Audio) {
+        const sound = this.laserBuffer.cloneNode();
+        sound.volume = 0.8;
+        sound.play().catch(() => {});
+      }
     } else {
+      if (!this.ctx) return;
+      // Synth Fallback
       const t0 = this._now();
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
