@@ -19,6 +19,8 @@ struct WebGameView: NSViewRepresentable {
 
         override init(frame: CGRect) {
             super.init(frame: frame)
+            // Ensure the container itself doesn't block hits but allows subviews to receive them
+            self.wantsLayer = true
         }
 
         required init?(coder: NSCoder) {
@@ -30,12 +32,17 @@ struct WebGameView: NSViewRepresentable {
             self.webView = webView
             webView.translatesAutoresizingMaskIntoConstraints = false
             self.addSubview(webView)
+            
             NSLayoutConstraint.activate([
                 webView.leadingAnchor.constraint(equalTo: self.leadingAnchor),
                 webView.trailingAnchor.constraint(equalTo: self.trailingAnchor),
                 webView.topAnchor.constraint(equalTo: self.topAnchor),
                 webView.bottomAnchor.constraint(equalTo: self.bottomAnchor)
             ])
+            
+            // Force layout update to ensure hit-testing geometry is correct immediately
+            self.needsLayout = true
+            self.layoutSubtreeIfNeeded()
         }
     }
 

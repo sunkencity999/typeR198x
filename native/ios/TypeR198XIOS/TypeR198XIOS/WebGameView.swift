@@ -20,6 +20,8 @@ struct WebGameView: UIViewRepresentable {
         init(webView: WKWebView) {
             self.webView = webView
             super.init(frame: .zero)
+            self.isUserInteractionEnabled = true // Explicitly enable interaction
+            
             webView.translatesAutoresizingMaskIntoConstraints = false
             self.addSubview(webView)
             NSLayoutConstraint.activate([
