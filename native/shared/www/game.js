@@ -756,10 +756,14 @@ class Game {
     // autosave
     this.lastSaveAt = 0;
 
-    this.bindUI();
-    this.refreshMenu();
-    this.checkLoadingOverlay();
-    this.maybeShowKeyboardHint();
+    // Delay UI binding slightly to ensuring DOM is ready and non-blocking
+    setTimeout(() => {
+        this.bindUI();
+        this.refreshMenu();
+        this.checkLoadingOverlay();
+        this.maybeShowKeyboardHint();
+        this.focusGameCanvas();
+    }, 100);
 
     // focus
     this.canvas.tabIndex = 0;
