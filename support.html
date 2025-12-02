@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Type-R 198X Support</title>
+  <link rel="stylesheet" href="./assets/style/tokens.css" />
+  <link rel="stylesheet" href="./style.css" />
+  <style>
+    body.support-page {
+      min-height: 100vh;
+      margin: 0;
+      background: radial-gradient(circle at top, rgba(8, 12, 36, 0.95), rgba(3, 5, 16, 0.98)),
+                  url('./assets/backgrounds/thirdlevelbg.png') center / cover no-repeat fixed;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 32px;
+      font-family: var(--font-ui, "Inter", system-ui, -apple-system);
+    }
+
+    .support-modal {
+      width: min(520px, 100%);
+      background: rgba(7, 9, 26, 0.9);
+      border-radius: 28px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      padding: 48px;
+      text-align: center;
+      color: rgba(255, 255, 255, 0.92);
+      box-shadow: 0 30px 90px rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(18px);
+    }
+
+    .support-modal h1 {
+      margin: 0 0 12px;
+      letter-spacing: 0.3em;
+      font-size: 1.1rem;
+      text-transform: uppercase;
+      color: #7ef7ff;
+    }
+
+    .support-modal p {
+      margin: 0 0 24px;
+      font-size: 1.05rem;
+      line-height: 1.6;
+    }
+
+    .support-email {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 24px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #ff73d4, #5be6ff);
+      color: #060913;
+      font-weight: 600;
+      text-decoration: none;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .support-email:hover {
+      opacity: 0.9;
+    }
+  </style>
+</head>
+<body class="support-page">
+  <div class="support-modal">
+    <h1>Type-R 198X Support</h1>
+    <p>For support or questions email the creator at</p>
+    <a class="support-email" href="mailto:support@typer198x.com">support@typer198x.com</a>
+  </div>
+</body>
+</html>

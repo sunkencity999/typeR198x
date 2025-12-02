@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>About Type-R 198X</title>
+  <link rel="stylesheet" href="./assets/style/tokens.css" />
+  <link rel="stylesheet" href="./style.css" />
+  <style>
+    body.info-page {
+      min-height: 100vh;
+      margin: 0;
+      background: linear-gradient(160deg, #05070b 0%, #0f1233 60%, #1f0f33 100%);
+      font-family: var(--font-ui, "Inter", system-ui, -apple-system, BlinkMacSystemFont);
+      color: rgba(255, 255, 255, 0.92);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 16px;
+    }
+
+    .info-shell {
+      width: min(960px, 100%);
+      background: rgba(9, 12, 32, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 32px;
+      padding: 48px;
+      box-shadow: 0 40px 90px rgba(0, 0, 0, 0.45);
+      backdrop-filter: blur(20px);
+    }
+
+    .info-header {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 24px;
+      align-items: center;
+      margin-bottom: 32px;
+    }
+
+    .info-logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 600;
+      letter-spacing: 0.18em;
+    }
+
+    .info-logo img {
+      width: 64px;
+      height: auto;
+    }
+
+    .pill {
+      padding: 8px 16px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      font-size: 0.85rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+    }
+
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 24px;
+      margin-top: 32px;
+    }
+
+    .info-card {
+      background: rgba(255, 255, 255, 0.04);
+      border-radius: 20px;
+      padding: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      min-height: 180px;
+    }
+
+    .info-card h3 {
+      margin-top: 0;
+      letter-spacing: 0.12em;
+      font-size: 1rem;
+      text-transform: uppercase;
+      color: #b2f5ff;
+    }
+
+    .info-card ul {
+      padding-left: 18px;
+      margin: 0;
+      color: rgba(255, 255, 255, 0.8);
+    }
+
+    .cta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      align-items: center;
+      margin-top: 40px;
+    }
+
+    .cta a {
+      padding: 14px 28px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #ff8bdc, #63f3ff);
+      color: #05070b;
+      font-weight: 600;
+      text-decoration: none;
+      letter-spacing: 0.08em;
+    }
+
+    .cta small {
+      opacity: 0.75;
+    }
+
+    @media (max-width: 720px) {
+      .info-shell {
+        padding: 32px 20px;
+      }
+    }
+  </style>
+</head>
+<body class="info-page">
+  <main class="info-shell">
+    <header class="info-header">
+      <div class="info-logo">
+        <img src="./assets/ui/logo.svg" alt="Type-R 198X" />
+        <span>TYPE-R 198X</span>
+      </div>
+      <span class="pill">Hyper-Typing Arcade</span>
+    </header>
+
+    <section>
+      <h1 class="neon-text" style="margin-bottom: 12px;">Arcade-grade typing thrills</h1>
+      <p class="small" style="font-size:1.05rem; color:rgba(255,255,255,0.82);">
+        Type-R 198X turns deliberate practice into a neon space opera. Lock onto word-swarms, laser bosses by finishing their phrases,
+        and build accuracy and speed without staring at drills. Every keystroke is a shot fired.
+      </p>
+    </section>
+
+    <section class="info-grid">
+      <article class="info-card">
+        <h3>Skill Builder</h3>
+        <p>Custom word pools, escalating speeds, and in-run accuracy tracking sharpen typing fluency while keeping the adrenaline high.</p>
+      </article>
+      <article class="info-card">
+        <h3>Immersive Story</h3>
+        <p>Ten sectors of WordStorm chaos, animated boss encounters, and synthwave SFX keep motivation maxed out for seasoned typists and new pilots alike.</p>
+      </article>
+      <article class="info-card">
+        <h3>Seamless Progress</h3>
+        <ul>
+          <li>Local saves remember ships, runs, and unlocks.</li>
+          <li>Pause or resume with a single keystroke.</li>
+          <li>Optimized for keyboard warriors on desktop and laptop.</li>
+        </ul>
+      </article>
+    </section>
+
+    <section class="info-grid" style="margin-top:32px;">
+      <article class="info-card" style="background:rgba(99,243,255,0.08); border-color:rgba(99,243,255,0.4);">
+        <h3>Available on macOS</h3>
+        <p style="font-size:1.2rem; font-weight:600;">Launch price: <span style="color:#63f3ff;">$7.99 USD</span></p>
+        <p>Download the notarized macOS edition to enjoy offline play, native keyboard focus, and silky frame pacing.</p>
+      </article>
+      <article class="info-card" style="display:flex; flex-direction:column; justify-content:center;">
+        <h3>Perfect For</h3>
+        <ul>
+          <li>Writers and coders who want faster, cleaner typing.</li>
+          <li>Students needing a break from repetitive drills.</li>
+          <li>Arcade fans chasing the next legendary high score.</li>
+        </ul>
+      </article>
+    </section>
+
+    <div class="cta">
+      <a href="./support.html">Need support?</a>
+      <small>Questions about licensing, education bundles, or accessibility? Let us know.</small>
+    </div>
+  </main>
+</body>
+</html>
