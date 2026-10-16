@@ -950,10 +950,11 @@ body[data-mode] .screen:not(.is-active) .screenInner > * {
 .sectorCard.is-current .sectorStatus { color: var(--c-ui); }
 
 .sectorCard.is-locked, .sectorCard:disabled {
-  opacity: 0.4;
+  opacity: 0.7; /* review R46: dim the chrome, keep the number and boss name legible; grayscale + the lock glyph carry the state */
   filter: grayscale(0.6);
   cursor: not-allowed;
 }
+.sectorCard.is-locked .sectorBoss, .sectorCard:disabled .sectorBoss { opacity: 1; }
 
 .sectorCard.is-locked .sectorStatus::before {
   content: "";
