@@ -197,7 +197,7 @@ Extra one-off scripts live in `probes/` (shipped) or `out/` (ignored). They can 
   round trip, story modal + Reset Save still work, reduce-motion context, legacy-midwave Continue and
   legacy-postvictory sector tile.
 
-- `probes/e2-layout.mjs [--dpr 2]` — CDP LayoutCount over 5 s idle play, 5 s idle with three chips and 5 s typing (targets idle <= 10, typing <= 30 per 5 s).
+- `probes/e2-layout.mjs [--dpr 2]` — CDP LayoutCount over 5 s idle play, 5 s idle with three chips and 5 s typing (targets idle <= 10, typing <= 35 per 5 s: 25 commit layouts at the 5 Hz HUD cadence plus ~10 event-driven writes such as a tip, a chip pickup or a tier change; the arithmetic is in the probe header).
 - `probes/e2-hitch.mjs [--dpr 2]` — max render() ms over the 3 s after a direct `startSector(i)` jump (S3/S5/S7/S10), target <= 16 ms.
 - `probes/e2-portrait.mjs` — 390x844 portrait with three chips: HUD height <= 22 % of the playfield (reports the boss-bar case).
 - `probes/e2-budget.mjs [--dpr 2] [--sector 10]` — combined budget: 14 plates, 3 chips, toast + banner, CRT on: fps >= 58, maxRenderMs <= 16, shadowBlur 0, composite sets <= 6. Run it alone (fps-sensitive).
