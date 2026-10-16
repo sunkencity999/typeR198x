@@ -541,7 +541,7 @@ Object.assign(Game.prototype, {
       .sort(byScoreThenNewest)   // review R52
       .slice(0, 10);
     if (!rows.length) {
-      tbody.innerHTML = '<tr class="hsRow hsEmpty"><td colspan="6">No runs recorded yet. Clear a sector to enter the hall.</td></tr>';
+      tbody.innerHTML = '<tr class="hsRow hsEmpty"><td colspan="6">No runs recorded yet. Score in a run to enter the hall.</td></tr>';
       return;
     }
     tbody.innerHTML = rows.map((h, i) => {
