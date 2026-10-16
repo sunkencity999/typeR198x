@@ -37,7 +37,7 @@ function getHpBonusForLevel(levelNumber) {
 const DAMAGE = {
   leakBase: 12,
   leakPerChar: 2,
-  leakCap: 16,
+  leakCap: 24,
   leak: (len) => DAMAGE.leakBase + Math.min(DAMAGE.leakCap, DAMAGE.leakPerChar * len),
   minion: 10,                                  // boss minion leak
   surge: (level) => 8 + 2 * level,             // Signal Surge that was not countered (L3 14 ... L10 28)
