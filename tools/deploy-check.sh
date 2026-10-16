@@ -8,7 +8,8 @@
 #   * every ?v= token on the served index's shell tags agrees (and with <meta name=asset-version> when present)
 #   * the served game.js (or, failing that, one of the served scripts) carries the window.SFX guard
 #   * `node --check` on the served game.js and sfx.js
-#   * served assets/opt/manifest.js version === the local assets/opt/manifest.js version
+#   * served assets/opt/manifest.js version === the local assets/opt/manifest.js version, and every assets/opt
+#     ?v= token on the served shell (the ship-card <img> tags) === that served version (review R39)
 #   * cache headers: /index.html (and /) must say no-cache or max-age=0 -> WARN, or FAIL with --strict (G025);
 #     versioned URLs should be immutable / long max-age -> WARN; manifest.js should be no-cache -> WARN;
 #     MP3 should advertise Accept-Ranges -> WARN
@@ -16,7 +17,8 @@
 #     privacy.html is a meta-refresh stub
 # Local mode (--local), source checks against --root (default: this repo):
 #   * every <script src> in index.html exists and passes `node --check`
-#   * assets/opt/manifest.js version === assets/opt/manifest.json version (MANIFEST_ONLY=1 tools/build-web-assets.sh)
+#   * assets/opt/manifest.js version === assets/opt/manifest.json version (MANIFEST_ONLY=1 tools/build-web-assets.sh),
+#     and every assets/opt ?v= token in index.html (the ship-card <img> tags) === that version (tools/bump-version.sh)
 #   * tools/check-globals.sh finds no duplicate top-level declarations across the classic scripts
 #   * the footer privacy link resolves to a local file that names the save key and links back to the game;
 #     privacy.html carries a meta refresh; info.html / support.html / privacy-policy.html link back to the game
@@ -96,7 +98,7 @@ if [[ -n "$URL" ]]; then
     node - "$TMP/index.html" > "$TMP/shell.parsed" <<'NODE' && mv "$TMP/shell.parsed" "$TMP/shell.json"
 const fs = require("fs");
 const html = fs.readFileSync(process.argv[2], "utf8");
-const tags = html.match(/<(?:script|link)\b[^>]*>/gi) || [];
+const tags = html.match(/<(?:script|link|img)\b[^>]*>/gi) || [];
 const scripts = [], styles = [], tokens = [], optTokens = [];
 for (const t of tags) {
   const m = t.match(/\b(href|src)=["']([^"']*)["']/i); if (!m) continue;
@@ -104,7 +106,8 @@ for (const t of tags) {
   if (/^(https?:)?\/\//i.test(url) || /^data:/i.test(url)) continue;
   const isScript = /^<script/i.test(t);
   const isStyle = /^<link/i.test(t) && /\brel=["']stylesheet["']/i.test(t);
-  if (isScript) scripts.push(url); else if (isStyle) styles.push(url); else continue;
+  const isImg = /^<img/i.test(t); // ship cards: their ?v= must be the ART token (review R39)
+  if (isScript) scripts.push(url); else if (isStyle) styles.push(url); else if (!isImg) continue;
   const v = (url.match(/[?&]v=([^&"']+)/) || [])[1];
   if (!v) continue;
   const isOpt = /(^|\/)assets\/opt\//.test(url) && !/manifest\.js(\?|$)/.test(url);
@@ -118,6 +121,7 @@ NODE
     SCRIPTS=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).scripts.join("\n"))' "$TMP/shell.json")
     STYLES=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).styles.join("\n"))' "$TMP/shell.json")
     TOKENS=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).tokens.join("\n"))' "$TMP/shell.json")
+    OPTTOKENS=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).optTokens.join("\n"))' "$TMP/shell.json")
     META=$(node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); console.log(j.meta||"")' "$TMP/shell.json")
     PRIVACY=$(node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); console.log(j.privacy||"")' "$TMP/shell.json")
   else
@@ -125,6 +129,7 @@ NODE
     SCRIPTS=$(grep -oiE '<script[^>]*src="[^"]*"' "$TMP/index.html" | sed -E 's/.*src="([^"]*)".*/\1/')
     STYLES=$(grep -oiE '<link[^>]*rel="stylesheet"[^>]*href="[^"]*"' "$TMP/index.html" | sed -E 's/.*href="([^"]*)".*/\1/')
     TOKENS=$(printf '%s\n%s\n' "$SCRIPTS" "$STYLES" | grep -v 'assets/opt/[^m]' | grep -oE '[?&]v=[^&"]+' | sed -E 's/^[?&]v=//')
+    OPTTOKENS=$(grep -oiE '<(img|script|link)[^>]*(src|href)="[^"]*assets/opt/[^"]*"' "$TMP/index.html" | grep -v 'manifest\.js' | grep -oE '[?&]v=[^&"]+' | sed -E 's/^[?&]v=//')
     META=$(grep -oiE '<meta[^>]*name="asset-version"[^>]*content="[^"]*"' "$TMP/index.html" | sed -E 's/.*content="([^"]*)".*/\1/' | head -1)
     PRIVACY=$(grep -oiE 'href="[^"]*privacy[^"]*"' "$TMP/index.html" | head -1 | sed -E 's/href="([^"]*)"/\1/')
   fi
@@ -185,6 +190,14 @@ NODE
       local_v=$(grep -oE '"version":"[^"]+"' "$LOCAL_MANIFEST" | head -1 | cut -d'"' -f4)
       [[ -n "$served_v" && "$served_v" == "$local_v" ]] && pass "manifest version matches local ($served_v)" || fail "manifest version served '$served_v' != local '$local_v'"
     else warn "no local assets/opt/manifest.js to compare (served $served_v)"; fi
+    # assets/opt ?v= tokens on the served shell (the ship-card <img> tags) must be the served manifest version (review R39)
+    if [[ -n "$served_v" ]]; then
+      nopt=$(printf '%s\n' "$OPTTOKENS" | sed '/^$/d' | wc -l | tr -d ' ')
+      badopt=$(printf '%s\n' "$OPTTOKENS" | sed '/^$/d' | grep -vxF "$served_v" | sort | uniq -c | tr -s ' ' | tr '\n' ';')
+      if [[ "$nopt" == "0" ]]; then info "served index.html has no assets/opt ?v= tokens on script/link/img tags"
+      elif [[ -z "$badopt" ]]; then pass "all $nopt assets/opt ?v= tokens on the served shell match the manifest version ($served_v)"
+      else fail "assets/opt ?v= tokens on the served shell differ from the manifest version $served_v:$badopt (stale ship-card tokens; run tools/bump-version.sh)"; fi
+    fi
   else fail "assets/opt/manifest.js status $st"; fi
 
   # Media + font (range requests keep this cheap)
@@ -245,6 +258,15 @@ if [[ $LOCAL -eq 1 ]]; then
       js_v=$(grep -oE '"version":"[^"]+"' "$ROOT/assets/opt/manifest.js" | head -1 | cut -d'"' -f4)
       json_v=$(grep -oE '"version": *"[^"]+"' "$ROOT/assets/opt/manifest.json" | head -1 | sed -E 's/.*"([^"]+)"$/\1/')
       [[ -n "$js_v" && "$js_v" == "$json_v" ]] && pass "assets/opt/manifest.js version $js_v matches manifest.json" || fail "assets/opt/manifest.js version '$js_v' != manifest.json '$json_v' (run MANIFEST_ONLY=1 tools/build-web-assets.sh)"
+      # assets/opt ?v= tokens in index.html (the ship-card <img> tags) must be that version (review R39)
+      if [[ -n "$json_v" ]]; then
+        opt_toks=$(grep -oiE '<(img|script|link)[^>]*(src|href)="[^"]*assets/opt/[^"]*"' "$ROOT/index.html" | grep -v 'manifest\.js' | grep -oE '[?&]v=[^&"]+' | sed -E 's/^[?&]v=//')
+        nopt=$(printf '%s\n' "$opt_toks" | sed '/^$/d' | wc -l | tr -d ' ')
+        badopt=$(printf '%s\n' "$opt_toks" | sed '/^$/d' | grep -vxF "$json_v" | sort | uniq -c | tr -s ' ' | tr '\n' ';')
+        if [[ "$nopt" == "0" ]]; then info "index.html has no assets/opt ?v= tokens on script/link/img tags"
+        elif [[ -z "$badopt" ]]; then pass "all $nopt assets/opt ?v= tokens in index.html match the manifest version ($json_v)"
+        else fail "assets/opt ?v= tokens in index.html differ from the manifest version $json_v:$badopt (stale ship-card tokens; run tools/bump-version.sh)"; fi
+      fi
     else fail "assets/opt/manifest.js or manifest.json is missing (run tools/build-web-assets.sh)"; fi
     # duplicate top-level declarations across the classic scripts
     if [[ -f "$ROOT/tools/check-globals.sh" ]]; then

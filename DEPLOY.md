@@ -80,8 +80,9 @@ bash tools/deploy-check.sh https://typer198x.com --strict
 `FAIL 0` is the gate. The strict run fails on: `index.html` or `/` without `no-cache`/`max-age=0`,
 shell tokens that disagree or differ from `<meta name="asset-version">`, any script/stylesheet/WebP/MP3/
 font with a wrong status or MIME type, a served `game.js` without the `window.SFX` guard or failing
-`node --check`, `assets/opt/manifest.js` differing from the local one, or a missing/incorrect privacy
-target. Warnings about `immutable` or `Accept-Ranges` are worth fixing but do not block.
+`node --check`, `assets/opt/manifest.js` differing from the local one, a ship-card `?v=` that differs from
+the served manifest version, or a missing/incorrect privacy target. Warnings about `immutable` or
+`Accept-Ranges` are worth fixing but do not block.
 
 ## 6. If the host cache still serves the old shell
 

@@ -4,7 +4,7 @@
 # The single writer of the web shell's version token (PLAN A10 / contract "Version token").
 # Rewrites, in one pass:
 #   * <meta name="asset-version" content="...">            (when present)
-#   * every ?v=<token> on <link>/<script> tags              in index.html, info.html, support.html,
+#   * every ?v=<token> on <link>/<script>/<img> tags        in index.html, info.html, support.html,
 #                                                          privacy-policy.html, privacy.html (when present)
 #   * const ASSET_VERSION = "...";                         in game.js
 # and leaves the withAssetVersion literal line (`return `${path}${sep}v=${ASSET_VERSION}`;`) untouched,
@@ -119,7 +119,7 @@ function rewriteHtml(file) {
     }
     return tag;
   };
-  out = out.replace(/<(?:link|script)\b[^>]*>/gi, bump);
+  out = out.replace(/<(?:link|script|img)\b[^>]*>/gi, bump); // img: the ship cards carry the ART token (review R39)
   let metaHit = false;
   out = out.replace(metaRe, (_, a, old, c) => { metaHit = true; if (old !== TOKEN) replaced++; return `${a}${TOKEN}${c}`; });
   if (!metaHit) out = out.replace(metaReAlt, (_, a, old, c) => { metaHit = true; if (old !== TOKEN) replaced++; return `${a}${TOKEN}${c}`; });

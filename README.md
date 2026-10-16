@@ -184,11 +184,13 @@ come from `PALETTE` / CSS variables rather than literals.
 2. **ART token**: the `"version"` in `assets/opt/manifest.json` (and the identical value in
    `manifest.js`), written by `tools/build-web-assets.sh`. `Assets.url()` and the music transport append
    it to every `assets/opt/*` URL; `bump-version.sh` stamps it on any `assets/opt` URL that appears in the
-   HTML. `manifest.js` itself takes the **shell** token because it is part of the shell.
+   HTML (`<script>`, `<link>` and the ship-card `<img>` tags). `manifest.js` itself takes the **shell** token
+   because it is part of the shell.
 
 Production must serve the HTML pages, `/` and `manifest.js` with `Cache-Control: no-cache` and every
 versioned URL as immutable; see [Deployment](#deployment). Bump the shell token before every deploy.
-`tools/deploy-check.sh` fails when the served tokens disagree or `manifest.js` differs from the local one.
+`tools/deploy-check.sh` fails when the served tokens disagree, `manifest.js` differs from the local one, or an
+`assets/opt` token on the shell (the ship cards) differs from the manifest version.
 
 ## Asset pipeline
 
@@ -382,8 +384,9 @@ tools/deploy-check.sh https://typer198x.com --strict            # 5. go/no-go
 - **Go/no-go.** `tools/deploy-check.sh https://typer198x.com --strict` fails when `index.html` lacks
   `no-cache`/`max-age=0`, when the served `?v=` tokens disagree, when a script, stylesheet, WebP, MP3 or the
   font comes back with the wrong status or MIME type, when the served `game.js` has no `window.SFX` guard
-  or fails `node --check`, when `assets/opt/manifest.js` differs from the local one, or when the footer
-  privacy target is missing. Without `--strict` the cache-header findings are warnings.
+  or fails `node --check`, when `assets/opt/manifest.js` differs from the local one, when a ship-card `?v=`
+  differs from the served manifest version, or when the footer privacy target is missing. Without `--strict`
+  the cache-header findings are warnings.
 
 ## Native wrappers
 
