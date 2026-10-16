@@ -46,6 +46,7 @@ Object.assign(Game.prototype, {
     this.parallax.bgOffset = 0;
     this.parallax.fgOffset = 0;
 
+    this.resetTransientFx();
     this.bossClear = null;
     this.bossFinaleBursts.length = 0;
     this.bossFinaleOrigin = null;
@@ -98,6 +99,7 @@ Object.assign(Game.prototype, {
 
   stopToMenu(saveRun = true) {
     if (saveRun) this.saveRun(true);
+    this.resetTransientFx();
     this.setMode("menu");
     this.refreshMenu();
   },
@@ -112,6 +114,10 @@ Object.assign(Game.prototype, {
   },
 
   onGameOver() {
+    if (this.mode === "gameOver") return;
+    const lvl = LEVELS[this.levelIndex].level;
+    this.deathsBySector[lvl] = (this.deathsBySector[lvl] || 0) + 1;
+    this.resetTransientFx();
     this.setMode("gameOver");
     const acc = this.getAccuracyPct();
     this.ui.gameOverText.textContent = `Final score: ${formatInt(this.stats.score)} • Accuracy: ${acc}%`;
@@ -122,14 +128,15 @@ Object.assign(Game.prototype, {
   },
 
   onVictory() {
+    // Bank the score first: the dialogue below must never stand between a win and the high score (F001).
+    this.commitHighScore();
+    this.save.run = null;
+    storeSave(this.save);
     this.setMode("victory");
     const acc = this.getAccuracyPct();
     this.ui.victoryText.textContent = `You beat all 10 levels! Score: ${formatInt(this.stats.score)} • Accuracy: ${acc}%`;
     this.resetEndingDialogue();
     this.advanceEndingDialogue();
-    this.commitHighScore();
-    this.save.run = null;
-    storeSave(this.save);
   },
 
   applyLevelHpBonus(levelNumber) {

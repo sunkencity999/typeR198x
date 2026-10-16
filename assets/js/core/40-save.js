@@ -27,6 +27,15 @@ function buildResumeRun(levelIndex, maxHp, shipId) {
   };
 }
 
+// Full stats / levelStats shapes (CONTRACT §9). Later tracks increment these fields; they always exist.
+function defaultStats() {
+  return { score: 0, combo: 0, mult: 1, correct: 0, total: 0, maxCombo: 0, kills: 0, words: 0, letters: 0, chars: 0, misses: 0, timeMs: 0, bossTimeMs: 0, retries: 0 };
+}
+
+function defaultLevelStats() {
+  return { kills: 0, words: 0, chars: 0, correct: 0, total: 0, maxCombo: 0, timeMs: 0, bossTimeMs: 0, damageTaken: 0, waveDamage: 0, bossDamage: 0, surgesCancelled: 0, perfectWaves: 0, retries: 0, levelScore: 0 };
+}
+
 function clampPlayerHp(player) {
   player.hp = clamp(player.hp, 0, player.maxHp);
 }

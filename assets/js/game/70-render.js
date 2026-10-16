@@ -40,9 +40,6 @@ Object.assign(Game.prototype, {
     }
 
     for (const s of this.stars) {
-      const spd = lerp(30, 140, 1 - s.z);
-      s.x -= spd * (1/60);
-      if (s.x < -5) { s.x = this.w + rand(0, 80); s.y = rand(0, this.h); s.z = Math.random(); }
       const alpha = lerp(0.25, 0.9, 1 - s.z);
       ctx.fillStyle = `rgba(255,255,255,${alpha})`;
       ctx.fillRect(s.x, s.y, s.s, s.s);
@@ -484,9 +481,10 @@ Object.assign(Game.prototype, {
 
   render(dt) {
     const ctx = this.ctx;
-    // Shake transform
-    const sx = (this.shake > 0) ? rand(-this.shake, this.shake) : 0;
-    const sy = (this.shake > 0) ? rand(-this.shake, this.shake) : 0;
+    // Shake transform: random offset with amplitude from trauma (D1 replaces this with smooth noise).
+    const amp = 18 * this.trauma * this.trauma;
+    const sx = amp >= 0.5 ? Math.round(rand(-amp, amp)) : 0;
+    const sy = amp >= 0.5 ? Math.round(rand(-amp, amp)) : 0;
 
     ctx.save();
     ctx.setTransform(1,0,0,1,0,0);

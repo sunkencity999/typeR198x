@@ -113,6 +113,9 @@ Object.assign(Game.prototype, {
     if (this.ui.endingNext) {
       this.ui.endingNext.addEventListener("click", () => this.advanceEndingDialogue());
     }
+    if (this.ui.endingSkip) {
+      this.ui.endingSkip.addEventListener("click", () => this.skipEndingDialogue());
+    }
 
     if (this.keyboardHintBtn) {
       this.keyboardHintBtn.addEventListener("click", () => this.dismissKeyboardHint());
@@ -165,14 +168,50 @@ Object.assign(Game.prototype, {
       this.handleTyped(ch);
     });
 
+    this.bindLifecycle();
+  },
+
+  // Page lifecycle: pause + save on blur/hidden, stop the rAF while hidden, save on pagehide (F091).
+  bindLifecycle() {
     window.addEventListener("blur", () => {
-      if (this.mode === "playing") this.setMode("paused");
+      if (this.mode === "playing") this.pauseGame("blur");
+      this.saveRun(true);
+    });
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) this.onPageHidden();
+      else this.onPageVisible();
+    });
+
+    window.addEventListener("pagehide", () => {
       this.saveRun(true);
     });
 
     window.addEventListener("beforeunload", () => {
       this.saveRun(true);
     });
+  },
+
+  onPageHidden() {
+    if (this.mode === "playing") this.pauseGame("hidden");
+    this.saveRun(true);
+    if (this.rafId !== null) {
+      cancelAnimationFrame(this.rafId);
+      this.rafId = null;
+    }
+    if (this.sfx && typeof this.sfx.onHidden === "function") this.sfx.onHidden();
+  },
+
+  onPageVisible() {
+    this.prev = nowMs();
+    if (this.rafId === null && this._loop) this.rafId = requestAnimationFrame(this._loop);
+    if (this.sfx && typeof this.sfx.onVisible === "function") this.sfx.onVisible();
+  },
+
+  pauseGame(reason = "user") {
+    if (this.mode !== "playing") return;
+    this.pauseReason = reason;
+    this.setMode("paused");
   },
 
   async ensureAudio() {
@@ -206,24 +245,99 @@ Object.assign(Game.prototype, {
   },
 
   togglePause() {
-    if (this.mode === "playing") this.setMode("paused");
+    if (this.mode === "playing") this.pauseGame("user");
     else if (this.mode === "paused") this.setMode("playing");
   },
 
   setMode(m) {
     this.mode = m;
-    // screens
-    this.ui.menu.classList.toggle("hidden", m !== "menu");
-    this.ui.paused.classList.toggle("hidden", m !== "paused");
-    this.ui.levelComplete.classList.toggle("hidden", m !== "levelComplete");
-    this.ui.gameOver.classList.toggle("hidden", m !== "gameOver");
-    this.ui.victory.classList.toggle("hidden", m !== "victory");
+    document.body.dataset.mode = m;
+    // screens: .hidden (today's CSS) + .is-active (C1's transitions)
+    const screens = {
+      menu: this.ui.menu,
+      paused: this.ui.paused,
+      levelComplete: this.ui.levelComplete,
+      gameOver: this.ui.gameOver,
+      victory: this.ui.victory
+    };
+    for (const key of Object.keys(screens)) {
+      const el = screens[key];
+      if (!el) continue;
+      const active = key === m;
+      el.classList.toggle("hidden", !active);
+      el.classList.toggle("is-active", active);
+    }
     // Pause button label
     this.btnPause.textContent = (m === "paused") ? "Resume" : "Pause";
+    if (m === "paused") {
+      // Freeze-frame: the pause screen sits on a still canvas.
+      this.trauma = 0;
+      this.shake = 0;
+      if (this.ui.pauseReason) {
+        const copy = { user: "Paused", blur: "Window lost focus", hidden: "Tab hidden", fullscreen: "Left fullscreen" };
+        this.ui.pauseReason.textContent = copy[this.pauseReason] || copy.user;
+      }
+    } else {
+      this.pauseReason = "user";
+    }
     // Autosave when leaving playing
     if (m !== "playing") this.saveRun(true);
     // Focus canvas
     if (m === "playing") this.canvas.focus();
+    this.requestFrame();
+  },
+
+  // ------------------------- Ending dialogue (victory) -------------------------
+  resetEndingDialogue() {
+    this.endingScript = getVictoryScript();
+    this.endingIndex = 0;
+    const u = this.ui;
+    if (u.endingStage) { u.endingStage.textContent = ""; u.endingStage.classList.add("hidden"); }
+    if (u.endingSpeaker) { u.endingSpeaker.textContent = ""; u.endingSpeaker.classList.add("hidden"); }
+    if (u.endingLine) u.endingLine.textContent = "";
+    if (u.creditsLine) u.creditsLine.classList.add("hidden");
+    if (this.btnNewRun) this.btnNewRun.classList.add("hidden");
+    if (u.endingNext) u.endingNext.classList.remove("hidden");
+    if (u.endingSkip) u.endingSkip.classList.remove("hidden");
+  },
+
+  showEndingLine(i) {
+    const n = this.endingScript.length;
+    const line = this.endingScript[i];
+    if (!line) return;
+    const u = this.ui;
+    if (u.endingStage) { u.endingStage.textContent = `TRANSMISSION ${i + 1}/${n}`; u.endingStage.classList.remove("hidden"); }
+    if (u.endingSpeaker) { u.endingSpeaker.textContent = line.speaker || ""; u.endingSpeaker.classList.remove("hidden"); }
+    if (u.endingLine) u.endingLine.textContent = line.text || "";
+    const win = u.endingLine ? u.endingLine.closest(".dialogueWindow") : null;
+    if (win) win.dataset.speaker = (line.speaker || "").toLowerCase().replace(/[^a-z]+/g, "-");
+  },
+
+  advanceEndingDialogue() {
+    const n = this.endingScript.length;
+    if (this.endingIndex >= n) { this.finishEndingDialogue(); return; }
+    this.showEndingLine(this.endingIndex);
+    this.endingIndex++;
+    if (this.endingIndex >= n) this.finishEndingDialogue();
+  },
+
+  skipEndingDialogue() {
+    const n = this.endingScript.length;
+    if (n) this.showEndingLine(n - 1);
+    this.endingIndex = n;
+    this.finishEndingDialogue();
+  },
+
+  // Last line shown: reveal Play again + credits, retire Next/Skip.
+  finishEndingDialogue() {
+    const u = this.ui;
+    if (u.creditsLine) u.creditsLine.classList.remove("hidden");
+    if (this.btnNewRun) this.btnNewRun.classList.remove("hidden");
+    if (u.endingNext) u.endingNext.classList.add("hidden");
+    if (u.endingSkip) u.endingSkip.classList.add("hidden");
+    if (this.btnNewRun && this.mode === "victory") {
+      try { this.btnNewRun.focus({ preventScroll: true }); } catch (_) {}
+    }
   },
 
   refreshMenu() {

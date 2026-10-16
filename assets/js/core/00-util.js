@@ -18,6 +18,18 @@ const SKIP_CORS_IMAGES = IS_FILE_ORIGIN || IS_NATIVE_SHELL;
 
 const nowMs = () => performance.now();
 
+// In-place array compaction: keepFn runs for EVERY element (callers update inside it), survivors keep
+// their order and identity (so a lock reference stays valid), and the same array object is returned.
+function compactInPlace(arr, keepFn) {
+  let w = 0;
+  for (let i = 0; i < arr.length; i++) {
+    const item = arr[i];
+    if (keepFn(item)) arr[w++] = item;
+  }
+  arr.length = w;
+  return arr;
+}
+
 function formatInt(n) {
   return Math.floor(n).toLocaleString();
 }

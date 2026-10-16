@@ -1,7 +1,48 @@
 // Type-R 198X — visual FX: lasers, sparks, explosions, screen shake. Methods are mixed into Game.prototype; load order is defined in index.html.
 Object.assign(Game.prototype, {
-  screenShake(amount) {
-    this.shake = Math.max(this.shake, amount);
+  // Trauma camera (C-8): px maps onto trauma; render derives the shake amplitude from trauma.
+  screenShake(px) {
+    if (this.reduceMotion) return;
+    this.trauma = clamp(this.trauma + (px || 0) / 14, 0, 1);
+    this.shake = 18 * this.trauma * this.trauma;
+  },
+
+  // Effects clock: runs in EVERY mode (loop calls it before update), so hits settle behind pause/game-over panels.
+  tickEffects(dt) {
+    this.trauma = Math.max(0, this.trauma - dt * 1.4);
+    this.shake = 18 * this.trauma * this.trauma; // legacy mirror (amplitude in px)
+    this.flash = Math.max(0, this.flash - dt * 3);
+    this.damagePulse = Math.max(0, this.damagePulse - dt * 1.8);
+    this.hitStop = Math.max(0, this.hitStop - dt);
+  },
+
+  // Ambient drift only: stars, parallax, the starT phase clock. Called from update() while playing and
+  // from the loop's ambient tick on menu/pause/level-complete/victory screens.
+  stepAmbient(dt) {
+    this.starT += dt;
+    if (this.currentTheme) {
+      this.parallax.bgOffset += (this.currentTheme.bgSpeed || 0) * dt;
+      this.parallax.fgOffset += (this.currentTheme.fgSpeed || 0) * dt;
+    }
+    for (const s of this.stars) {
+      const spd = lerp(30, 140, 1 - s.z);
+      s.x -= spd * dt;
+      if (s.x < -5) { s.x = this.w + rand(0, 80); s.y = rand(0, this.h); s.z = Math.random(); }
+    }
+  },
+
+  // Zero every transient presentation effect. Called at the top of startLevel(), stopToMenu(), onGameOver().
+  resetTransientFx() {
+    this.trauma = 0;
+    this.shake = 0;
+    this.flash = 0;
+    this.damagePulse = 0;
+    this.hitStop = 0;
+    this.timeScale = 1;
+    this.bossIntro = null;
+    this.explosions.length = 0;
+    this.particles.length = 0;
+    this.bullets.length = 0;
   },
 
   fireLaserTo(tx, ty, color) {
