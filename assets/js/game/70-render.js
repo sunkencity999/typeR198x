@@ -115,6 +115,9 @@ Object.assign(Game.prototype, {
       this.canvas.height = wantH;
       this.spriteEpoch++;
       if (this.plateCache) this.plateCache.clear();
+      // review R30: re-bake the active content's plate sprites in idle slices at the new scale (sector 1 for the
+      // menu / attract) instead of inside the next frames; during boot activateAttract / loadLevelAssets warm anyway.
+      if (this.loadingDismissed && typeof this.warmPlateCache === "function") this.warmPlateCache(this.mode === "menu" ? 0 : this.levelIndex);
       this.vignetteSprite = null;
       this.dangerVignette = null;
       if (typeof Assets !== "undefined" && Assets && typeof Assets.setRenderScale === "function") Assets.setRenderScale(s);
