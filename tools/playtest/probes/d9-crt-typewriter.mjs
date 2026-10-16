@@ -96,7 +96,7 @@ const grow = await P.g(() => new Promise((resolve) => {
 }));
 const lens = grow.out.map((o) => o.len);
 P.check("#endingLine grows across frames and equals the line within 1.5 s; lime caret blinks while typing", lens[0] < grow.full && lens.some((l, i) => i > 0 && l > lens[i - 1]) && lens[lens.length - 1] === grow.full && grow.out[0].caret && grow.out[0].caretAnim === "blink", JSON.stringify({ lens, full: grow.full, caret: grow.out[0] }));
-P.check("TRANSMISSION 1/23, progress 1 / 23, speaker typegrid", grow.stage === "TRANSMISSION 1/23" && grow.progress === "1 / 23" && grow.speaker === "typegrid", JSON.stringify({ stage: grow.stage, progress: grow.progress, speaker: grow.speaker }));
+P.check("stage INCOMING TRANSMISSION, progress 1 / 23, speaker typegrid", grow.stage === "INCOMING TRANSMISSION" && grow.progress === "1 / 23" && grow.speaker === "typegrid", JSON.stringify({ stage: grow.stage, progress: grow.progress, speaker: grow.speaker }));
 
 // Enter advances to line 2; Enter mid-line completes instantly; Enter again advances.
 await P.g(() => document.activeElement && document.activeElement.blur());

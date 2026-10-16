@@ -643,7 +643,8 @@ Object.assign(Game.prototype, {
     if (!line) return;
     const u = this.ui;
     const key = this.endingSpeakerKey(line.speaker);
-    if (u.endingStage) { u.endingStage.textContent = `TRANSMISSION ${i + 1}/${n}`; u.endingStage.classList.remove("hidden"); }
+    // The counter lives in the window header (#endingProgress); the stage line is the channel label (review R35).
+    if (u.endingStage) { u.endingStage.textContent = "INCOMING TRANSMISSION"; u.endingStage.classList.remove("hidden"); }
     if (u.endingSpeaker) {
       u.endingSpeaker.textContent = line.speaker || "";
       u.endingSpeaker.dataset.speaker = key;

@@ -93,7 +93,7 @@ await P.g(() => { window.game.invulnT = 1000; });
 await P.autoType(240, { accuracy: 0.995, until: (s) => s.bossClear || s.mode !== "playing" });
 await page.waitForFunction(() => window.game.mode === "victory", null, { timeout: 30000 }).catch(() => {});
 const v0 = await P.g(() => ({ mode: window.game.mode, progress: document.getElementById("endingProgress").textContent.trim(), stage: document.getElementById("endingStage").textContent.trim(), n: window.game.endingScript.length, hiddenCard: document.getElementById("resultsRun").classList.contains("hidden"), speaker: document.querySelector("#screenVictory .dialogueWindow").dataset.speaker }));
-P.check("victory: #endingProgress '1 / N' and TRANSMISSION 1/N, results hidden", v0.mode === "victory" && v0.progress === `1 / ${v0.n}` && v0.stage === `TRANSMISSION 1/${v0.n}` && v0.hiddenCard, JSON.stringify(v0));
+P.check("victory: #endingProgress '1 / N', #endingStage 'INCOMING TRANSMISSION' (no second counter), results hidden", v0.mode === "victory" && v0.progress === `1 / ${v0.n}` && v0.stage === "INCOMING TRANSMISSION" && v0.hiddenCard, JSON.stringify(v0));
 await sleep(700);
 await P.shot("victory-dialogue");
 await page.keyboard.press("Escape");
