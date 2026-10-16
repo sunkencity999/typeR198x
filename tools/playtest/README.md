@@ -94,7 +94,9 @@ everything else:
 `01-boot 02-menu 03-story 04-gameplay-early 05-gameplay-mid 06-paused 07-boss-intro 08-boss-fight
 09-boss-finale 10-level-complete 11-level2-start 12-game-over 13-final-boss 14-victory
 15-victory-dialogue 16-menu-after`. A shot keeps its number even when earlier ones are skipped
-(fixtures with `storySeen` produce no `03-story`); extra shots continue from 17.
+(fixtures with `storySeen` produce no `03-story`); extra shots continue from 17. `03-story` is taken once the
+modal has settled (400 ms), `05-gameplay-mid` waits up to 4 s for at least three enemies on screen, and
+`07-boss-intro` captures the intro ceremony at ~1.2 s before the hand-off.
 
 ## report.json fields
 
@@ -115,6 +117,7 @@ everything else:
 | `fullFrameFillMaxAlpha` | Max effective alpha (`fillStyle` alpha × `globalAlpha`) of a translucent `fillRect` covering ≥ 90 % of the game canvas (contract: ≤ .12 except the 2-frame storm flash). `perf.*.fullFrameFillFramesAbove12` counts offending frames; `fullFrameOpaqueFillsPerFrame` is the base clear; `fullFrameGradientFills` counts gradient/pattern fills whose alpha cannot be parsed |
 | `getImageDataCalls` | Total `getImageData` calls (should be 0 after the loader lands) |
 | `layoutCountPer5s`, `recalcStyleCountPer5s`, `jsHeapUsedMB` | CDP `Performance.getMetrics` deltas over the first typing wave, normalised to 5 s (DOM HUD write hygiene) |
+| `layoutCountPer5sIdle` | The same LayoutCount delta over the first 5 s of play before any typing (the PLAN A11 idle target, <= 10) |
 | `probe` | Whole-run totals plus `longTasks {count,maxMs,totalMs}` from `PerformanceObserver('longtask')` and `wrapped` (render wrap succeeded) |
 | `network[]` | Every finished request: `{url, bytes (transfer size incl. headers), start, end (ms from navigation), status, type}` |
 | `networkTotals` | `requests`, `overallBytes`, `mediaBytes`, `firstKeystrokeMs`, `bytesStartedBeforeFirstKeystroke`, `bytesFinishedBeforeFirstKeystroke`, `bytesFinishedBeforeFirstKeystrokeNonMedia` (the ~2.5 MB budget metric), `bytesFinishedBeforeFirstKeystrokeMedia`, `byType`, `topUrls` (bytes per URL, ranges summed) |
@@ -193,6 +196,13 @@ Extra one-off scripts live in `probes/` (shipped) or `out/` (ignored). They can 
   `assets/ships/*.png` before the first keystroke, silent / stat-free, ship-radio swap flash, Start / pause-quit
   round trip, story modal + Reset Save still work, reduce-motion context, legacy-midwave Continue and
   legacy-postvictory sector tile.
+
+- `probes/e2-layout.mjs [--dpr 2]` — CDP LayoutCount over 5 s idle play, 5 s idle with three chips and 5 s typing (targets idle <= 10, typing <= 30 per 5 s).
+- `probes/e2-hitch.mjs [--dpr 2]` — max render() ms over the 3 s after a direct `startSector(i)` jump (S3/S5/S7/S10), target <= 16 ms.
+- `probes/e2-portrait.mjs` — 390x844 portrait with three chips: HUD height <= 22 % of the playfield (reports the boss-bar case).
+- `probes/e2-budget.mjs [--dpr 2] [--sector 10]` — combined budget: 14 plates, 3 chips, toast + banner, CRT on: fps >= 58, maxRenderMs <= 16, shadowBlur 0, composite sets <= 6. Run it alone (fps-sensitive).
+- `probes/e2-vision.mjs` — six scenes under normal / deuteranopia / achromatopsia vision (`Emulation.setEmulatedVisionDeficiency`), 15 PNGs under `out/e2-vision/`, plus DOM/state assertions on the shape cues.
+- `probes/e2-menu.mjs` — CRT top-bar toggle (label, aria-pressed, dot, data-crt), NEW RUN + confirm, Enter -> Continue, Escape restores focus.
 
 ## Music loop points (`tools/measure-loops.sh`)
 
