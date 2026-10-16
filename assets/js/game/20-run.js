@@ -53,19 +53,37 @@ Object.assign(Game.prototype, {
 
   // ------------------------- Run/Level control -------------------------
   startNewRun() {
+    this.beginRunAt(0);
+  },
+
+  // Sector select (C5 / SYS-12): a fresh run that starts at sector levelIndex+1 with that sector's HP curve, score 0
+  // and a level checkpoint; run.startLevel > 1 keeps it off the headline high score (commitHighScore) but in the
+  // top-10 table. This is the direct entry (the harness jumps to sector 10 with it); the unlock check and the
+  // confirm for a saved run live in the sector-tile path (enterSectorFromMenu, 15-screens.js).
+  startSector(levelIndex) {
+    const i = clamp(levelIndex | 0, 0, 9);
+    this.beginRunAt(i);
+    return true;
+  },
+
+  // Shared by startNewRun (sector 1) and startSector(i): bank the abandoned run, reset player/stats, new run record.
+  beginRunAt(levelIndex) {
+    const i = clamp(levelIndex | 0, 0, 9);
+    const L = i + 1;
     this.commitHighScore(); // bank whatever run is being abandoned (F009)
     this.setPlayerShip(this.getSelectedShipId());
-    this.levelIndex = 0;
+    this.levelIndex = i;
     this.stats = defaultStats();
     this.levelStats = defaultLevelStats();
-    this.player.maxHp = getHpBonusForLevel(1);
+    this.player.maxHp = getHpBonusForLevel(L);
     this.player.hp = this.player.maxHp;
     this.player.shield = 0;
     this.power = { spread: 0, pierce: 0, rapid: 0, multiplier: 0 };
     this.toastOnce.clear();
-    this.run = this.save.run = this.newRunRecord(0, 1);
+    this._accuracyTipPending = false;
+    this.run = this.save.run = this.newRunRecord(i, L);
     this.setRunMeta(this.run);
-    this.startLevel(0, { fromMenu: true, fresh: true });
+    this.startLevel(i, { fromMenu: true, fresh: true });
   },
 
   continueRun() {
@@ -290,6 +308,10 @@ Object.assign(Game.prototype, {
     if (this.sfx && typeof this.sfx.setMusicState === "function") this.sfx.setMusicState("end");
     this.setMode("menu");
     this.refreshMenu();
+    // Until refreshMenu() calls renderMenuScreens() itself (shell hook), the cabinet is re-rendered here.
+    if (!this._menuScreensHooked && typeof this.renderMenuScreens === "function") {
+      this.renderMenuScreens(typeof SCREENS_SELF !== "undefined" ? SCREENS_SELF : "self");
+    }
   },
 
   // ------------------------- Checkpoints -------------------------
@@ -461,21 +483,46 @@ Object.assign(Game.prototype, {
     }
     this.setMode("levelComplete");
     const r = this.lastResults;
-    const bonus = (info && info.tally) ? info.tally.total : 0;
-    this.ui.levelCompleteText.textContent = `Sector ${info.level} cleared! Bonus +${formatInt(bonus)} • Rank ${r ? r.rank : "-"} • ${r ? r.wpm : 0} WPM • Max HP ${this.player.maxHp}`;
-    if (typeof this.renderResultsCard === "function" && r) this.renderResultsCard(document.getElementById("resultsLevel"), r, { animate: true });
+    const cfg = LEVELS[clamp(info.levelIndex | 0, 0, 9)];
+    const L = info.level || cfg.level;
+    const nextCfg = LEVELS[Math.min(L, LEVELS.length - 1)];
+    const $ = (id) => document.getElementById(id);
+    // Eyebrow carries the sector, the title the kill, the sub what comes next (C4 copy).
+    const eyebrow = $("levelCompleteEyebrow");
+    const title = $("levelCompleteTitle");
+    const bossName = info.bossName || cfg.bossName;
+    if (eyebrow) eyebrow.textContent = `SECTOR ${L} CLEAR`;
+    if (title) {
+      title.textContent = `${bossName} NEUTRALIZED`;
+      title.classList.toggle("screenTitle--long", bossName.length > 12);
+    }
+    if (this.ui.levelCompleteText) {
+      this.ui.levelCompleteText.textContent = L >= LEVELS.length
+        ? `Max HP ${this.player.maxHp}`
+        : `Next: Sector ${L + 1} — ${nextCfg.bossName} · Max HP ${this.player.maxHp}`;
+    }
+    if (typeof this.renderResultsCard === "function" && r) this.renderResultsCard($("resultsLevel"), r, { animate: true });
+    if (typeof this.announce === "function" && r) {
+      this.announce(`Sector ${L} cleared. Rank ${r.rank}. Score ${formatInt(this.stats.score)}. Press Enter for Sector ${L + 1}.`);
+    }
+    if (typeof this.focusPrimary === "function") this.focusPrimary("levelComplete");
   },
 
   onGameOver() {
     if (this.mode === "gameOver") return;
-    const lvl = LEVELS[this.levelIndex].level;
+    const cfg = LEVELS[this.levelIndex];
+    const lvl = cfg.level;
     this.deathsBySector[lvl] = (this.deathsBySector[lvl] || 0) + 1;
     this.deathInBoss = !!(this.inBoss && this.boss);
+    const bossName = this.deathInBoss ? this.boss.name : cfg.bossName;
+    const waveNo = Math.min((this.wave | 0) + 1, 3);
     this.resetTransientFx();
     this.clearBanners();
     const r = this.buildResults("over");
     this.lastResults = r;
     if (r.wpm > (this.save.bestWpm | 0)) this.save.bestWpm = r.wpm;
+    // Sector-1 deaths below 70 % accuracy queue the accuracy tip for the next sector start (C8).
+    if (lvl === 1 && r.acc < 70) this._accuracyTipPending = true;
     // Keep the real run (no resume stub): hp 0 tells Continue to restore the checkpoint (F030).
     if (this.run) this.writeRunSave({ dead: true });
     if (this.sfx) {
@@ -483,12 +530,28 @@ Object.assign(Game.prototype, {
       this.sfx.fanfare("gameOver");
     }
     this.setMode("gameOver");
-    const acc = this.getAccuracyPct();
-    this.ui.gameOverText.textContent = `Final score: ${formatInt(this.stats.score)} • Accuracy: ${acc}% • ${r.wpm} WPM • Rank ${r.rank}`;
+    const run = this.run || this.save.run;
+    const cp = run && run.checkpoint;
+    const cpLevel = cp ? (cp.levelIndex | 0) + 1 : lvl;
+    const cpScore = cp ? (cp.score | 0) : 0;
+    if (this.ui.gameOverText) {
+      this.ui.gameOverText.textContent = `Sector ${lvl} · ${this.deathInBoss ? `boss ${bossName}` : `wave ${waveNo}/3`}`;
+    }
+    if (this.btnTryAgain) this.btnTryAgain.textContent = `Retry sector ${cpLevel}`;
+    const canRetryBoss = this.deathInBoss && !!(run && run.bossCheckpoint && run.boss);
+    if (this.btnRetryBoss) this.btnRetryBoss.classList.toggle("hidden", !canRetryBoss);
+    const note = document.getElementById("retryNote");
+    if (note) {
+      let text = cp ? `Score returns to the Sector ${cpLevel} checkpoint: ${formatInt(cpScore)} pts` : "Score returns to the sector start";
+      if (canRetryBoss) text += ` · Retry boss keeps ${formatInt(run.bossCheckpoint.score | 0)} pts`;
+      note.textContent = text;
+    }
     if (typeof this.renderResultsCard === "function") this.renderResultsCard(document.getElementById("resultsOver"), r, { animate: true });
     this.commitHighScore();
-    const canRetryBoss = this.deathInBoss && !!(this.run && this.run.bossCheckpoint && this.run.boss);
-    if (this.btnRetryBoss) this.btnRetryBoss.classList.toggle("hidden", !canRetryBoss);
+    if (typeof this.announce === "function") {
+      this.announce(`Game over in Sector ${lvl}. Score ${formatInt(this.stats.score)}. Rank ${r.rank}. Press Enter to retry.`);
+    }
+    if (typeof this.focusPrimary === "function") this.focusPrimary("gameOver");
   },
 
   onVictory() {
@@ -506,11 +569,136 @@ Object.assign(Game.prototype, {
       this.sfx.fanfare("victory");
     }
     this.setMode("victory");
-    const acc = this.getAccuracyPct();
-    this.ui.victoryText.textContent = `You beat all 10 sectors! Score: ${formatInt(this.stats.score)} • Accuracy: ${acc}% • ${r.wpm} WPM • Rank ${r.rank}`;
-    if (typeof this.renderResultsCard === "function") this.renderResultsCard(document.getElementById("resultsRun"), r, { animate: true });
+    // The card carries every number; the summary line stays empty (hidden) until the dialogue ends.
+    if (this.ui.victoryText) this.ui.victoryText.textContent = "";
     this.resetEndingDialogue();
     this.advanceEndingDialogue();
+    if (typeof this.announce === "function") {
+      this.announce(`Victory. All ten sectors cleared. Score ${formatInt(this.stats.score)}. Rank ${r.rank}.`);
+    }
+  },
+
+  // ------------------------- Ending dialogue (victory) -------------------------
+  // Transmission staging over the victory script: each line is typewritten (typewrite(), 15-screens.js) when
+  // motion is allowed; Enter / Space / click complete the line first and advance on the next press; Escape or
+  // #btnEndingSkip jump to the end. The run results fade in under the last line.
+  endingSpeakerKey(speaker) {
+    const s = String(speaker || "").toUpperCase();
+    if (s.includes("EMPRESS")) return "empress";
+    if (s.includes("PILOT")) return "pilot";
+    if (s.includes("CONTROL")) return "control";
+    return "typegrid";
+  },
+
+  endingTickVariant(key) {
+    return key === "empress" ? "empress" : key === "typegrid" ? "typegrid" : undefined;
+  },
+
+  cancelEndingTypewriter() {
+    const tw = this.endingTw;
+    this.endingTw = null;
+    if (tw && typeof tw.cancel === "function") tw.cancel();
+  },
+
+  resetEndingDialogue() {
+    this.endingScript = getVictoryScript();
+    this.endingIndex = 0;
+    this.endingDone = false;
+    this.cancelEndingTypewriter();
+    const u = this.ui;
+    const $ = (id) => document.getElementById(id);
+    if (u.endingStage) { u.endingStage.textContent = ""; u.endingStage.classList.add("hidden"); }
+    if (u.endingSpeaker) { u.endingSpeaker.textContent = ""; u.endingSpeaker.classList.add("hidden"); }
+    if (u.endingLine) u.endingLine.textContent = "";
+    const progress = $("endingProgress");
+    if (progress) progress.textContent = "";
+    const win = u.endingLine ? u.endingLine.closest(".dialogueWindow") : null;
+    if (win) { win.dataset.speaker = "typegrid"; win.classList.remove("is-collapsed"); }
+    if (u.creditsLine) u.creditsLine.classList.add("hidden");
+    if (this.btnNewRun) this.btnNewRun.classList.add("hidden");
+    if (u.endingNext) u.endingNext.classList.remove("hidden");
+    if (u.endingSkip) u.endingSkip.classList.remove("hidden");
+    const card = $("resultsRun");
+    if (card) { card.classList.add("hidden"); card.classList.remove("is-revealed"); }
+  },
+
+  showEndingLine(i, opts = {}) {
+    const n = this.endingScript.length;
+    const line = this.endingScript[i];
+    if (!line) return;
+    const u = this.ui;
+    const key = this.endingSpeakerKey(line.speaker);
+    if (u.endingStage) { u.endingStage.textContent = `TRANSMISSION ${i + 1}/${n}`; u.endingStage.classList.remove("hidden"); }
+    if (u.endingSpeaker) {
+      u.endingSpeaker.textContent = line.speaker || "";
+      u.endingSpeaker.dataset.speaker = key;
+      u.endingSpeaker.classList.remove("hidden");
+    }
+    const progress = document.getElementById("endingProgress");
+    if (progress) progress.textContent = `${i + 1} / ${n}`;
+    const win = u.endingLine ? u.endingLine.closest(".dialogueWindow") : null;
+    if (win) win.dataset.speaker = key;
+    this.cancelEndingTypewriter();
+    if (!u.endingLine) return;
+    const text = line.text || "";
+    const isLast = i >= n - 1;
+    const onDone = () => {
+      this.endingTw = null;
+      // The last line settles, then the results fade in under it.
+      if (isLast && !opts.instant && this.mode === "victory") setTimeout(() => this.finishEndingDialogue(), 500);
+    };
+    const rm = typeof screensReducedMotion === "function" ? screensReducedMotion(this) : !!this.reduceMotion;
+    const canType = typeof this.typewrite === "function" && !opts.instant && !rm;
+    if (canType) {
+      this.endingTw = this.typewrite(u.endingLine, text, { cps: 38, tickEvery: 2, variant: this.endingTickVariant(key), onDone });
+    } else {
+      u.endingLine.textContent = text;
+      if (isLast && !opts.instant) onDone();
+    }
+  },
+
+  // Enter / Space / click / #btnEndingNext: a line still typing completes; a complete line yields to the next one.
+  advanceEndingDialogue() {
+    if (this.endingDone) return;
+    const tw = this.endingTw;
+    if (tw && !tw.done) { tw.complete(); return; }
+    const n = this.endingScript.length;
+    if (this.endingIndex >= n) { this.finishEndingDialogue(); return; }
+    this.showEndingLine(this.endingIndex);
+    this.endingIndex++;
+  },
+
+  skipEndingDialogue() {
+    if (this.endingDone) return;
+    const n = this.endingScript.length;
+    this.cancelEndingTypewriter();
+    if (n) this.showEndingLine(n - 1, { instant: true });
+    this.endingIndex = n;
+    this.finishEndingDialogue();
+  },
+
+  // Last line shown: collapse the window, reveal the run results, credits and Play again; retire Next/Skip.
+  finishEndingDialogue() {
+    if (this.endingDone) return;
+    this.endingDone = true;
+    this.cancelEndingTypewriter();
+    const u = this.ui;
+    const win = u.endingLine ? u.endingLine.closest(".dialogueWindow") : null;
+    if (win) win.classList.add("is-collapsed");
+    if (u.creditsLine) u.creditsLine.classList.remove("hidden");
+    if (this.btnNewRun) this.btnNewRun.classList.remove("hidden");
+    if (u.endingNext) u.endingNext.classList.add("hidden");
+    if (u.endingSkip) u.endingSkip.classList.add("hidden");
+    const card = document.getElementById("resultsRun");
+    if (card) {
+      card.classList.remove("hidden");
+      card.classList.add("is-revealed");
+      if (typeof this.renderResultsCard === "function" && this.lastResults) this.renderResultsCard(card, this.lastResults, { animate: true });
+    }
+    if (this.mode === "victory") {
+      if (typeof this.focusPrimary === "function") this.focusPrimary("victory");
+      else if (this.btnNewRun) { try { this.btnNewRun.focus({ preventScroll: true }); } catch (_) { /* no focus */ } }
+    }
   },
 
   // ------------------------- High scores -------------------------

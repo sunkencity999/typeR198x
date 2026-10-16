@@ -538,6 +538,42 @@ body[data-mode="playing"] #hud { background: rgba(5,6,11,0.74); }
   animation: chargePulse 600ms ease-in-out infinite alternate;
 }
 
+/* HUD readout refinements (screens track, C3): cockpit dividers, combo-break flash, hull/boss meter depth */
+.hudCell + .hudCell {
+  padding-left: 14px;
+  border-left: 1px solid rgba(255,255,255,0.08);
+}
+
+.hudCell .label { margin-right: 4px; }
+#hudScore { color: var(--c-text); font-weight: 600; }
+#hudCombo { transition: color var(--dur-2); }
+#hudCombo.break {
+  color: var(--c-danger);
+  animation: comboBreak 120ms var(--ease-out);
+}
+
+#hudHPFill { box-shadow: 0 0 8px rgba(57,245,255,0.35); }
+#hud[data-hp="warn"] #hudHPFill { box-shadow: 0 0 8px rgba(255,193,74,0.35); }
+#hud[data-hp="crit"] #hudHPFill { box-shadow: 0 0 10px rgba(255,77,109,0.55); }
+#hud[data-hp="crit"] { box-shadow: var(--glow-soft), inset 0 0 18px rgba(255,77,109,0.12); }
+
+.bossMeter { box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), inset 0 0 12px rgba(0,0,0,0.45); }
+.bossTitle .label { margin-right: 2px; }
+#bossSegment { opacity: 0.85; }
+
+@keyframes comboBreak {
+  0% { transform: translateX(0); }
+  30% { transform: translateX(-3px); }
+  60% { transform: translateX(2px); }
+  100% { transform: translateX(0); }
+}
+
+@media (max-width: 1024px) {
+  .hudCell + .hudCell { padding-left: 0; border-left: 0; }
+}
+
+:root.reduce-motion #hudCombo.break { animation: none; }
+
 /* ----- 5. Screens --------------------------------------------------------------- */
 .screen {
   position: absolute;
@@ -824,9 +860,6 @@ body[data-mode] .screen:not(.is-active) .screenInner > * {
   background: linear-gradient(135deg, rgba(57,245,255,0.08), rgba(255,57,209,0.06));
 }
 
-/* Compatibility shim: until C5's renderResumeCard lands, show the card only when Continue is enabled. */
-.resumeCard:has(> #btnContinue:disabled) { display: none; }
-
 #resumeShip { width: 64px; height: 48px; object-fit: contain; }
 .resumeMeta { min-width: 0; }
 .resumeMeta p { margin: 0; }
@@ -1037,6 +1070,68 @@ fieldset.shipGrid > legend {
   margin-top: var(--sp-4);
   padding-top: var(--sp-3);
   border-top: 1px solid var(--chrome0);
+}
+
+/* Cabinet states (screens track, C5): resume card moods, sector tile badges, saved marker, roving focus */
+.resumeCard { position: relative; overflow: hidden; }
+.resumeCard::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--c-ui);
+  opacity: 0.8;
+}
+.resumeCard[data-state="dead"] {
+  border-color: rgba(255,77,109,0.5);
+  background: linear-gradient(135deg, rgba(255,77,109,0.08), rgba(5,6,11,0.25));
+}
+.resumeCard[data-state="dead"]::before { background: var(--c-danger); }
+.resumeCard[data-state="dead"] .resumeMeta .label { color: var(--c-danger); opacity: 0.9; }
+.resumeCard .resumeMeta .label { color: var(--c-ui); opacity: 0.9; }
+.resumeCard .btn-arcade { white-space: nowrap; }
+#resumeShip { filter: drop-shadow(0 0 8px rgba(57,245,255,0.35)); }
+#resumeStats {
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.04em;
+  line-height: 1.5;
+  opacity: 0.75;
+  white-space: pre-line;
+}
+
+.sectorCard { padding-right: 14px; }
+.sectorCard.is-cleared {
+  border-color: rgba(57,245,255,0.45);
+  background: linear-gradient(180deg, rgba(57,245,255,0.07), rgba(0,0,0,0.35));
+}
+.sectorCard.is-cleared .sectorStatus { gap: 6px; }
+.sectorCard .sectorStatus .rankBadge {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  font-size: 9px;
+  border-radius: 4px;
+}
+.sectorCard .sectorBest { letter-spacing: 0.04em; opacity: 0.85; }
+.sectorCard.is-saved::after {
+  content: "";
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--c-score);
+  box-shadow: 0 0 6px var(--c-score);
+}
+.sectorCard:focus-visible {
+  outline: 2px solid var(--neon-cyan);
+  outline-offset: 2px;
+  border-color: var(--neon-cyan);
 }
 
 /* ----- 8. Pause and settings ---------------------------------------------------- */
@@ -1343,6 +1438,78 @@ fieldset.shipGrid > legend {
 
 .bonusValue { color: var(--c-score); }
 
+/* Results card motion and accents (screens track, C4) */
+.resultsCard { position: relative; }
+.resultsHead .resultsSub { opacity: 0.8; }
+
+.statTile {
+  position: relative;
+  overflow: hidden;
+}
+
+.statTile::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--panel-accent, var(--c-ui)), transparent 80%);
+  opacity: 0.6;
+}
+
+.statTile__value { transition: color 220ms var(--ease-out), text-shadow 220ms var(--ease-out); }
+.statTile__value.is-counting {
+  color: var(--c-score);
+  text-shadow: 0 0 10px rgba(255,193,74,0.45);
+}
+
+.rankBadge--lg { transition: opacity 180ms var(--ease-out), transform 180ms var(--ease-out), filter 180ms var(--ease-out); }
+.rankBadge--lg.is-pending {
+  opacity: 0.4;
+  transform: scale(0.92);
+  filter: saturate(0.3);
+  text-shadow: none;
+}
+.rankBadge--lg.stamp { animation: rankStamp 180ms var(--ease-snap); }
+.resultsCard[data-rank="S"] .rankBadge--lg { box-shadow: 0 0 18px rgba(255,193,74,0.45), 0 0 14px rgba(0,0,0,0.35); }
+.resultsCard[data-rank="D"] .rankBadge--lg { box-shadow: 0 0 14px rgba(255,77,109,0.35); }
+
+.bonusList {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: var(--sp-5);
+  row-gap: 0;
+  margin-top: 2px;
+}
+
+.bonusRow .bonusLabel { opacity: 0.8; }
+.bonusRow--penalty .bonusValue { color: var(--c-danger); }
+
+.resultsCard.is-revealed { animation: resultsIn 320ms var(--ease-out) both; }
+.screenTitle--long { font-size: var(--fs-2xl); letter-spacing: 0.1em; }
+#victoryText:empty { display: none; }
+#retryNote { margin: var(--sp-2) 0 0; text-align: center; opacity: 0.8; }
+#retryNote:empty { display: none; }
+
+@keyframes rankStamp {
+  0% { transform: scale(1.3); opacity: 0.2; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes resultsIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (max-width: 640px) {
+  .bonusList { grid-template-columns: 1fr; }
+}
+
+:root.reduce-motion .rankBadge--lg.stamp,
+:root.reduce-motion .resultsCard.is-revealed { animation: none; }
+:root.reduce-motion .rankBadge--lg { transition: none; }
+:root.reduce-motion .statTile__value { transition: none; }
+
 /* ----- 10. Victory dialogue ------------------------------------------------------ */
 .dialogueWindow {
   position: relative;
@@ -1417,6 +1584,29 @@ fieldset.shipGrid > legend {
   text-transform: uppercase;
   color: rgba(246,247,255,0.65);
 }
+
+/* Transmission window states (screens track, C4 / D9) */
+.dialogueWindow.is-collapsed {
+  min-height: 0;
+  padding: 10px 16px;
+}
+
+.dialogueWindow.is-collapsed .dialogueLine {
+  min-height: 0;
+  font-size: var(--fs-md);
+  line-height: 1.5;
+}
+
+.dialogueWindow.is-collapsed .dialogueHeader { margin-bottom: 4px; }
+
+#endingProgress {
+  font-family: var(--font-mono);
+  letter-spacing: 0.12em;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+}
+
+.dialogueLabel { transition: color var(--dur-2); }
 
 /* ----- 11. Toasts, tap-to-type, hidden input, rotate hint ------------------------ */
 .toastStack {
@@ -1784,6 +1974,23 @@ fieldset.shipGrid > legend {
 .hsRow td:nth-child(3) { color: var(--c-score); }
 .hsRow td:nth-child(1) { opacity: 0.6; }
 .hsEmpty td { text-align: center; white-space: normal; opacity: 0.6; padding: 18px 8px; }
+
+/* Records table tags (screens track, C5 / B-12) */
+.hsTag {
+  display: inline-block;
+  padding: 1px 7px;
+  border: 1px solid var(--chrome1);
+  border-radius: var(--r-pill);
+  font-size: var(--fs-2xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+.hsTag[data-tag="LEGEND"] { color: var(--c-score); border-color: rgba(255,193,74,0.6); opacity: 1; }
+.hsTag[data-tag="FULL"] { color: var(--c-ui); border-color: rgba(57,245,255,0.45); }
+.hsRow.is-legend td:nth-child(2) { color: var(--c-score); }
+.hsTable th:nth-child(4), .hsTable td:nth-child(4) { text-align: center; }
+#storyModal[data-readonly] .modalEyebrow::after { content: " · archive"; opacity: 0.6; }
 
 /* ----- 13. Loading overlay ------------------------------------------------------- */
 #loadingOverlay {

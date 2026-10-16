@@ -2,19 +2,31 @@
 //
 // Every DOM write goes through setText / setStyleVar / setAttr, which keep a per-element cache and only touch the DOM
 // when the value changed. The hull and boss meters animate with transform: scaleX only; #bossBar is toggled on
-// transitions (beginBossFight / endBossFight), never per frame.
+// transitions (beginBossFight / endBossFight), never per frame. The score display tweens toward stats.score at 10/s
+// (hudScoreShown) and glows for single gains >= HUD_GAIN_MIN; the combo cell flashes when a run of >= 5 breaks.
 
-const CHIP_ICON_PATHS = {
-  SHIELD: "M6 1 L10.5 2.6 V6 C10.5 8.6 8.6 10.4 6 11.2 C3.4 10.4 1.5 8.6 1.5 6 V2.6 Z",
-  MULTI:  "M2 2 L10 10 M10 2 L2 10",
-  SPREAD: "M6 6 L1.5 2 M6 6 L10.5 2 M6 6 L1.5 10 M6 6 L10.5 10 M6 6 L6 1",
-  PIERCE: "M1 6 H11 M8 3 L11 6 L8 9",
-  RAPID:  "M7 1 L2.5 7 H6 L5 11 L9.5 5 H6 Z"
+// Chip icons: the VIS-05 shapes in a 12x12 box (currentColor = the chip's --accent).
+//   SHIELD hexagon outline · MULTI "x2" · SPREAD three lines fanning from the left edge · PIERCE arrow through two bars ·
+//   RAPID lightning bolt.
+const CHIP_ICON_SVG = {
+  SHIELD: '<path d="M6 1.2 L10.2 3.6 V8.4 L6 10.8 L1.8 8.4 V3.6 Z"/>',
+  MULTI:  '<path d="M1.6 3 L5 6.5 M5 3 L1.6 6.5"/><path d="M7 4.2 C7 3 9.8 3 9.8 4.4 C9.8 5.6 7.2 6.4 7.1 8.6 H10"/>',
+  SPREAD: '<path d="M1.5 6 H10.5 M1.5 6 L9.5 2.4 M1.5 6 L9.5 9.6"/>',
+  PIERCE: '<path d="M1 6 H10.6 M8 3.6 L10.6 6 L8 8.4 M3.4 3.4 V8.6 M5.6 3.4 V8.6"/>',
+  RAPID:  '<path d="M7 1 L2.5 7 H6 L5 11 L9.5 5 H6 Z"/>'
 };
 const WPM_WINDOW_S = 10;
+const WPM_WRITE_EVERY_S = 0.5;      // a falling live WPM is written at most twice a second (idle HUD stays quiet)
 const HUD_HIT_MS = 180;
+const HUD_GAIN_MS = 240;
+const HUD_GAIN_MIN = 500;           // a single-frame score gain this large lights #hudScore.gain
+const HUD_COMBO_BREAK_MS = 120;
+const HUD_COMBO_BREAK_MIN = 5;      // combo runs shorter than this break silently
+const HUD_SCORE_RATE = 10;          // tween rate per second (CONTRACT: 10/s)
+const HUD_SCORE_WRITE_S = 0.05;     // intermediate tween values reach the DOM at 20 Hz; the settled value at once
 const CHIP_LEAVE_MS = 160;
 const BOSS_SEGMENT_CLEAR_MS = 160;
+const BOSS_METER_MAX_TICKS = 24;    // --segments shows one tick per segment up to this, else 4 (VIS-08)
 
 Object.assign(Game.prototype, {
   // ------------------------- Write primitives -------------------------
@@ -66,6 +78,15 @@ Object.assign(Game.prototype, {
     return true;
   },
 
+  // Add a class for ms milliseconds; a second call inside the window restarts the timer (no duplicate removal).
+  pulseClass(el, cls, ms) {
+    if (!el) return;
+    if (!el._hudPulse) el._hudPulse = {};
+    el.classList.add(cls);
+    clearTimeout(el._hudPulse[cls]);
+    el._hudPulse[cls] = setTimeout(() => { el.classList.remove(cls); el._hudPulse[cls] = null; }, ms);
+  },
+
   // Lazy element cache: everything the contract names, null-guarded so the HUD runs on older markup.
   hudEls() {
     if (this._hudEls) return this._hudEls;
@@ -89,23 +110,76 @@ Object.assign(Game.prototype, {
   updateHUD() {
     const el = this.hudEls();
     const cfg = LEVELS[this.levelIndex];
+    const now = nowMs();
+    const dt = this._hudPrev == null ? 0 : clamp((now - this._hudPrev) / 1000, 0, 0.1);
+    this._hudPrev = now;
+
     this.setText(el.name, this.save.playerName || "(unnamed)");
     this.setText(el.level, `${cfg.level}/10`);
-    this.setText(el.score, formatInt(this.stats.score));
-    this.setText(el.combo, String(this.stats.combo | 0));
+    this.updateScoreCell(dt);
+    this.updateComboCell();
     this.updateMultBadge();
     this.setText(el.acc, `${this.getAccuracyPct()}%`);
-    this.setText(el.wpm, String(this.liveWpm()));
+    this.updateWpmCell(dt);
     this.updateHullMeter();
     this.updateStageBar();
     this.syncChips();
     if (this.inBoss && this.boss) this.refreshBossUI();
   },
 
+  // hudScoreShown chases stats.score at HUD_SCORE_RATE per second (snaps down on a restore, instant under
+  // reduced motion); a single-frame gain >= HUD_GAIN_MIN lights the amber .gain glow for 240 ms.
+  updateScoreCell(dt) {
+    const el = this.hudEls();
+    const score = this.stats.score | 0;
+    const rm = typeof screensReducedMotion === "function" ? screensReducedMotion(this) : !!this.reduceMotion;
+    if (this.hudScoreShown == null || score < this.hudScoreShown || rm) this.hudScoreShown = score;
+    const last = this._hudLastScore == null ? score : this._hudLastScore;
+    if (score - last >= HUD_GAIN_MIN) this.pulseClass(el.score, "gain", HUD_GAIN_MS);
+    this._hudLastScore = score;
+    const diff = score - this.hudScoreShown;
+    if (diff !== 0) {
+      this.hudScoreShown += diff * Math.min(1, dt * HUD_SCORE_RATE);
+      if (Math.abs(score - this.hudScoreShown) < 1) this.hudScoreShown = score;
+    }
+    // Intermediate tween values are written at most every HUD_SCORE_WRITE_S (layout hygiene); the settled value at once.
+    const settled = this.hudScoreShown === score;
+    this._scoreWriteAcc = (this._scoreWriteAcc || 0) + dt;
+    if (settled || this._scoreWriteAcc >= HUD_SCORE_WRITE_S) {
+      this._scoreWriteAcc = 0;
+      this.setText(el.score, formatInt(Math.round(this.hudScoreShown)));
+    }
+  },
+
+  // Bare combo count; a run of >= HUD_COMBO_BREAK_MIN falling to 0 flashes the cell danger-red for 120 ms.
+  updateComboCell() {
+    const el = this.hudEls();
+    const combo = this.stats.combo | 0;
+    const last = this._hudLastCombo | 0;
+    if (combo === 0 && last >= HUD_COMBO_BREAK_MIN) this.pulseClass(el.combo, "break", HUD_COMBO_BREAK_MS);
+    this._hudLastCombo = combo;
+    this.setText(el.combo, String(combo));
+  },
+
+  // Rising WPM is written at once (typing feedback); a decaying one at most every WPM_WRITE_EVERY_S.
+  updateWpmCell(dt) {
+    const el = this.hudEls();
+    if (!el.wpm) return;
+    const wpm = this.liveWpm();
+    this._wpmAcc = (this._wpmAcc || 0) + dt;
+    const shown = this._wpmShown;
+    if (shown == null || wpm > shown || wpm === 0 || this._wpmAcc >= WPM_WRITE_EVERY_S) {
+      this._wpmAcc = 0;
+      this._wpmShown = wpm;
+      this.setText(el.wpm, String(wpm));
+    }
+  },
+
   updateMultBadge() {
     const el = this.hudEls();
     const mult = this.stats.mult | 0 || 1;
     if (this.setText(el.mult, `x${mult}`) && el.mult) {
+      // x6 / x7 (MULTI on top of tier 5) keep the tier-5 look: the cap reads as "maxed", not as a new colour.
       this.setAttr(el.mult, "data-tier", clamp(mult, 1, 5));
       // .pop replays on every tier change; restart via the animation property (no forced layout).
       const badge = el.mult;
@@ -132,9 +206,7 @@ Object.assign(Game.prototype, {
   flashHudHit() {
     const el = this.hudEls();
     if (!el.hud) return;
-    el.hud.classList.add("is-hit");
-    clearTimeout(this._hudHitTimer);
-    this._hudHitTimer = setTimeout(() => el.hud.classList.remove("is-hit"), HUD_HIT_MS);
+    this.pulseClass(el.hud, "is-hit", HUD_HIT_MS);
   },
 
   // #stageBar: one .stageSeg per wave (--p = waveKills/quota, .isDone when finished) + the boss segment, which
@@ -184,10 +256,11 @@ Object.assign(Game.prototype, {
     if (this.setTransformScaleX(el.bossFill, frac)) {
       this.setAttr(el.bossMeter, "aria-valuenow", Math.round(frac * 100));
     }
+    // data-state = current phase (B-11), colour only: p1 magenta, p2 amber, p3 danger, p4 violet.
     this.setAttr(el.bossMeter, "data-state", `p${Math.min(boss.phase + 1, 4)}`);
     this.setClass(el.bossMeter, "isCharging", !!boss.surge);
     if (opts.full) {
-      this.setStyleVar(el.bossMeter, "--segments", n);
+      this.setStyleVar(el.bossMeter, "--segments", n <= BOSS_METER_MAX_TICKS ? n : 4);
       this.layoutBossPhaseTicks(boss);
     }
   },
@@ -220,9 +293,7 @@ Object.assign(Game.prototype, {
   pulseBossSegmentClear() {
     const el = this.hudEls();
     if (!el.bossMeter) return;
-    el.bossMeter.classList.add("segmentClear");
-    clearTimeout(this._segClearTimer);
-    this._segClearTimer = setTimeout(() => el.bossMeter.classList.remove("segmentClear"), BOSS_SEGMENT_CLEAR_MS);
+    this.pulseClass(el.bossMeter, "segmentClear", BOSS_SEGMENT_CLEAR_MS);
   },
 
   showBossBar(show) {
@@ -296,7 +367,7 @@ Object.assign(Game.prototype, {
     el.style.setProperty("--accent", `var(--neon-${POWER_ACCENT[id] === "text" ? "cyan" : POWER_ACCENT[id]})`);
     const icon = document.createElement("i");
     icon.className = "chipIcon";
-    icon.innerHTML = `<svg viewBox="0 0 12 12" aria-hidden="true"><path d="${CHIP_ICON_PATHS[id] || CHIP_ICON_PATHS.SHIELD}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+    icon.innerHTML = `<svg viewBox="0 0 12 12" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round">${CHIP_ICON_SVG[id] || CHIP_ICON_SVG.SHIELD}</svg>`;
     const label = document.createElement("span");
     label.className = "chipLabel";
     label.textContent = def.label;
