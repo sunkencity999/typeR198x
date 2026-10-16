@@ -740,7 +740,7 @@ try {
     await shot("boss-finale");
     await page.waitForFunction(() => { const g = (typeof game !== "undefined" && game) || window.game; return g && g.mode !== "playing"; }, null, { timeout: 20000 })
       .catch(() => report.notes.push("boss finale did not end within 20s"));
-    await sleep(600);
+    await sleep(1200); // results count-up: 600 ms + 5 x 80 ms stagger, rank stamp at 700 ms
     report.stateAfterFinale = await state();
     await shot("level-complete");
 
@@ -753,7 +753,7 @@ try {
     await page.evaluate(() => { const g = (typeof game !== "undefined" && game) || window.game; if (g && g.player) g.player.hp = 5; });
     await page.waitForFunction(() => { const g = (typeof game !== "undefined" && game) || window.game; return g && g.mode === "gameOver"; }, null, { timeout: 60000 })
       .catch(() => report.notes.push("game over not reached in 60s"));
-    await sleep(500);
+    await sleep(1200); // let the results count-up finish so the card shows final numbers
     await shot("game-over");
 
     // Victory: jump to sector 10 and force its boss (amendment B-5). This path exists to exercise the
@@ -783,7 +783,7 @@ try {
     }
     await page.waitForFunction(() => { const g = (typeof game !== "undefined" && game) || window.game; return g && g.mode === "victory"; }, null, { timeout: 30000 })
       .catch(() => report.notes.push("victory not reached"));
-    await sleep(600);
+    await sleep(1200); // results count-up as above
     await shot("victory");
     const adv = page.locator("#btnEndingNext");
     for (let i = 0; i < 3 && await adv.isVisible().catch(() => false); i++) { await adv.click(); await sleep(250); }
