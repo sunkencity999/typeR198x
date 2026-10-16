@@ -1179,10 +1179,13 @@ Object.assign(Game.prototype, {
     if (scale !== 1) { ctx.translate(cx, cy); ctx.scale(scale, scale); ctx.translate(-cx, -cy); }
     this.drawGlowSprite(ctx, this.getPlateSprite("slab", s.w, s.h, "boss"), cx, cy);
     if (boss.flash > 0) {
-      ctx.strokeStyle = PALETTE.rgba("text", clamp(boss.flash * 2, 0, 0.70));
+      const ga = ctx.globalAlpha;   // review R12: flash alpha through globalAlpha, one memoised colour string
+      ctx.globalAlpha = ga * clamp(boss.flash * 2, 0, 0.70);
+      ctx.strokeStyle = PALETTE.rgba("text", 1);
       ctx.lineWidth = 2;
       roundRect(ctx, s.x, s.y, s.w, s.h, SLAB.r);
       ctx.stroke();
+      ctx.globalAlpha = ga;
     }
 
     // left cell: name (Orbitron 13, tracked .2em, fit 184) + SEG k/N + PHASE p/n

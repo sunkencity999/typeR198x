@@ -398,10 +398,12 @@ Object.assign(Game.prototype, {
       ctx.arc(cx, r.y + 40, 16, 0, Math.PI * 2);
       ctx.stroke();
       if (k > 0) {
-        ctx.strokeStyle = feedbackColor("magenta", 0.45 + 0.25 * k);
+        ctx.globalAlpha = 0.45 + 0.25 * k;   // review R12: ladder colour + globalAlpha (no per-frame colour string)
+        ctx.strokeStyle = feedbackColor("magenta", 1);
         ctx.beginPath();
         ctx.arc(cx, r.y + 40, 16, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * k);
         ctx.stroke();
+        ctx.globalAlpha = 1;
       }
     } else {
       ctx.font = feedbackFont(10, 700);
