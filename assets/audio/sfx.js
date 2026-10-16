@@ -340,7 +340,14 @@
         this._htmlApply(0.02);
         if (this.htmlBigExplosion) this.htmlBigExplosion.muted = this.muted;
       }
-      if (!this.muted) this.resumeIfNeeded();
+      if (this.muted) return;
+      this.resumeIfNeeded();
+      // Legacy shim (F053): the pre-overhaul game skips playMusic() while muted, so a run that started
+      // muted has no track yet; start the sector's track on unmute. A no-op once a track was requested.
+      const g = global.game;
+      if (!this.wantMusic && this.pendingTrack == null && this.musicEls.length && g && g.mode === "playing") {
+        this.playMusic(this.trackForLevel(g.levelIndex));
+      }
     }
 
     setMusicVolume(v) {
