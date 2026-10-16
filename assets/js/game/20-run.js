@@ -647,7 +647,8 @@ Object.assign(Game.prototype, {
       // The last line settles, then the results fade in under it.
       if (isLast && !opts.instant && this.mode === "victory") setTimeout(() => this.finishEndingDialogue(), 500);
     };
-    const canType = typeof this.typewrite === "function" && !opts.instant && !(typeof this.reduceMotion === "boolean" ? this.reduceMotion : false);
+    const rm = typeof screensReducedMotion === "function" ? screensReducedMotion(this) : !!this.reduceMotion;
+    const canType = typeof this.typewrite === "function" && !opts.instant && !rm;
     if (canType) {
       this.endingTw = this.typewrite(u.endingLine, text, { cps: 38, tickEvery: 2, variant: this.endingTickVariant(key), onDone });
     } else {

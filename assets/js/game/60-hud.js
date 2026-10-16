@@ -132,7 +132,7 @@ Object.assign(Game.prototype, {
   updateScoreCell(dt) {
     const el = this.hudEls();
     const score = this.stats.score | 0;
-    const rm = typeof this.reduceMotion === "boolean" ? this.reduceMotion : false;
+    const rm = typeof screensReducedMotion === "function" ? screensReducedMotion(this) : !!this.reduceMotion;
     if (this.hudScoreShown == null || score < this.hudScoreShown || rm) this.hudScoreShown = score;
     const last = this._hudLastScore == null ? score : this._hudLastScore;
     if (score - last >= HUD_GAIN_MIN) this.pulseClass(el.score, "gain", HUD_GAIN_MS);

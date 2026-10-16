@@ -972,6 +972,156 @@ Object.assign(Game.prototype, {
   },
 });
 
+// ------------------------- CRT overlay v2 (D9 / VIS-12) -------------------------
+// Three CSS layers (#crtShade normal-blend vignette, #crtLines screen-blend scanlines + grille + rolling band,
+// #crtNoise tiled from makeNoiseTile()). JS owns: the noise tile, documentElement.dataset.crt + --crt-k from
+// save.settings (the shell's applySettings writes the same values once it lands), crtTear() for 120 ms on real HP
+// loss (takeDamage calls it once the plates track lands; tickCrtWatch covers it until then).
+const CRT_TEAR_MS = 120;
+const CRT_NOISE_SIZE = 128;
+const CRT_NOISE_ALPHA = 0.35;
+
+Object.assign(Game.prototype, {
+  initCrt() {
+    const E = this.screenEls || {};
+    if (E.crtNoise) {
+      const url = this.makeNoiseTile();
+      if (url) E.crtNoise.style.backgroundImage = `url("${url}")`;
+    }
+    this._crtWatch = { hp: this.player ? this.player.hp : null, crt: undefined, k: undefined, tearAt: -Infinity };
+    this.applyCrtSettings();
+    // Every applySettings() pass re-applies the CRT state; identical to what the shell writes, so a double write is harmless.
+    if (!this._crtWrapped && typeof this.applySettings === "function") {
+      this._crtWrapped = true;
+      const orig = this.applySettings;
+      this.applySettings = (...args) => {
+        const r = orig.apply(this, args);
+        this.applyCrtSettings();
+        return r;
+      };
+    }
+  },
+
+  // :root[data-crt=on|off] + --crt-k (0.25..1, default .75) from save.settings.
+  applyCrtSettings() {
+    const s = (this.save && this.save.settings) || {};
+    const on = s.crt !== false;
+    const k = clamp(Number.isFinite(s.crtIntensity) ? s.crtIntensity : 0.75, 0.25, 1);
+    const root = document.documentElement;
+    const crt = on ? "on" : "off";
+    if (root.dataset.crt !== crt) root.dataset.crt = crt;
+    const kStr = String(Math.round(k * 100) / 100);
+    if (root.style.getPropertyValue("--crt-k").trim() !== kStr) root.style.setProperty("--crt-k", kStr);
+    if (this._crtWatch) { this._crtWatch.crt = s.crt; this._crtWatch.k = s.crtIntensity; }
+    return crt;
+  },
+
+  // 128x128 grey noise (alpha .35) as a PNG data URL, generated once.
+  makeNoiseTile() {
+    if (this._noiseTileUrl !== undefined) return this._noiseTileUrl;
+    try {
+      const c = document.createElement("canvas");
+      c.width = c.height = CRT_NOISE_SIZE;
+      const ctx = c.getContext("2d");
+      const img = ctx.createImageData(CRT_NOISE_SIZE, CRT_NOISE_SIZE);
+      const d = img.data;
+      const a = Math.round(CRT_NOISE_ALPHA * 255);
+      for (let i = 0; i < d.length; i += 4) {
+        const v = (Math.random() * 256) | 0;
+        d[i] = v; d[i + 1] = v; d[i + 2] = v; d[i + 3] = a;
+      }
+      ctx.putImageData(img, 0, 0);
+      this._noiseTileUrl = c.toDataURL("image/png");
+    } catch (_) {
+      this._noiseTileUrl = null;
+    }
+    return this._noiseTileUrl;
+  },
+
+  // #crtOverlay.tear for 120 ms (scanlines jump 6 px and skew); nothing under reduced motion.
+  crtTear() {
+    const overlay = (this.screenEls && this.screenEls.crtOverlay) || document.getElementById("crtOverlay");
+    if (!overlay) return;
+    if (this._crtWatch) this._crtWatch.tearAt = nowMs();
+    if (screensReducedMotion(this)) return;
+    this.pulseClass(overlay, "tear", CRT_TEAR_MS);
+  },
+
+  // Per frame: tear on a real HP drop (unless takeDamage already called crtTear this frame) and follow settings changes
+  // made without applySettings().
+  tickCrtWatch(dt) {
+    const W = this._crtWatch;
+    if (!W) return;
+    const hp = this.player ? this.player.hp : null;
+    if (this.mode === "playing" && W.hp != null && hp != null && hp < W.hp - 0.5 && nowMs() - W.tearAt > 100) this.crtTear();
+    W.hp = hp;
+    const s = this.save && this.save.settings;
+    if (s && (s.crt !== W.crt || s.crtIntensity !== W.k)) this.applyCrtSettings();
+  },
+
+  // ------------------------- Typewriter (D9 / JUICE-12) -------------------------
+  // typewrite(el, text, {cps=38, tickEvery=2, variant, onDone}) -> {complete(), cancel(), done}. rAF-driven (pauses
+  // while document.hidden), lime .twCaret while typing (CSS blinks it; steady under reduce-motion), SFX.typeTick(variant)
+  // every tickEvery glyphs. complete() lands the whole line and fires onDone; cancel() stops silently.
+  typewrite(el, text, opts = {}) {
+    const full = String(text == null ? "" : text);
+    const cps = Math.max(1, Number(opts.cps) || 38);
+    const tickEvery = Math.max(1, (opts.tickEvery | 0) || 2);
+    const variant = opts.variant;
+    const h = { done: false, cancelled: false, complete: () => {}, cancel: () => {} };
+    if (!el) { h.done = true; return h; }
+    const textNode = document.createTextNode("");
+    const caret = document.createElement("span");
+    caret.className = "twCaret";
+    caret.setAttribute("aria-hidden", "true");
+    el.textContent = "";
+    el.append(textNode, caret);
+    el.setAttribute("aria-label", full);
+    let shown = 0, acc = 0, typed = 0, last = null, raf = 0;
+    const tick = () => {
+      const sfx = this.sfx;
+      if (sfx && typeof sfx.typeTick === "function") { try { sfx.typeTick(variant); } catch (_) { /* audio optional */ } }
+    };
+    const finish = () => {
+      if (h.done) return;
+      h.done = true;
+      if (raf) cancelAnimationFrame(raf);
+      textNode.data = full;
+      if (caret.parentNode) caret.remove();
+      if (!h.cancelled && typeof opts.onDone === "function") opts.onDone();
+    };
+    const step = (t) => {
+      if (h.done) return;
+      if (last === null) last = t;
+      let dt = (t - last) / 1000;
+      last = t;
+      if (document.hidden) dt = 0;
+      acc += clamp(dt, 0, 0.1) * cps;
+      const n = Math.min(full.length, shown + Math.floor(acc));
+      if (n > shown) {
+        acc -= n - shown;
+        for (let i = shown; i < n; i++) {
+          if (full[i] !== " " && (++typed % tickEvery) === 0) tick();
+        }
+        shown = n;
+        textNode.data = full.slice(0, shown);
+      }
+      if (shown >= full.length) { finish(); return; }
+      raf = requestAnimationFrame(step);
+    };
+    h.complete = finish;
+    h.cancel = () => {
+      if (h.done) return;
+      h.cancelled = true;
+      h.done = true;
+      if (raf) cancelAnimationFrame(raf);
+      if (caret.parentNode) caret.remove();
+    };
+    raf = requestAnimationFrame(step);
+    return h;
+  },
+});
+
 // Self-boot: bindUI() calls initScreens() once the shell lands; until then run it after every script has executed
 // (99-boot.js constructs the game synchronously, so window.game exists by DOMContentLoaded).
 if (typeof document !== "undefined") {
