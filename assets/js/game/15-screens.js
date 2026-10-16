@@ -602,13 +602,14 @@ Object.assign(Game.prototype, {
 // Tutorial tips are driven from tickTutorial(dt) by polling game state (no hooks in other tracks' files): first
 // enemy on screen (t >= 1 s), first lock, first powerup on screen, boss intro end, first lock loss, the accuracy tip
 // after a sector-1 death below 70 %. Flags live in save.tutorialSeen; everything is suppressed for returning players
-// (lastUnlockedLevel > 1), deferred during the sector card / boss intro / finale and cleared outside play.
+// (lastUnlockedLevel > 1), deferred behind the sector card, DROPPED (never queued) while a boss intro or the finale
+// is on, and cleared outside play. The boss tip itself waits for the intro to end.
 const TUTORIAL_TIPS = {
   lock: { text: "TYPE THE FIRST LETTER OF A TARGET TO LOCK ON", ms: 4000 },
   finish: { text: "KEEP TYPING TO FINISH IT", ms: 2600 },
   powerup: { text: (label) => `TYPE ${String(label || "").toUpperCase()} TO GRAB IT`, ms: 3500 },
   boss: { text: "BOSS: TYPE THE HIGHLIGHTED WORD — MINIONS COUNT TOO", ms: 4000 },
-  release: { text: "LOCK LOST — SPACE RELEASES, 3 MISSES DROP IT", ms: 3000 },
+  release: { text: "LOCK LOST — 3 MISSES DROP A LOCK, SPACE OR BACKSPACE RELEASES IT", ms: 3200 },
   accuracy: { text: "TIP: ACCURACY BEATS SPEED — EVERY TYPO BREAKS THE COMBO", ms: 4500 }
 };
 const TUTORIAL_KEY = "tut";
@@ -643,7 +644,14 @@ Object.assign(Game.prototype, {
   tutorialToast(kind, text, ms) {
     if (!this._tut) return;
     this._tut.shown[kind] = true;
+    this._tut.visible = true;
     if (typeof this.showToast === "function") this.showToast(text, { kind: "tip", key: TUTORIAL_KEY, ms });
+  },
+
+  dismissTutorialToast() {
+    if (!this._tut || !this._tut.visible) return;
+    this._tut.visible = false;
+    if (typeof this.dismissToast === "function") this.dismissToast(TUTORIAL_KEY);
   },
 
   hasEnemyOnScreen() {
@@ -667,7 +675,7 @@ Object.assign(Game.prototype, {
     if (!T) return;
     const mode = this.mode;
     if (mode !== "playing") {
-      if (T.prevMode === "playing" && typeof this.dismissToast === "function") this.dismissToast(TUTORIAL_KEY);
+      if (T.prevMode === "playing") this.dismissTutorialToast();
       T.prevMode = mode;
       T.prevLock = null;
       T.prevCorrect = null;
@@ -697,7 +705,11 @@ Object.assign(Game.prototype, {
       T.watchPowerup = null;
     }
 
-    const gated = !!this.levelIntro || !!(this.bossIntro && this.bossIntro.locked) || !!this.bossClear;
+    // Boss intro (the whole ceremony, not only the locked part) and the finale: no tip appears and one already on
+    // screen goes away; the events of those frames are consumed below, so nothing is queued for afterwards.
+    const bossGate = !!this.bossIntro || !!this.bossClear;
+    if (bossGate) this.dismissTutorialToast();
+    const gated = !!this.levelIntro || bossGate;
     if (this.tutorialEnabled() && !gated) {
       const levelT = this.levelT || 0;
       if (!seen.lock && !T.shown.lock && !lock && this.levelIndex === 0 && levelT >= 1 && this.hasEnemyOnScreen()) {

@@ -4,6 +4,12 @@
 // when the value changed. The hull and boss meters animate with transform: scaleX only; #bossBar is toggled on
 // transitions (beginBossFight / endBossFight), never per frame. The score display tweens toward stats.score at 10/s
 // (hudScoreShown) and glows for single gains >= HUD_GAIN_MIN; the combo cell flashes when a run of >= 5 breaks.
+//
+// Layout hygiene (PLAN A11 / E2): a text change is a layout pass, so the counters that move continuously (score
+// tween, combo, accuracy, live WPM, hull number, chip timers) are committed together in one frame at most every
+// HUD_TEXT_COMMIT_S; a frame therefore carries one layout pass or none. Event-driven writes (multiplier tier, hull
+// state, chip enter / leave, boss phase, sector) still land the frame they happen. Measured with
+// probes/e2-layout.mjs: typing 67.6 -> ~20 layouts per 5 s, idle with three chips 57 -> ~25.
 
 // Chip icons: the VIS-05 shapes in a 12x12 box (currentColor = the chip's --accent).
 //   SHIELD hexagon outline · MULTI "x2" · SPREAD three lines fanning from the left edge · PIERCE arrow through two bars ·
@@ -16,14 +22,13 @@ const CHIP_ICON_SVG = {
   RAPID:  '<path d="M7 1 L2.5 7 H6 L5 11 L9.5 5 H6 Z"/>'
 };
 const WPM_WINDOW_S = 10;
-const WPM_WRITE_EVERY_S = 0.5;      // a falling live WPM is written at most twice a second (idle HUD stays quiet)
 const HUD_HIT_MS = 180;
 const HUD_GAIN_MS = 240;
 const HUD_GAIN_MIN = 500;           // a single-frame score gain this large lights #hudScore.gain
 const HUD_COMBO_BREAK_MS = 120;
 const HUD_COMBO_BREAK_MIN = 5;      // combo runs shorter than this break silently
 const HUD_SCORE_RATE = 10;          // tween rate per second (CONTRACT: 10/s)
-const HUD_SCORE_WRITE_S = 0.05;     // intermediate tween values reach the DOM at 20 Hz; the settled value at once
+const HUD_TEXT_COMMIT_S = 0.2;      // continuous counters reach the DOM together, at most 5x/s (one layout pass per commit frame)
 const CHIP_LEAVE_MS = 160;
 const BOSS_SEGMENT_CLEAR_MS = 160;
 const BOSS_METER_MAX_TICKS = 24;    // --segments shows one tick per segment up to this, else 4 (VIS-08)
@@ -111,25 +116,36 @@ Object.assign(Game.prototype, {
     const el = this.hudEls();
     const cfg = LEVELS[this.levelIndex];
     const now = nowMs();
-    const dt = this._hudPrev == null ? 0 : clamp((now - this._hudPrev) / 1000, 0, 0.1);
+    const first = this._hudPrev == null;
+    const dt = first ? 0 : clamp((now - this._hudPrev) / 1000, 0, 0.1);
     this._hudPrev = now;
+    // commit frame: the continuous counters write now (first call, then every HUD_TEXT_COMMIT_S)
+    this._hudCommitAcc = (this._hudCommitAcc || 0) + dt;
+    const commit = first || this._hudCommitAcc >= HUD_TEXT_COMMIT_S;
+    if (commit) this._hudCommitAcc = 0;
 
     this.setText(el.name, this.save.playerName || "(unnamed)");
     this.setText(el.level, `${cfg.level}/10`);
-    this.updateScoreCell(dt);
-    this.updateComboCell();
+    this.updateScoreCell(dt, commit);
+    this.updateComboCell(commit);
     this.updateMultBadge();
-    this.setText(el.acc, `${this.getAccuracyPct()}%`);
-    this.updateWpmCell(dt);
-    this.updateHullMeter();
+    if (commit) this.setText(el.acc, `${this.getAccuracyPct()}%`);
+    this.updateWpmCell(commit);
+    this.updateHullMeter(commit);
     this.updateStageBar();
-    this.syncChips();
+    this.syncChips(commit);
     if (this.inBoss && this.boss) this.refreshBossUI();
   },
 
+  // Force the next updateHUD() to commit every counter (restores, level entry, anything that jumps the numbers).
+  forceHudCommit() {
+    this._hudCommitAcc = HUD_TEXT_COMMIT_S;
+  },
+
   // hudScoreShown chases stats.score at HUD_SCORE_RATE per second (snaps down on a restore, instant under
-  // reduced motion); a single-frame gain >= HUD_GAIN_MIN lights the amber .gain glow for 240 ms.
-  updateScoreCell(dt) {
+  // reduced motion); a single-frame gain >= HUD_GAIN_MIN lights the amber .gain glow for 240 ms. The text is
+  // written on commit frames only (the glow class is a paint-only change and lands at once).
+  updateScoreCell(dt, commit = true) {
     const el = this.hudEls();
     const score = this.stats.score | 0;
     const rm = typeof screensReducedMotion === "function" ? screensReducedMotion(this) : !!this.reduceMotion;
@@ -142,37 +158,24 @@ Object.assign(Game.prototype, {
       this.hudScoreShown += diff * Math.min(1, dt * HUD_SCORE_RATE);
       if (Math.abs(score - this.hudScoreShown) < 1) this.hudScoreShown = score;
     }
-    // Intermediate tween values are written at most every HUD_SCORE_WRITE_S (layout hygiene); the settled value at once.
-    const settled = this.hudScoreShown === score;
-    this._scoreWriteAcc = (this._scoreWriteAcc || 0) + dt;
-    if (settled || this._scoreWriteAcc >= HUD_SCORE_WRITE_S) {
-      this._scoreWriteAcc = 0;
-      this.setText(el.score, formatInt(Math.round(this.hudScoreShown)));
-    }
+    if (commit) this.setText(el.score, formatInt(Math.round(this.hudScoreShown)));
   },
 
   // Bare combo count; a run of >= HUD_COMBO_BREAK_MIN falling to 0 flashes the cell danger-red for 120 ms.
-  updateComboCell() {
+  updateComboCell(commit = true) {
     const el = this.hudEls();
     const combo = this.stats.combo | 0;
     const last = this._hudLastCombo | 0;
     if (combo === 0 && last >= HUD_COMBO_BREAK_MIN) this.pulseClass(el.combo, "break", HUD_COMBO_BREAK_MS);
     this._hudLastCombo = combo;
-    this.setText(el.combo, String(combo));
+    if (commit) this.setText(el.combo, String(combo));
   },
 
-  // Rising WPM is written at once (typing feedback); a decaying one at most every WPM_WRITE_EVERY_S.
-  updateWpmCell(dt) {
+  // Trailing-10 s live WPM; written on commit frames (rising and falling alike).
+  updateWpmCell(commit = true) {
     const el = this.hudEls();
-    if (!el.wpm) return;
-    const wpm = this.liveWpm();
-    this._wpmAcc = (this._wpmAcc || 0) + dt;
-    const shown = this._wpmShown;
-    if (shown == null || wpm > shown || wpm === 0 || this._wpmAcc >= WPM_WRITE_EVERY_S) {
-      this._wpmAcc = 0;
-      this._wpmShown = wpm;
-      this.setText(el.wpm, String(wpm));
-    }
+    if (!el.wpm || !commit) return;
+    this.setText(el.wpm, String(this.liveWpm()));
   },
 
   updateMultBadge() {
@@ -189,12 +192,13 @@ Object.assign(Game.prototype, {
     }
   },
 
-  updateHullMeter() {
+  // Meters are transforms (no layout); the hull number and the shield seconds are counters (commit frames).
+  updateHullMeter(commit = true) {
     const el = this.hudEls();
     const maxHp = Math.max(1, this.player.maxHp);
     const frac = clamp(this.player.hp / maxHp, 0, 1);
     const shield = this.player.shield > 0 ? ` +S${Math.ceil(this.player.shield)}` : "";
-    this.setText(el.hp, `${Math.round(this.player.hp)}${shield}`);
+    if (commit) this.setText(el.hp, `${Math.round(this.player.hp)}${shield}`);
     this.setTransformScaleX(el.hpFill, frac);
     this.setTransformScaleX(el.hpGhost, frac);
     this.setAttr(el.hpMeter, "aria-valuenow", Math.round(frac * 100));
@@ -310,9 +314,9 @@ Object.assign(Game.prototype, {
 
   // ------------------------- Chips -------------------------
   // #hudChips .chip[data-type] in POWERUP_CHIP_ORDER (shield, multi, spread, pierce, rapid; REPAIR has no chip).
-  // --p is written when it moved >= .01, .chipTime every .1 s (B-16 text), .expiring in the last 2 s, .is-leaving
-  // for 160 ms before removal.
-  syncChips() {
+  // --p (paint-only: the conic ring on ::before) is written when it moved >= .01; .chipTime (B-16 text: tenths
+  // below 10 s, else whole seconds) on commit frames; .expiring in the last 2 s; .is-leaving for 160 ms before removal.
+  syncChips(commit = true) {
     const el = this.hudEls();
     const host = el.chips;
     if (!host) return;
@@ -346,8 +350,10 @@ Object.assign(Game.prototype, {
           chip.p = p;
           chip.el.style.setProperty("--p", String(Math.round(p * 100) / 100));
         }
-        const timeText = remaining < 10 ? remaining.toFixed(1) : String(Math.ceil(remaining));
-        this.setText(chip.time, timeText);
+        if (commit || chip.time._hudText == null) {
+          const timeText = remaining < 10 ? remaining.toFixed(1) : String(Math.ceil(remaining));
+          this.setText(chip.time, timeText);
+        }
         this.setClass(chip.el, "expiring", remaining <= 2);
       } else if (chip && !chip.leaving) {
         chip.leaving = true;

@@ -255,8 +255,20 @@ body[data-mode="playing"] #btnSettings { display: none; }
   display: grid;
   gap: 6px;
   padding: 8px 12px 9px;
+  /* layout + style containment: a counter write re-lays out the HUD, never the page (paint stays uncontained
+     so the panel glow and the .gain text-shadow are not clipped) */
+  contain: layout style;
   transition: opacity var(--dur-2) var(--ease-out), border-color var(--dur-2), transform var(--dur-1);
 }
+
+/* Numeric cells reserve their widest value (tabular digits via .mono), so a changing number never shifts its
+   neighbours: the relayout stays inside the cell. */
+#hudLevel { min-width: 5ch; }
+#hudScore { min-width: 7ch; }
+#hudCombo { min-width: 3ch; }
+#hudAcc { min-width: 4ch; }
+#hudWpm { min-width: 3ch; }
+#hudHP { min-width: 3ch; }
 
 body[data-mode]:not([data-mode="playing"]):not([data-mode="paused"]) #hud {
   opacity: 0;
@@ -2421,6 +2433,57 @@ fieldset.shipGrid > legend {
   }
   .screenInner::before { top: 0; }
   #crtOverlay { z-index: calc(var(--z-screen) - 1); }
+}
+
+/* Portrait phones (E2 nit b): the 16:9 playfield is only ~220 px tall at 390 px wide, so the HUD drops Pilot and
+   WPM, runs 10 px labels on two tight cell rows and seats the chips beside them (grid column 2) instead of on a
+   third row. Target: HUD height <= 22 % of the playfield (probes/e2-portrait.mjs). */
+@media (orientation: portrait) and (max-width: 640px) {
+  #hud {
+    top: 6px;
+    left: 6px;
+    right: 6px;
+    padding: 3px 8px 4px;
+    gap: 2px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+  #stageBar { grid-column: 1 / -1; height: 2px; margin: -1px 0 0; }
+  #bossBar { grid-column: 1 / -1; }
+  .hudRow {
+    grid-column: 1;
+    display: grid;
+    grid-template-columns: repeat(3, auto);
+    justify-content: space-between;
+    row-gap: 1px;
+    column-gap: 8px;
+  }
+  .hudCell--pilot, .hudCell--wpm { display: none; }
+  .hudCell { gap: 4px; }
+  .hudCell .label { font-size: 10px; line-height: 1.1; margin-right: 2px; letter-spacing: 0.08em; }
+  .hudCell .mono { font-size: 11px; line-height: 1.1; }
+  #hudLevel { min-width: 4ch; }
+  #hudScore { min-width: 6ch; }
+  .multBadge { font-size: 9px; padding: 0 5px; line-height: 1.3; }
+  .meter { width: 56px; height: 5px; }
+  .hudChips {
+    grid-column: 2;
+    grid-row: 2;
+    align-self: center;
+    justify-content: flex-end;
+    max-width: 104px;   /* two chips per row; the cell rows keep >= 240 px */
+    gap: 3px;
+  }
+  /* icon + timer only: the VIS-05 icon and the accent name the powerup, the label would not fit beside the cells */
+  .chip { padding: 0 5px; gap: 3px; font-size: 9px; line-height: 1.3; letter-spacing: 0.04em; }
+  .chipLabel { display: none; }
+  .chip::before { padding: 2px; }
+  .chipIcon { width: 10px; height: 10px; }
+  .chipTime { min-width: 2.5ch; }
+  .bossBar { gap: 2px; }
+  .bossTitle { gap: 6px; }
+  .bossTitle .mono { font-size: 10px; }
+  .bossMeter { height: 5px; }
 }
 
 /* Immersive phone landscape: chrome hidden, playfield fills the display, pause lives in the HUD */
