@@ -1,4 +1,6 @@
-// Type-R 198X — static content tables (word pools, boss tables, ship/boss/theme art, explosion sheet, victory script). Classic script; load order is defined in index.html.
+// Type-R 198X — static content tables (word pools, letter sets, boss tables, ship/boss/theme art, explosion sheet, victory script).
+// Classic script; load order is defined in index.html. Loads after 20-constants.js and attaches the per-level word
+// pools to LEVELS at the bottom of this file (attachLevelContent).
 
 const EXPLOSION_SHEET = {
   src: "./assets/explosions/explosions.png",
@@ -6,6 +8,8 @@ const EXPLOSION_SHEET = {
   height: 1117
 };
 
+// Rects in the sheet's original pixel space. Indices are stable: frames 10, 18 and 20 are empty on the sheet and 16
+// is a lone debris chunk, so no set references them (F012); they stay in the table so the numbering does not shift.
 const EXPLOSION_FRAMES = [
   { x: 586, y: 118, w: 164, h: 162 },
   { x: 353, y: 135, w: 147, h: 144 },
@@ -30,12 +34,13 @@ const EXPLOSION_FRAMES = [
   { x: 2656, y: 1422, w: 14, h: 7 }
 ];
 
+// Frame order follows the art (time runs right-to-left on each sheet row): flash -> fireball -> smoke.
+// flashFrames are the frames drawn additively; the rest are smoke and composite source-over (D2).
 const EXPLOSION_SETS = {
-  small: { frames: [0, 1, 2, 10], scale: 0.9, frameTime: 0.05 },
-  medium: { frames: [3, 4, 5, 6, 7, 8, 9], scale: 1.0, frameTime: 0.065 },
-  large: { frames: [11, 12, 14, 15, 17, 19, 20], scale: 1.15, frameTime: 0.075 }
+  small:  { frames: [2, 1, 0],                   flashFrames: [2],      scale: 0.9,  frameTime: 0.055 },
+  medium: { frames: [9, 7, 6, 5, 4, 3, 8],       flashFrames: [9, 7],   scale: 1.0,  frameTime: 0.06 },
+  large:  { frames: [15, 14, 12, 11, 13, 19, 17], flashFrames: [15, 14], scale: 1.15, frameTime: 0.07 }
 };
-
 const BOSS_ARTS = [
   { level: 1, src: "./assets/boss_ships/firstlevelBoss.png" },
   { level: 2, src: "./assets/boss_ships/secondlevelboss.png" },
@@ -186,13 +191,43 @@ const PARALLAX_THEMES = [
     tileFg: false
   }
 ];
-const getThemeForLevel = (index) => {
-  if (index < 5) return PARALLAX_THEMES[index];
-  const themeIndex = (index - 5) % PARALLAX_THEMES.length;
-  return PARALLAX_THEMES[themeIndex];
-};
+
+// Sector -> art mapping (VIS-09 / F020). Only seven art sets are distinct (seventh/eighth/ninth duplicate
+// fourth/fifth/third), so the back half revisits familiar skies as "storm passes" and the finale gets the crystal city.
+const LEVEL_THEMES = [
+  { art: "first" },
+  { art: "sixth" },
+  { art: "third" },
+  { art: "fourth" },
+  { art: "fifth" },
+  { art: "third", storm: true },
+  { art: "second" },
+  { art: "fourth", storm: true },
+  { art: "fifth", storm: true },
+  { art: "tenth" }
+];
+// PALETTE token names (10-tokens.js); the presentation track maps them to hex for --theme-accent.
+const THEME_ACCENT = { first: "cyan", sixth: "amber", third: "magenta", fourth: "violet", fifth: "cyan", second: "amber", tenth: "violet" };
+const STORM_SPEED_MUL = 1.25;
+
+// One merged view per sector: the PARALLAX_THEMES entry (id/bg/fg/bgSpeed/fgSpeed/fgHeight/tileFg, which the
+// renderer reads today) plus art/storm/accent/speedMul for the overhaul. The canonical views are frozen;
+// getThemeForLevel hands out a shallow copy so callers may annotate their copy.
+const LEVEL_THEME_VIEWS = LEVEL_THEMES.map((entry) => {
+  const base = PARALLAX_THEMES.find((t) => t.id === entry.art) || PARALLAX_THEMES[0];
+  return Object.freeze({
+    ...base,
+    art: entry.art,
+    storm: !!entry.storm,
+    accent: THEME_ACCENT[entry.art] || "cyan",
+    speedMul: entry.storm ? STORM_SPEED_MUL : 1
+  });
+});
+
+const getThemeForLevel = (index) => ({ ...LEVEL_THEME_VIEWS[clamp(index | 0, 0, LEVEL_THEME_VIEWS.length - 1)] });
 
 // ----------------------------- Content -----------------------------
+// The three tiers stay as named lists (other code still references them); gameplay draws from ALL_WORDS via LEVELS[i].words.
 const WORDS_EASY = [
   "neon","arcade","laser","shift","type","pilot","score","combo","spark","wave","nova","drift","glow","bolt","trail",
   "vita","kana","pixel","grid","chrome","vapor","retro","japan","tokyo","speed","boost","hype","dash","flame",
@@ -219,7 +254,100 @@ const WORDS_HARD = [
   "transnebulous","astrocartography","thermodynamic","luminescence","neurotransmitter","tachyometric","photogrammetric"
 ];
 
-// Boss segments per level (stylized phrases; avoid punctuation that is annoying to type)
+// Space / retro-computing / arcade vocabulary that fills the short and middle lengths the tiers were missing (F005).
+// Grouped by length: 3x15, 4x20, 5x25, 6x25, 7x20, 8x15, 9x12, 10x8, 11x6, 12x4.
+const WORDS_THEMED = [
+  "bit","ram","rom","hex","key","mod","bus","jam","ion","orb","pod","zip","cog","dot","pad",
+  "chip","disk","code","data","port","ping","loop","node","tape","coin","star","moon","mars","void","atom","zoom","jump","boot","cart","lane",
+  "modem","cache","patch","stack","queue","array","debug","float","token","cargo","comet","lunar","solar","sonar","probe","rover","relay",
+  "micro","nexus","robot","droid","servo","bonus","level","pylon",
+  "kernel","buffer","socket","upload","reboot","cyborg","saturn","photon","meteor","galaxy","cosmos","nebula","vortex","thrust","module",
+  "sensor","credit","joypad","bitmap","sprite","shader","opcode","packet","hangar","pulsar",
+  "console","cabinet","circuit","program","network","monitor","scanner","command","control","machine","antenna","orbital","stellar",
+  "gravity","compile","decoder","payload","mission","capsule","reactor",
+  "joystick","asteroid","thruster","terminal","keyboard","software","hardware","firmware","database","download","starship","overload",
+  "override","cassette","wormhole",
+  "mainframe","satellite","processor","algorithm","bandwidth","lightyear","cartridge","telemetry","gyroscope","simulator","astronaut","interface",
+  "spacecraft","hyperdrive","hovercraft","controller","teleporter","cybernetic","trajectory","resolution",
+  "holographic","accelerator","coprocessor","overclocked","spacewalker","gravitation",
+  "microcircuit","hyperspatial","astronomical","transmission"
+];
+
+const ALL_WORDS = [...new Set([...WORDS_EASY, ...WORDS_MED, ...WORDS_HARD, ...WORDS_THEMED].map((w) => w.toLowerCase()))]
+  .filter((w) => /^[a-z]+$/.test(w));
+
+// Single-letter enemies draw from a graded alphabet: home row first, the full a-z from sector 4.
+const LETTER_SETS = {
+  tutorial: "asdfjkleiortn",
+  basic: "asdfghjkleiortnucmpwy",
+  full: "abcdefghijklmnopqrstuvwxyz"
+};
+const WORD_LEN_MIN = 3;
+const WORD_LEN_MAX = 13;
+const LEVEL_POOL_MIN = 24;
+
+// Words of length min..max. If that is thin (< 24; never with the shipped table), the window widens one step at a
+// time, max+1 first, then min-1, alternating, inside 3..13 (amendment C-7).
+function buildLevelWordPool(min, max) {
+  let lo = clamp(min, WORD_LEN_MIN, WORD_LEN_MAX);
+  let hi = clamp(max, lo, WORD_LEN_MAX);
+  const fitting = () => ALL_WORDS.filter((w) => w.length >= lo && w.length <= hi);
+  let pool = fitting();
+  let growMax = true;
+  while (pool.length < LEVEL_POOL_MIN && (lo > WORD_LEN_MIN || hi < WORD_LEN_MAX)) {
+    if (growMax && hi < WORD_LEN_MAX) hi++;
+    else if (lo > WORD_LEN_MIN) lo--;
+    else hi++;
+    growMax = !growMax;
+    pool = fitting();
+  }
+  return pool;
+}
+
+// Wave length windows (w = 0..2): the first wave uses the lower 60% of the level's window, the second the full
+// window, the third the upper 60%, so a sector visibly escalates.
+function waveLengthWindow(cfg, wave) {
+  const w = clamp(wave | 0, 0, 2);
+  const n = cfg.wordMax - cfg.wordMin + 1;
+  const span = Math.max(1, Math.ceil(n * 0.6));
+  if (w === 0) return { min: cfg.wordMin, max: Math.min(cfg.wordMax, cfg.wordMin + span - 1) };
+  if (w === 2) return { min: Math.max(cfg.wordMin, cfg.wordMax - span + 1), max: cfg.wordMax };
+  return { min: cfg.wordMin, max: cfg.wordMax };
+}
+
+function letterSetKeysForLevel(level) {
+  if (level <= 1) return ["tutorial", "tutorial", "basic"];
+  if (level <= 3) return ["basic", "basic", "basic"];
+  return ["full", "full", "full"];
+}
+
+function letterSetForWave(cfg, wave) {
+  return cfg.waveLetterSets[clamp(wave | 0, 0, 2)] || cfg.letterSet || LETTER_SETS.full;
+}
+
+function wordsForWave(cfg, wave) {
+  const sub = cfg.waveWords[clamp(wave | 0, 0, 2)];
+  return (sub && sub.length) ? sub : cfg.words;
+}
+
+// LEVELS (20-constants.js) is built before the word lists exist; this gives every row its pools and alphabets.
+function attachLevelContent(levels) {
+  for (const cfg of levels) {
+    cfg.words = buildLevelWordPool(cfg.wordMin, cfg.wordMax);
+    cfg.waveWords = [0, 1, 2].map((w) => {
+      const { min, max } = waveLengthWindow(cfg, w);
+      const sub = cfg.words.filter((x) => x.length >= min && x.length <= max);
+      return sub.length >= LEVEL_POOL_MIN ? sub : cfg.words.slice();
+    });
+    const keys = letterSetKeysForLevel(cfg.level);
+    cfg.waveLetterSets = keys.map((k) => LETTER_SETS[k]);
+    cfg.letterSet = cfg.level <= 3 ? LETTER_SETS.basic : LETTER_SETS.full;   // the widest alphabet the sector uses
+  }
+  return levels;
+}
+
+// ----------------------------- Boss content -----------------------------
+// Signature words per boss (kept even when longer than the sector's wordMax + 1).
 const BOSS_SEGMENT_BASE = [
   ["neon", "express", "boss"],
   ["turbo", "arcade", "guardian"],
@@ -233,6 +361,23 @@ const BOSS_SEGMENT_BASE = [
   ["final", "electro", "sovereign"]
 ];
 
+// Themed vocabulary per boss, keyed by level number (1-based).
+const BOSS_WORD_THEMES = {
+  1: ["signal","static","ghost","echo","haunt","wraith","aerial","carrier","hiss","phantom","beacon","fade","drift","whisper","relay","noise"],
+  2: ["vector","angle","brute","crush","polygon","vertex","scalar","smash","jagged","tangent","ogre","blunt","wedge","matrix","normal","axis"],
+  3: ["plasma","shogun","katana","honor","blade","ronin","banner","armor","flare","corona","ember","dojo","strike","tempest","bushido","warlord"],
+  4: ["hologram","titan","mirage","colossus","lumen","prism","giant","facet","shimmer","projector","illusion","tower","refract","glimmer","immense","beam"],
+  5: ["chrome","monolith","polish","granite","mirror","slab","alloy","basalt","gleam","pillar","obelisk","steel","lacquer","ingot","carbon","bastion"],
+  6: ["sync","leviathan","abyss","tidal","cadence","fathom","pulse","trench","rhythm","current","kraken","swell","metronome","undertow","breach","depth"],
+  7: ["empress","static","crown","decree","throne","scepter","regal","sovereign","dynasty","edict","jewel","tiara","court","dominion","royal","majesty"],
+  8: ["logic","dragon","boolean","scale","syntax","inferno","wyrm","theorem","lambda","talon","axiom","cinder","recursion","hoard","predicate","wingspan"],
+  9: ["night","engine","piston","nocturne","turbine","midnight","flywheel","eclipse","cylinder","twilight","exhaust","lunar","throttle","shadow","torque","dusk"],
+  10: ["final","electro","voltage","sorcery","ampere","conjure","lightning","hex","tesla","incant","thunder","overwrite","surge","spellbook","kilovolt","headline"]
+};
+
+// The Electromancer's message from the briefing, typed as the fourth phase of the final boss.
+const FINAL_MESSAGE = ["my", "syntax", "is", "law", "fill", "every", "screen", "with", "me"];
+
 const BOSS_WORD_POOL = [
   "neon","signal","vector","ghost","quantum","phase","horizon","vapor",
   "matrix","gamma","cypher","shadow","omega","binary","cadence","volt",
@@ -240,6 +385,48 @@ const BOSS_WORD_POOL = [
   "static","echo","sable","flux","lumen","aether","cinder","pulse",
   "aurora","glitch","cursor","plinth","bastion","spire","ember","auric",
   "radiant","specter","lattice","ionstorm","solstice","parallax","carbon","crystal",
-  "hyperion","omega","solenoid","paladin","cathedral","symphony","monolith","oblivion",
+  "hyperion","solenoid","paladin","cathedral","symphony","monolith","oblivion",
   "zenithal","transistor","oscillation","helix","redshift","sunflare","midnight","membrane"
 ];
+
+// Segment plan for a boss: 3 signature words, then the shuffled themed list, then the shuffled global pool (both
+// filtered to length 3..wordMax+1 and deduped), and only when all of that runs out a repeat (amendment C-6).
+// Count is 6+3(L-1); L10 appends FINAL_MESSAGE as a fourth phase. phaseStarts are segment indices.
+function buildBossPlan(level) {
+  const L = clamp(level | 0, 1, LEVELS.length);
+  const cfg = LEVELS[L - 1];
+  const count = bossSegmentCount(L);
+  const maxLen = cfg.wordMax + 1;
+  const fits = (w) => w.length >= WORD_LEN_MIN && w.length <= maxLen;
+
+  const base = (BOSS_SEGMENT_BASE[L - 1] || ["neon", "boss"]).map((w) => w.toLowerCase());
+  const themed = (BOSS_WORD_THEMES[L] || []).map((w) => w.toLowerCase());
+  const themedSet = new Set([...base, ...themed]);
+  const segments = [];
+  const used = new Set();
+  const take = (words) => {
+    for (const w of words) {
+      if (segments.length >= count) return;
+      if (used.has(w)) continue;
+      used.add(w);
+      segments.push(w);
+    }
+  };
+  take(base);
+  take(shuffle(themed.filter(fits)));
+  take(shuffle(BOSS_WORD_POOL.filter(fits)));
+  if (segments.length < count) {
+    const repeats = shuffle([...themed, ...BOSS_WORD_POOL].filter(fits));
+    for (let k = 0; segments.length < count && repeats.length; k++) segments.push(repeats[k % repeats.length]);
+  }
+
+  const phaseStarts = [0, Math.ceil(count / 3), Math.ceil((2 * count) / 3)];
+  if (L === LEVELS.length) {
+    phaseStarts.push(count);
+    segments.push(...FINAL_MESSAGE);
+  }
+  const themedCount = segments.filter((w) => themedSet.has(w)).length;
+  return { level: L, segments, phaseStarts, coreCount: count, themedCount };
+}
+
+attachLevelContent(LEVELS);
