@@ -164,9 +164,16 @@ Object.assign(Game.prototype, {
         if (!li) { this.beginWave(this.wave); break; }
         li.t += dt;
         const gate = (typeof this.isLevelGateOpen === "function") ? this.isLevelGateOpen() : true;
+        const card = (this.banner && this.banner.kind === "sector") ? this.banner : null;
         if (li.t >= li.dur && (gate || li.t >= LEVEL_INTRO_MAX_S)) {
+          // warp-in hand-off: white flash .35 (the GO cue plays in beginWave), the card ends with the intro
           this.levelIntro = null;
+          this.parallaxWarp = 1;
+          this.whiteFlash = Math.max(this.whiteFlash || 0, 0.35);
+          if (card && card.t < card.dur) card.dur = card.t;
           this.beginWave(this.wave);
+        } else if (li.t >= li.dur && card) {
+          card.dur = Math.max(card.dur, Math.min(LEVEL_INTRO_MAX_S + 0.05, card.t + 0.05));   // held by the asset gate
         }
         break;
       }
@@ -182,7 +189,7 @@ Object.assign(Game.prototype, {
           if (alive) this.detonateLeftovers();
           if (this.wave < 2) {
             this.setWavePhase("banner");
-            this.showBanner({ kind: "wave", title: `WAVE ${this.wave + 2} / 3` });
+            this.showBanner({ kind: "wave", eyebrow: `WAVE ${this.wave + 2} / 3` });
           } else {
             this.beginBossApproach();
           }
@@ -214,7 +221,7 @@ Object.assign(Game.prototype, {
     this.sfx.waveStart(this.wave + 1);
     if (this.wave === 0) {
       this.sfx.lock("go");
-      this.showBanner({ kind: "wave", title: "WAVE 1 / 3", sub: "GO" });
+      this.showBanner({ kind: "wave", eyebrow: "WAVE 1 / 3", sub: "GO" });
     }
     if (this.run) { this.run.wave = this.wave; this.run.waveKills = 0; this.run.wavePhase = "spawn"; }
   },
@@ -245,7 +252,7 @@ Object.assign(Game.prototype, {
     this.setWavePhase("approach");
     this.sfx.bossWarning();
     if (typeof this.sfx.duckMusic === "function") this.sfx.duckMusic(0.5, BOSS_APPROACH_S);
-    this.showBanner({ kind: "wave", title: "WARNING", sub: `${cfg.bossName} APPROACHING`, color: "danger", dur: BOSS_APPROACH_S });
+    this.showBanner({ kind: "wave", eyebrow: "WARNING", sub: `${cfg.bossName} APPROACHING`, color: "danger", dur: BOSS_APPROACH_S, blink: true });
     if (this.run) { this.run.wavePhase = "approach"; this.run.wave = this.wave; }
   },
 
@@ -256,6 +263,7 @@ Object.assign(Game.prototype, {
     en.alive = false;
     en.locked = false;
     if (this.lock && this.lock.ref === en) { this.lock = null; this.lockMisses = 0; }
+    if (typeof this.notePlateDeath === "function") this.notePlateDeath(en, "detonate");
     this.addExplosion(en.x, en.y, 10);
     this.addExplosionSprite(en.x, en.y, "small");
   },
@@ -288,7 +296,13 @@ Object.assign(Game.prototype, {
     let base = minion ? SCORE.minion : (len <= 1 ? SCORE.letter : SCORE.word(len));
     if (secondary) base *= SCORE.secondaryMul;
     else if (!minion && len > 1 && en.cleanSoFar) base *= SCORE.cleanMul;
-    const gained = this.addScore(base * mult, { x: en.x, y: en.y - 26 });
+    const gained = this.addScore(base * mult);
+    if (gained > 0) {
+      const tier = (typeof this.tierColor === "function") ? this.tierColor(this.stats.mult | 0) : "text";
+      this.addFloater(en.x, en.y - ((en.plateH || 40) / 2 + 14), `+${formatInt(gained)}`, tier, len >= 8 ? 26 : 20);
+    }
+    if (typeof this.notePlateDeath === "function") this.notePlateDeath(en, "kill");
+    if (typeof this.onKillFx === "function") this.onKillFx(en, en.x, en.y);
 
     this.stats.kills++;
     this.levelStats.kills++;
@@ -370,10 +384,15 @@ Object.assign(Game.prototype, {
     if (this.bossClear) return;
     this._leakLog.push(nowMs());
     this.sfx.impact();
+    // Contact slam (JUICE-06): the plate itself is the hit (danger plate 90 ms, struck through), the ship kicks,
+    // a danger ring spreads from the contact point; no explosion sprite.
+    const slamX = Math.max(en.x, this.player.x + 35 + (en.plateW || 40) / 2);
+    if (typeof this.notePlateDeath === "function") this.notePlateDeath(en, "slam", { x: slamX, y: en.y });
+    this.player.kick = Math.max(this.player.kick || 0, 1);
+    if (typeof this.addShockwave === "function") this.addShockwave(this.player.x + 40, en.y, 120, "danger");
     const dmg = en.kind === "bossMinion" ? DAMAGE.minion : DAMAGE.leak(en.text.length);
     this.takeDamage(dmg, "leak");
-    this.addExplosion(this.player.x + 40, en.y, 18);
-    this.addExplosionSprite(this.player.x + 40, en.y, this.getExplosionTypeForEnemy(en));
+    this.addExplosion(this.player.x + 40, en.y, 10);
   },
 
   // ------------------------- HP, shield, i-frames -------------------------
@@ -405,6 +424,7 @@ Object.assign(Game.prototype, {
     this.player.hitT = 0.3;
     this.player.kick = 1;
     this.damageFlash = 1;
+    if (typeof this.crtTear === "function") this.crtTear();
     this.damagePulse = Math.max(this.damagePulse, 0.3);   // legacy tint: .3 x .4 = alpha .12 (contract cap)
     this.flash = Math.max(this.flash, 0.04);
     this.screenShake(12);
@@ -513,10 +533,14 @@ Object.assign(Game.prototype, {
     if (this.lock && this.lock.ref === p) { this.lock = null; this.lockMisses = 0; }
     const def = POWERUP_TYPES[p.type] || POWERUP_TYPES.SHIELD;
     const mult = this.scoringMult();
+    const accent = (typeof POWER_ACCENT === "object" && POWER_ACCENT[p.type]) || "violet";
     this.sfx.pickup(p.type);
-    this.addExplosion(p.x, p.y, 22);
-    this.addExplosionSprite(p.x, p.y, "small");
-    this.addScore(SCORE.pickup * mult, { x: p.x, y: p.y - 26, label: def.label.toUpperCase() });
+    // Collect ceremony (VIS-05): the capsule scales 1 -> 1.3 and fades, an accent shockwave, the label flies to its chip.
+    if (typeof this.notePlateDeath === "function") this.notePlateDeath(p, "collect");
+    if (typeof this.addShockwave === "function") this.addShockwave(p.x, p.y, 60, accent === "text" ? "cyan" : accent, 0.24);
+    this.addExplosion(p.x, p.y, 16);
+    const gained = this.addScore(SCORE.pickup * mult);
+    this.addFloater(p.x, p.y - ((p.plateH || 36) / 2 + 14), `${def.label.toUpperCase()} +${formatInt(gained)}`, accent, 20);
     if (!this.powerMax) this.powerMax = {};
     switch (p.type) {
       case "SPREAD":
@@ -575,6 +599,26 @@ Object.assign(Game.prototype, {
     }
   },
 
+  // ------------------------- Warp-in skip (amendment E-9) -------------------------
+  // Returning players (the next sector is already unlocked) may cut the sector card short on any key once the art
+  // is resident; the shell's handleTyped calls canSkipLevelIntro() / skipLevelIntro() while the gate is closed.
+  canSkipLevelIntro() {
+    const li = this.levelIntro;
+    if (!li || this.mode !== "playing") return false;
+    if (li.t < 0.4) return false;
+    if (typeof this.isLevelGateOpen === "function" && !this.isLevelGateOpen()) return false;
+    const unlocked = (this.save && this.save.lastUnlockedLevel) | 0;
+    return unlocked > this.levelIndex + 1;
+  },
+
+  skipLevelIntro() {
+    const li = this.levelIntro;
+    if (!li) return false;
+    li.t = Math.max(li.t, li.dur);
+    li.skipped = true;
+    return true;
+  },
+
   // ------------------------- Frame update -------------------------
   update(dt) {
     const cfg = LEVELS[this.levelIndex];
@@ -618,9 +662,10 @@ Object.assign(Game.prototype, {
     }
 
     // Powerups: homing / drift, lifetime, missed when they pass the ship
+    const bobAmp = this.reduceMotion ? 0 : 4;
     for (const p of this.powerups) {
       if (!p.alive) continue;
-      p.update(dt);
+      p.update(dt, bobAmp);
       if (p.dying || p.x < this.player.x + 60) {
         p.alive = false;
         if (this.lock && this.lock.ref === p) { this.lock = null; this.lockMisses = 0; }
@@ -641,6 +686,7 @@ Object.assign(Game.prototype, {
 
     this.updateFloaters(dt);
     this.updateBanner(dt);
+    if (typeof this.tickPresentation === "function") this.tickPresentation(dt);
 
     if (!this._prefetched && this.levelT >= 0.25 * cfg.duration) this.maybePrefetchNext();
 

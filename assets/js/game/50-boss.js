@@ -1,6 +1,9 @@
 // Type-R 198X — boss fight v2 (SYS-06/SYS-07): phases, targetable minions, the Signal Surge, the 2.4 s intro, the
 // 5 s skippable finale and the clear tally. Boss drawing lives in 70-render.js; drawBossHazardMeter(ctx, rect) here is
 // the hook the renderer calls at layer L10 when present. Methods are mixed into Game.prototype; load order is defined in index.html.
+// Dissolve length (70-render.js owns BOSS_DISSOLVE_S; 1.2 s per CONTRACT section 11).
+const BOSS_DISSOLVE_S_FOR = () => (typeof BOSS_DISSOLVE_S === "number" ? BOSS_DISSOLVE_S : 1.2);
+
 Object.assign(Game.prototype, {
   // Untrimmed art size for Boss.artRect (pre-D6). The loader's manifest first, else the constructor's <img>.
   bossArtSize(level) {
@@ -86,9 +89,10 @@ Object.assign(Game.prototype, {
     const bests = this.save.sectorBests || {};
     const returning = !!bests[String(cfg.level)] || (this.levelStats.retries | 0) > 0;
     this.bossIntro = { t: 0, dur: BOSS_INTRO_S, locked: true, name, skippable: returning };
-    this.whiteFlash = 0.5;      // D1 draws it; the legacy red tint is not a damage event
-    this.screenShake(14);
-    this.showBanner({ kind: "bossIntro", eyebrow: "WARNING // INCOMING BOSS", title: name, sub: returning ? "ANY KEY TO ENGAGE" : "" });
+    // Violet edge pulse (the camera draws and decays it); never the red damage tint. The art slides in from the
+    // right while trauma ramps to .5 x motion().shake (tickBoss); the white flash belongs to the hand-off.
+    this.introPulse = 1;
+    this.showBanner({ kind: "bossIntro", eyebrow: "WARNING", title: name, sub: "INCOMING BOSS" });
   },
 
   endBossIntro() {
@@ -119,6 +123,12 @@ Object.assign(Game.prototype, {
     const intro = this.bossIntro;
     if (intro) {
       intro.t += dt;
+      if (intro.locked && !this.reduceMotion) {
+        // trauma ramps to .5 x motion().shake over the .9 s slide, then decays with the rest of the camera
+        const shake = (typeof this.motionProfile === "function") ? (this.motionProfile().shake || 0) : 1;
+        const ramp = clamp(intro.t / 0.9, 0, 1) * (intro.t < 0.9 ? 1 : Math.max(0, 1 - (intro.t - 0.9) / 0.5));
+        this.trauma = Math.max(this.trauma || 0, 0.5 * shake * ramp);
+      }
       if (intro.locked && intro.t >= intro.dur) this.endBossIntro();
       if (!intro.locked && intro.t >= intro.dur + 0.4) this.bossIntro = null;
       if (intro.locked) return;
@@ -218,6 +228,8 @@ Object.assign(Game.prototype, {
     if (r.segmentDone) {
       this.addScore(SCORE.segment(segLen) * mult, { x: slab.x + slab.w / 2, y: slab.y - 14 });
       this.sfx.segmentDown();
+      boss.flash = Math.max(boss.flash, 0.5);
+      if (typeof this.addShockwave === "function") this.addShockwave(aim.x, aim.y, 120, "magenta");
       this.pulseBossSegmentClear();
       this.hitStop = Math.max(this.hitStop || 0, 0.09);
       if (boss.surge) this.cancelSurge(true);
@@ -319,59 +331,87 @@ Object.assign(Game.prototype, {
     return dmg;
   },
 
-  // Hazard cell: top-right of the console slab (D6 may move it; the renderer passes its own rect).
+  // Hazard cell: the console slab's right cell (88 x 68 inside the 16 px padding); also the surge bolt's anchor.
   bossHazardRect() {
     const boss = this.boss;
     if (!boss) return null;
     const s = boss.slabRect;
-    return { x: s.x + s.w - 156, y: s.y + 12, w: 132, h: 16 };
+    return { x: s.x + s.w - 16 - 88, y: s.y + 14, w: 88, h: 68 };
   },
 
-  // 3-segment countdown in danger red while a surge charges, plus the bolt afterglow once it fired.
+  // Surge telegraph in the slab's right cell: a dim SURGE label with the charge-up arc toward the next surge
+  // while idle; a danger 3-segment countdown (blinking in the last .5 s) while one charges; the bolt afterglow
+  // toward the ship once it fired. Hidden during the intro and the finale.
   drawBossHazardMeter(ctx, rect) {
     this._hazardDraws = (this._hazardDraws | 0) + 1;
     const boss = this.boss;
     if (!boss) return;
+    if (this.bossIntro && this.bossIntro.locked) return;
     const r = rect || this.bossHazardRect();
     if (!r) return;
+    const cfg = LEVELS[this.levelIndex];
     const surge = boss.surge;
-    if (!surge && !(boss.surgeFlash > 0)) return;
     const danger = feedbackColor("danger");
+    const rm = !!this.reduceMotion;
+    const cx = r.x + r.w / 2;
     ctx.save();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.lineCap = "round";
     if (surge) {
       const k = clamp(surge.t / Math.max(0.01, surge.dur), 0, 1);
-      const blink = (surge.dur - surge.t) < 0.5 && !this.reduceMotion && (Math.floor(surge.t * 10) % 2 === 0);
-      ctx.globalAlpha = blink ? 0.55 : 1;
-      ctx.strokeStyle = danger;
-      ctx.lineWidth = 1.5;
-      roundRect(ctx, r.x, r.y, r.w, r.h, 4);
-      ctx.stroke();
-      const gap = 4, inner = r.w - 8;
-      const segW = (inner - gap * 2) / 3;
+      const left = surge.dur - surge.t;
+      const blinkOn = left < 0.5 && !rm && (Math.floor(surge.t * 10) % 2 === 0);
+      const a = blinkOn ? 0.55 : 1;
+      ctx.globalAlpha = a;
+      ctx.font = feedbackFont(10, 700);
+      ctx.fillStyle = danger;
+      ctx.fillText("SIGNAL SURGE", cx, r.y + 8);
+      const gap = 4, segW = (r.w - gap * 2) / 3, barY = r.y + 22, barH = 12;
       for (let i = 0; i < 3; i++) {
         const fill = clamp(k * 3 - i, 0, 1);
-        const x0 = r.x + 4 + i * (segW + gap);
-        ctx.globalAlpha = (blink ? 0.55 : 1) * 0.25;
+        const x0 = r.x + i * (segW + gap);
+        ctx.globalAlpha = a * 0.25;
         ctx.fillStyle = danger;
-        ctx.fillRect(x0, r.y + 4, segW, r.h - 8);
+        ctx.fillRect(x0, barY, segW, barH);
         if (fill > 0) {
-          ctx.globalAlpha = blink ? 0.55 : 0.95;
-          ctx.fillRect(x0, r.y + 4, segW * fill, r.h - 8);
+          ctx.globalAlpha = a * 0.95;
+          ctx.fillRect(x0, barY, segW * fill, barH);
         }
       }
+      ctx.globalAlpha = a;
+      ctx.font = feedbackFont(16, 700);
+      ctx.fillStyle = feedbackColor("text", 0.92);
+      ctx.fillText(`${Math.max(0, left).toFixed(1)}s`, cx, r.y + 50);
+    } else if (cfg && cfg.surgeEvery) {
+      // idle: dim label + the charge arc toward the next surge
+      const k = clamp((boss.surgeTimer || 0) / cfg.surgeEvery, 0, 1);
       ctx.globalAlpha = 1;
-      ctx.font = feedbackFont(11, 700);
-      ctx.textAlign = "right";
-      ctx.textBaseline = "bottom";
-      ctx.fillStyle = danger;
-      ctx.fillText("SIGNAL SURGE", r.x + r.w, r.y - 3);
+      ctx.font = feedbackFont(10, 700);
+      ctx.fillStyle = feedbackColor("text", 0.25);
+      ctx.fillText("SURGE", cx, r.y + 8);
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = feedbackColor("text", 0.12);
+      ctx.beginPath();
+      ctx.arc(cx, r.y + 40, 16, 0, Math.PI * 2);
+      ctx.stroke();
+      if (k > 0) {
+        ctx.strokeStyle = feedbackColor("magenta", 0.45 + 0.25 * k);
+        ctx.beginPath();
+        ctx.arc(cx, r.y + 40, 16, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * k);
+        ctx.stroke();
+      }
+    } else {
+      ctx.font = feedbackFont(10, 700);
+      ctx.fillStyle = feedbackColor("text", 0.25);
+      ctx.fillText("NO SURGE", cx, r.y + 8);
     }
     if (boss.surgeFlash > 0) {
       ctx.globalAlpha = clamp(boss.surgeFlash, 0, 1);
       ctx.strokeStyle = danger;
       ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.moveTo(r.x, r.y + r.h / 2);
+      ctx.moveTo(r.x, r.y + 40);
       ctx.lineTo(this.player.x + 20, this.player.y);
       ctx.stroke();
     }
@@ -409,7 +449,9 @@ Object.assign(Game.prototype, {
     const boss = this.boss;
     const cfg = LEVELS[this.levelIndex];
     const L = cfg.level;
-    const artRect = boss.artRect;
+    const placement = (typeof this.bossPlacement === "function") ? this.bossPlacement(boss) : null;
+    const artRect = placement ? placement.artRect : boss.artRect;
+    const contentRect = placement ? placement.contentRect : (boss.contentRect || artRect);
     const aim = this.bossAimPoint();
     const target = (this.levelIndex >= LEVELS.length - 1) ? "victory" : "level";
     const totalChars = boss.totalChars;
@@ -428,6 +470,8 @@ Object.assign(Game.prototype, {
       bossName: cfg.bossName,
       nextLevelIndex: target === "level" ? Math.min(this.levelIndex + 1, LEVELS.length - 1) : null,
       artRect,
+      contentRect,
+      artLevel: cfg.level,
       tally: null,
       committed: false,
       skipped: false,
@@ -436,59 +480,84 @@ Object.assign(Game.prototype, {
     };
     info.tally = this.computeClearTally(info);
     this.bossClear = info;
+    // t = 0: hit-stop .16, white-out (.6 under reduce-motion), slow-mo .35 for .6 s easing back over .4 s,
+    // the charge riser (bossKill cracks at .4), finale music; minions already detonated in endBossFight.
+    const rm = !!this.reduceMotion;
+    if (typeof this.addHitStop === "function") this.addHitStop(0.16);
+    else this.hitStop = Math.max(this.hitStop || 0, 0.16);
+    this.whiteFlash = Math.max(this.whiteFlash || 0, rm ? 0.6 : 1);
+    if (typeof this.setSlowMo === "function" && !rm) this.setSlowMo(0.35, 0.6, 0.4);
     this.sfx.bossCharge();
     this.sfx.setMusicState("finale");
     this.screenShake(10);
     this.addExplosion(aim.x, aim.y, 120);
-    this.hitStop = Math.max(this.hitStop || 0, 0.16);
+    this.bossDissolve = { t: 0, dur: BOSS_DISSOLVE_S_FOR(), start: 0.4 };
     this.startBossFinale(artRect);
-    this.showBanner({ kind: "bossClear", eyebrow: `${cfg.bossName} NEUTRALIZED`, title: "BOSS DEFEATED", sub: `+${formatInt(info.tally.total)} BONUS` });
+    // Banner at t = .3 (startBossFinale schedules it) with the bonus counting up over 1.2 s from t = .8.
     this.maybePrefetchNext();
     return info;
   },
 
-  // Finale script: bossKill crack at .4 s, bursts every .3 s, the bossDown fanfare at 2.0 s.
+  // Finale script (JUICE-10 inside SYS-07's 5.0 s): banner at .3; bossKill crack + burst at .4, bursts at .8 /
+  // 1.2 / 1.6 (shockwave 180, large sprite, screenShake(8), explosion(rand(.7, 1))) with medium texture between;
+  // the art dissolves from .4 over 1.2 s (drawBossDissolve); fanfare at 2.0; SKIP: ANY KEY from 2.0 (banner footer).
   startBossFinale(artRect) {
     const r = artRect || { x: this.w / 2 - 200, y: this.h / 2 - 150, w: 400, h: 300 };
-    this.bossFinaleOrigin = { x: r.x + r.w * 0.5, y: r.y + r.h * 0.5, w: r.w, h: r.h };
+    const c = (this.bossClear && this.bossClear.contentRect) || r;
+    this.bossFinaleOrigin = { x: c.x + c.w * 0.5, y: c.y + c.h * 0.5, w: c.w, h: c.h };
     const bursts = [];
+    bursts.push({ time: 0.3, kind: "banner" });
     bursts.push({ time: 0.4, kind: "bossKill" });
-    for (let t = 0.1, i = 0; t <= BOSS_FINALE_S - 0.4; t += 0.3, i++) {
-      const step = i % 3;
-      bursts.push({ time: t, kind: step === 0 ? "shock" : step === 1 ? "large" : "medium" });
-    }
+    for (const t of [0.8, 1.2, 1.6]) bursts.push({ time: t, kind: "shock" });
+    for (const t of [0.55, 0.95, 1.35]) bursts.push({ time: t, kind: "medium" });
     bursts.push({ time: 2.0, kind: "fanfare" });
     bursts.sort((a, b) => a.time - b.time);
     this.bossFinaleBursts = bursts;
   },
 
   runBossFinaleBurst(burst) {
-    const o = this.bossFinaleOrigin || { x: this.w * 0.7, y: this.h * 0.4, w: 400, h: 300 };
+    const o = this.bossFinaleOrigin || { x: this.w * 0.76, y: this.h * 0.45, w: 400, h: 300 };
     const sx = Math.max(60, o.w * 0.35), sy = Math.max(60, o.h * 0.35);
+    const info = this.bossClear;
     switch (burst.kind) {
+      case "banner":
+        if (info) {
+          this.showBanner({
+            kind: "bossClear",
+            eyebrow: `${info.bossName} NEUTRALIZED`,
+            title: "BOSS DEFEATED",
+            sub: `+${formatInt(info.tally.total)} BONUS`,
+            dur: Math.max(BANNER_PRESETS.bossClear.dur, (info.duration || BOSS_FINALE_S) - 0.3),
+            count: { from: 0.5, dur: 1.2, to: info.tally.total }
+          });
+        }
+        break;
       case "bossKill":
         this.sfx.bossKill();
         this.screenShake(14);
+        if (typeof this.addShockwave === "function") this.addShockwave(o.x, o.y, 180, "text");
         this.addExplosionSprite(o.x, o.y, "large");
         this.addExplosion(o.x, o.y, 90);
         break;
       case "fanfare":
-        if (this.bossClear && !this.bossClear.fanfared) {
-          this.bossClear.fanfared = true;
+        if (info && !info.fanfared) {
+          info.fanfared = true;
           this.sfx.fanfare("bossDown");
         }
         break;
-      case "shock":
-        this.addExplosion(o.x + rand(-40, 40), o.y + rand(-40, 40), 140);
-        this.addExplosionSprite(o.x + rand(-40, 40), o.y + rand(-40, 40), "large");
-        this.screenShake(6);
-        this.sfx.explosion(rand(0.6, 1.0));
+      case "shock": {
+        const bx = o.x + rand(-sx * 0.6, sx * 0.6), by = o.y + rand(-sy * 0.6, sy * 0.6);
+        if (typeof this.addShockwave === "function") this.addShockwave(bx, by, 180, "amber");
+        this.addExplosionSprite(bx, by, "large");
+        this.addExplosion(bx, by, 120);
+        this.screenShake(8);
+        this.sfx.explosion(rand(0.7, 1.0));
         break;
+      }
       case "medium":
         for (let i = 0; i < 3; i++) this.addExplosionSprite(o.x + rand(-sx, sx), o.y + rand(-sy, sy), "medium");
         break;
       default:
-        for (let i = 0; i < 3; i++) this.addExplosionSprite(o.x + rand(-sx * 0.8, sx * 0.8), o.y + rand(-sy * 0.8, sy * 0.8), "large");
         break;
     }
   },
@@ -499,10 +568,12 @@ Object.assign(Game.prototype, {
     info.t += dt;
     const bursts = this.bossFinaleBursts;
     while (bursts.length && bursts[0].time <= info.t) this.runBossFinaleBurst(bursts.shift());
-    if (!info.skipHinted && info.t >= BOSS_FINALE_SKIP_S) {
-      info.skipHinted = true;
-      this.showBanner({ kind: "callout", title: "ANY KEY TO CONTINUE", color: "text", dur: 1.4 });
+    const d = this.bossDissolve;
+    if (d) {
+      d.t = info.t;
+      if (info.t >= d.start + d.dur) this.bossDissolve = null;
     }
+    if (!info.skipHinted && info.t >= BOSS_FINALE_SKIP_S) info.skipHinted = true;   // the bossClear banner draws "SKIP: ANY KEY"
     if (info.t >= (info.duration || BOSS_FINALE_S)) this.finishFinale();
   },
 
@@ -516,6 +587,7 @@ Object.assign(Game.prototype, {
     }
     this.commitLevelClear(info);
     this.bossClear = null;
+    this.bossDissolve = null;
     this.bossFinaleBursts.length = 0;
     this.bossFinaleOrigin = null;
     this.clearBanners();
