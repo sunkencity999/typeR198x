@@ -1,5 +1,5 @@
 {
- "version": "202610160652",
+ "version": "202610161134",
  "music": [
   "./assets/opt/audio/galactic_high_score_1.mp3",
   "./assets/opt/audio/galactic_high_score_2.mp3",
@@ -216,108 +216,6 @@
     "h": 1504
    },
    "fallback": "./assets/foregrounds/sixthlevelFG.png"
-  },
-  "bg/seventh": {
-   "orig": {
-    "w": 2816,
-    "h": 1504
-   },
-   "x1": {
-    "src": "./assets/opt/bg/seventh@1x.webp",
-    "w": 1408,
-    "h": 752
-   },
-   "x2": {
-    "src": "./assets/opt/bg/seventh@2x.webp",
-    "w": 2816,
-    "h": 1504
-   },
-   "fallback": "./assets/backgrounds/seventhlevelbg.png"
-  },
-  "fg/seventh": {
-   "orig": {
-    "w": 2816,
-    "h": 1504
-   },
-   "x1": {
-    "src": "./assets/opt/fg/seventh@1x.webp",
-    "w": 1408,
-    "h": 752
-   },
-   "x2": {
-    "src": "./assets/opt/fg/seventh@2x.webp",
-    "w": 2816,
-    "h": 1504
-   },
-   "fallback": "./assets/foregrounds/seventhlevelFG.png"
-  },
-  "bg/eighth": {
-   "orig": {
-    "w": 2816,
-    "h": 1504
-   },
-   "x1": {
-    "src": "./assets/opt/bg/eighth@1x.webp",
-    "w": 1408,
-    "h": 752
-   },
-   "x2": {
-    "src": "./assets/opt/bg/eighth@2x.webp",
-    "w": 2816,
-    "h": 1504
-   },
-   "fallback": "./assets/backgrounds/eighthlevelbg.png"
-  },
-  "fg/eighth": {
-   "orig": {
-    "w": 2816,
-    "h": 1504
-   },
-   "x1": {
-    "src": "./assets/opt/fg/eighth@1x.webp",
-    "w": 1408,
-    "h": 752
-   },
-   "x2": {
-    "src": "./assets/opt/fg/eighth@2x.webp",
-    "w": 2816,
-    "h": 1504
-   },
-   "fallback": "./assets/foregrounds/eighthlevelFG.png"
-  },
-  "bg/ninth": {
-   "orig": {
-    "w": 2816,
-    "h": 1504
-   },
-   "x1": {
-    "src": "./assets/opt/bg/ninth@1x.webp",
-    "w": 1408,
-    "h": 752
-   },
-   "x2": {
-    "src": "./assets/opt/bg/ninth@2x.webp",
-    "w": 2816,
-    "h": 1504
-   },
-   "fallback": "./assets/backgrounds/ninthlevelbg.png"
-  },
-  "fg/ninth": {
-   "orig": {
-    "w": 2816,
-    "h": 1504
-   },
-   "x1": {
-    "src": "./assets/opt/fg/ninth@1x.webp",
-    "w": 1408,
-    "h": 752
-   },
-   "x2": {
-    "src": "./assets/opt/fg/ninth@2x.webp",
-    "w": 2816,
-    "h": 1504
-   },
-   "fallback": "./assets/foregrounds/ninthlevelFG.png"
   },
   "bg/tenth": {
    "orig": {
