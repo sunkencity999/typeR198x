@@ -310,11 +310,7 @@ Object.assign(Game.prototype, {
   },
 
   // ------------------------- Start / Continue / Reset -------------------------
-  runHasProgress(run) {
-    if (!run) return false;
-    const st = run.stats || {};
-    return (run.levelIndex | 0) > 0 || (st.score | 0) > 0 || (run.levelT || 0) > 0 || (run.wave | 0) > 0 || !!run.inBoss;
-  },
+  // runHasProgress(run) lives in 15-screens.js (single source of truth; it loads after this file).
 
   readPilotName() {
     const name = (this.ui.playerName && this.ui.playerName.value || "").trim();
