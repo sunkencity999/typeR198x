@@ -793,7 +793,7 @@ body[data-mode] .screen:not(.is-active) .screenInner > * {
   text-decoration-style: solid;
 }
 
-.btn-link.danger { color: var(--c-danger); }
+.btn-link.danger { color: #FF7A92; opacity: 1; } /* review R45: resting tint lighter and opaque (danger at .75 measured 3.9:1 on the menu panel) */
 .btn-link.danger:hover, .btn-link.danger:focus-visible { color: var(--c-danger); }
 
 /* ----- 7. Menu (title cabinet) -------------------------------------------------- */
