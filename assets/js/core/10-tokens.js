@@ -161,3 +161,26 @@ const easeInOutCubic = (t) => {
 // Shake margin (logical px): the base fill and the background bitmaps extend this far past the playfield so
 // the trauma camera never reveals the page behind the canvas (CONTRACT section 0).
 const SHAKE_PAD = 20;
+
+// ----------------------------- Effects clock -----------------------------
+// Numbers behind the trauma camera, hit-stop, flash channels, weapon staging and the ship's thruster (CONTRACT
+// section 11; PLAN D1, D2, D4). 80-fx.js and 75-fx-draw.js read them through FX_MOTION so every tuning value
+// lives in one table.
+const FX_MOTION = Object.freeze({
+  traumaDecay: 1.4, traumaPx: 14, shakeMaxPx: 18, shakeRotRad: 0.02, shakeHz: Object.freeze([23, 37]),
+  hitStopScale: 0.15, hitStopCap: 0.18, hitStopCapReduced: 0.06,
+  hitStop: Object.freeze({ word: 0.045, letter: 0.03, pickup: 0.03, segment: 0.09, bossDeath: 0.16 }),
+  finaleSlowMo: Object.freeze({ scale: 0.35, hold: 0.6, ease: 0.4 }),
+  recoilPerKey: 0.35, recoilPerKill: 0.8, recoilDecay: 6, recoilPx: 10,
+  heatPerKey: 0.25, heatDecay: 1.2,
+  kickPx: 14, kickEase: 8, hitT: 0.12,
+  typoGlyphS: 0.4, typoEdgeS: 0.1, typoFlashDecay: 3, damageFlashDecay: 1.8, whiteFlashDecay: 2, introPulseDecay: 1.2,
+  vignetteMax: 0.35, introPulseMax: 0.25, whiteFlashMax: 0.12, whiteFlashMaxReduced: 0.08,
+  lowHp: Object.freeze({ base: 0.10, amp: 0.08, hz: 1.2, reduced: 0.12 }),
+  ringLife: 0.28, ring: Object.freeze({ impact: 12, kill: 20, letter: 12, segment: 60, bossDeath: 180, bossDeathLife: 0.6 }),
+  bulletLife: 0.15, bulletHeadS: 0.035, bulletTailS: 0.07, muzzleLife: 0.06, boltLife: 0.12,
+  debris: Object.freeze({ gravity: 520, life: 0.7 }),
+  plume: Object.freeze({ base: 26, heat: 30, flicker: 6, flickerHz: 23, recoil: 0.6, staticLen: 36 }),
+  exhaustRate: 90, bobPx: 3, bobHz: 1.6, rollRad: 0.02,
+  shield: Object.freeze({ r: 66, dash: Object.freeze([8, 6]), spinDegS: 30, blinkS: 2, blinkHz: 3, cap: 9, capStacked: 15 })
+});
