@@ -76,7 +76,7 @@ Object.assign(Game.prototype, {
   beginRunAt(levelIndex) {
     const i = clamp(levelIndex | 0, 0, 9);
     const L = i + 1;
-    this.commitHighScore(); // bank whatever run is being abandoned (F009)
+    this.bankAbandonedRun(); // bank whatever run is being abandoned (F009), stored or live (review R22)
     this.setPlayerShip(this.getSelectedShipId());
     this.levelIndex = i;
     this.stats = defaultStats();
@@ -710,6 +710,19 @@ Object.assign(Game.prototype, {
   },
 
   // ------------------------- High scores -------------------------
+  // New run / sector tile over a stored run this session never set up (a reload, then New run instead of
+  // Continue): commitHighScore() reads only runMeta, so the stored record is loaded as the run first (F009,
+  // review R22). The caller resets stats / levelIndex for the new run right after.
+  bankAbandonedRun() {
+    const stored = this.save.run;
+    if (stored && (!this.runMeta || this.runMeta.id !== stored.id)) {
+      this.setRunMeta(stored);
+      this.stats = { ...defaultStats(), ...((stored.stats && typeof stored.stats === "object") ? stored.stats : {}) };
+      this.levelIndex = clamp(stored.levelIndex | 0, 0, 9);
+    }
+    return this.commitHighScore();
+  },
+
   // Headline high score only for runs that started at sector 1 (or were migrated from v1); the top-10 table
   // gets one row per run. Idempotent per (run id, score).
   commitHighScore(opts = {}) {

@@ -349,7 +349,7 @@ Object.assign(Game.prototype, {
     try {
       await this.unlockAudioWithBusy();
       this.uiTick("confirm");
-      this.commitHighScore();
+      if (typeof this.bankAbandonedRun === "function") this.bankAbandonedRun(); else this.commitHighScore();   // review R22
       this.save.run = null;
       this.run = null;
       this.storeAndRefresh();

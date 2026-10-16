@@ -450,7 +450,7 @@ Object.assign(Game.prototype, {
       if (typeof this.ensureAudio === "function") await this.ensureAudio();
       // A fresh pilot's first sector goes through the briefing like Start does.
       if (i === 0 && !this.save.storySeen && this.storyModal && typeof this.showStoryModal === "function") {
-        this.commitHighScore();
+        if (typeof this.bankAbandonedRun === "function") this.bankAbandonedRun(); else this.commitHighScore();   // review R22
         this.save.run = null;
         this.run = null;
         storeSave(this.save);
