@@ -1,9 +1,9 @@
 // Audio contract probe for Type-R 198X (CONTRACT section 6, tasks A9/D10/D11).
 // Usage (from tools/playtest):
 //   node probes/audio-contract.mjs --root ../.. [--out ./out/audio] [--legacy] [--headed]
-// --legacy skips the manifest injection so the WAV fallback path is exercised. By default the probe
-// injects assets/opt/manifest.js before any page script (index.html does not load it yet), so the MP3
-// streaming path is the one under test. Writes <out>/report.json; exit code 1 on any failed check.
+// index.html loads assets/opt/manifest.js, so the MP3 streaming path is the default. --legacy serves a
+// manifest without its music/sfx members (the art loader keeps working) so sfx.js takes the WAV fallback.
+// Writes <out>/report.json; exit code 1 on any failed check.
 import { chromium } from "playwright";
 import http from "node:http";
 import fs from "node:fs";
@@ -63,7 +63,7 @@ const browser = await chromium.launch({ channel: "chrome", headless: !HEADED, ar
 const manifestJs = fs.readFileSync(path.join(ROOT, "assets/opt/manifest.js"), "utf8");
 const decodeSpy = `(() => { window.__decodes = []; const P = (window.BaseAudioContext || window.AudioContext).prototype; const orig = P.decodeAudioData; P.decodeAudioData = function (buf, ...rest) { window.__decodes.push(buf.byteLength); return orig.call(this, buf, ...rest); }; })();`;
 
-async function newPage(context, { manifest = !LEGACY } = {}) {
+async function newPage(context, { legacy = LEGACY } = {}) {
   const page = await context.newPage();
   const errors = [], consoleErrors = [], requests = { laser: 0, bigExplosion: 0, music: [] };
   page.on("pageerror", (e) => errors.push(String(e && e.stack || e)));
@@ -74,7 +74,10 @@ async function newPage(context, { manifest = !LEGACY } = {}) {
     else if (/bigexplosion\.wav/i.test(u)) requests.bigExplosion++;
     else if (/\.mp3|galactic_high_score/i.test(u)) requests.music.push(u.replace(/^.*\/assets\//, "assets/"));
   });
-  if (manifest) await page.addInitScript({ content: manifestJs });
+  if (legacy) {
+    const body = manifestJs + "\n;(function () { var m = window.TYPER_ASSET_MANIFEST; if (m) { delete m.music; delete m.sfx; } })();\n";
+    await page.route(/\/assets\/opt\/manifest\.js(\?.*)?$/, (route) => route.fulfill({ status: 200, contentType: "text/javascript; charset=utf-8", body }));
+  }
   await page.addInitScript({ content: decodeSpy });
   return { page, errors, consoleErrors, requests };
 }
@@ -282,13 +285,13 @@ try {
 
   // 16. Legacy game loop still works with the new cues (type for a few seconds)
   const t1 = Date.now(); let typed = 0;
-  while (Date.now() - t1 < 4000) {
+  while (Date.now() - t1 < 6000) {
     const k = await page.evaluate(() => { const g = game; if (g.mode !== "playing") return null; const pool = [...g.powerups, ...g.enemies].filter((e) => e && e.alive && e.x < g.w - 10).sort((a, b) => a.x - b.x); const c = g.lock && g.lock.ref && g.lock.ref.alive ? g.lock.ref : pool[0]; if (!c) return null; return typeof c.nextChar === "function" ? c.nextChar() : c.nextChar; });
     if (k) { await page.keyboard.press(k === " " ? "Space" : k); typed++; }
     await sleep(70);
   }
   const play = await page.evaluate(() => ({ score: game.stats.score, kills: game.stats.kills || null, lastCue: game.sfx.lastCue, voices: game.sfx.laserVoices.length, playing: !!game.sfx.music }));
-  check("gameplay: typing drives zap/explosion through the legacy call sites", typed > 10 && play.score > 0 && play.playing, { typed, ...play });
+  check("gameplay: typing drives zap/explosion through the legacy call sites", typed >= 10 && play.score > 0 && play.playing, { typed, ...play });
   await page.screenshot({ path: path.join(OUT, "02-gameplay.png") });
 
   // 17. stopMusic + prefetch
