@@ -46,7 +46,7 @@ before the first keystroke <= 2.5, every `fixture-*` row `pass`.
 node tools/deploy/deploy.mjs --dry-run --user <ftp-user>
 ```
 
-Prints the local set in upload order (about 189 files, ~370 MB listed; on a real run the ~341 MB of
+Prints the local set in upload order (about 190 files, ~370 MB listed; on a real run the ~341 MB of
 PNG/WAV masters are skipped when the remote size matches) and exits without connecting, so no password
 is needed. Check that `index.html` is last, `assets/opt/manifest.js` just before it, and that `privacy-policy.html`
 and every `assets/opt` file are in the list.

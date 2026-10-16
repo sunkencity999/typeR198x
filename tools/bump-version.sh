@@ -172,6 +172,8 @@ for (const f of ["index.html", "game.js", "assets/audio/sfx.js"]) {
   if (!exists(f)) continue;
   read(f).split("\n").forEach((line, i) => {
     const m = line.match(/\bv=(20\d{6}[a-z]?)\b/) || line.match(/VERSION\s*=\s*["']([^"']+)["']/);
+    // review R44: in a dry run game.js's own ASSET_VERSION line is the one this script rewrites, not a stale string
+    if (DRY && f === "game.js" && assetVersionRe.test(line)) return;
     if (m && m[1] !== TOKEN && m[1] !== ART && !(DRY && m[1] === currentShell) && !line.includes("${ASSET_VERSION}")) stale.push(`  ${f}:${i + 1}: ${line.trim()}`);
   });
 }

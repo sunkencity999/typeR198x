@@ -344,7 +344,7 @@ Full flag, field and fixture tables: [tools/playtest/README.md](./tools/playtest
 | Script | Purpose |
 | --- | --- |
 | `tools/build-web-assets.sh` | Masters -> `assets/opt` + manifest (+ og-card); `MANIFEST_ONLY=1`, `OG_ONLY=1`, `SKIP_OG=1` |
-| `tools/bump-version.sh [token] [--root] [--dry-run] [--add-missing]` | Single writer of the shell token |
+| `tools/bump-version.sh [token] [--root] [--dry-run] [--add-missing] [--quiet]` | Single writer of the shell token |
 | `tools/deploy-check.sh <url> [--strict] [--local] [--unreferenced-out f]` | Remote header/MIME/token/privacy checks; `--local` adds source checks and the native sync dry run |
 | `tools/deploy/deploy.mjs` | FTP/FTPS deploy with backup, dry run and the `.htaccess` cache policy (see below) |
 | `tools/deploy/htaccess-cache.txt`, `tools/nginx-cache.conf` | Cache and MIME policy for Apache (`--htaccess`) and nginx hosts |
@@ -360,7 +360,7 @@ The full, ordered procedure is in [DEPLOY.md](./DEPLOY.md). In short:
 ```bash
 tools/bump-version.sh 20261016a                               # 1. new shell token (never deploy the old one)
 (cd tools/playtest && bash run-matrix.sh)                      # 2. matrix green
-node tools/deploy/deploy.mjs --dry-run --user <ftp-user>       # 3. what would upload (189 files, ~370 MB listed; unchanged binaries skipped by size)
+node tools/deploy/deploy.mjs --dry-run --user <ftp-user>       # 3. what would upload (about 190 files, ~370 MB listed; unchanged binaries skipped by size)
 TYPER_FTP_PASSWORD=... node tools/deploy/deploy.mjs --user <ftp-user> --htaccess   # 4. backup, upload, cache policy, verify
 tools/deploy-check.sh https://typer198x.com --strict            # 5. go/no-go
 ```
