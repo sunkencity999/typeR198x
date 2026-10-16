@@ -39,7 +39,7 @@ const PLATE_STYLES = {
 };
 const PLATE_CACHE_MAX = 96;
 const PLATE_BUCKET = 8;
-const PLATE_PAD = 16;
+const GLOW_PAD = 16;
 const SLAB_PAD = 32;
 const SLAB_W = 520;
 const SLAB_H = 190;
@@ -126,7 +126,7 @@ Object.assign(Game.prototype, {
   // ------------------------- Glow sprites (PERF-08 / VIS-04) -------------------------
   // Renders drawFn(ctx, w, h) once into an offscreen canvas at the current renderScale with `pad` logical px of
   // margin on every side (room for the blur). Draw it with drawGlowSprite() or ctx.drawImage at (x - pad, y - pad).
-  makeGlowSprite(drawFn, w, h, pad = PLATE_PAD) {
+  makeGlowSprite(drawFn, w, h, pad = GLOW_PAD) {
     const s = this.renderScale || 1;
     const canvas = document.createElement("canvas");
     canvas.width = Math.max(1, Math.round((w + 2 * pad) * s));
@@ -157,7 +157,7 @@ Object.assign(Game.prototype, {
       return sprite;
     }
     const style = PLATE_STYLES[state] || PLATE_STYLES.idle;
-    const pad = shape === "slab" ? SLAB_PAD : PLATE_PAD;
+    const pad = shape === "slab" ? SLAB_PAD : GLOW_PAD;
     const r = shape === "slab" ? 24 : shape === "chip" ? 10 : 12;
     sprite = this.makeGlowSprite((g, w, hh) => {
       g.shadowBlur = style.blur;
@@ -296,7 +296,7 @@ Object.assign(Game.prototype, {
     }
     en.textW = en._textW;
     const chip = text.length === 1;
-    en.plateW = chip ? h : Math.ceil(en._textW + 28);
+    en.plateW = chip ? h : Math.ceil(en._textW + (en.kind === "bossMinion" ? 24 : 28));
     en.plateH = h;
     return en._textW;
   },
@@ -825,43 +825,6 @@ Object.assign(Game.prototype, {
     ctx.restore();
   },
 
-  drawBossClearText(ctx) {
-    ctx.save();
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.font = FONT.display(64, 800);
-    ctx.fillStyle = "rgba(255, 247, 216, 0.95)";
-    ctx.strokeStyle = "rgba(255,120,80,0.85)";
-    ctx.lineWidth = 3;
-    const cx = this.w / 2;
-    const cy = this.h * 0.5 - 10;
-    ctx.strokeText("BOSS DEFEATED", cx, cy);
-    ctx.fillText("BOSS DEFEATED", cx, cy);
-
-    ctx.font = FONT.target(24, 600);
-    ctx.fillStyle = "rgba(168,255,120,0.92)";
-    const sub = this.bossClear?.target === "victory" ? "Congratulations!" : `${this.bossClear?.bossName || ""} neutralized.`;
-    ctx.fillText(sub, cx, cy + 60);
-    ctx.restore();
-  },
-
-  drawBossIntro(ctx) {
-    const info = this.bossIntro;
-    if (!info) return;
-    ctx.save();
-    const alpha = clamp(1 - (info.t / 2.6), 0, 0.9);
-    ctx.fillStyle = `rgba(5,6,18,${alpha * 0.7})`;
-    ctx.fillRect(0, this.h * 0.3, this.w, this.h * 0.4);
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = `rgba(255,255,255,${alpha})`;
-    ctx.font = FONT.display(48, 800);
-    ctx.fillText("INCOMING BOSS", this.w / 2, this.h * 0.42);
-    ctx.font = FONT.target(32, 600);
-    ctx.fillText(info.name ?? "UNKNOWN", this.w / 2, this.h * 0.52);
-    ctx.restore();
-  },
-
   // Minimal sector card while the level gate is closed (D7 brings the warp-in ceremony).
   drawLevelIntro(ctx) {
     const cfg = LEVELS[this.levelIndex];
@@ -909,6 +872,7 @@ Object.assign(Game.prototype, {
     for (const p of this.powerups) this.drawPowerup(ctx, p);   // L8
     this.drawEnemies(ctx);                                     // L9 (far to near, locked last)
     if (boss) this.drawBossSlab(ctx, boss);                    // L10
+    if (boss && typeof this.drawBossHazardMeter === "function") this.drawBossHazardMeter(ctx, this.bossHazardRect()); // L10 surge cell
     this.drawShip(ctx);                                        // L11
     if (this.bossClear) this.drawBossClearBackdrop(ctx);
     this.drawExplosionSprites(ctx);                            // L12
@@ -917,9 +881,7 @@ Object.assign(Game.prototype, {
     this.drawWorldOverlays(ctx);                               // L14
     ctx.restore();
 
-    // L15: banners / cards, unshaken
-    if (this.bossClear) this.drawBossClearText(ctx);
-    if (this.bossIntro) this.drawBossIntro(ctx);
+    // L15: banners / cards, unshaken (boss intro / clear copy is a banner now, see 45-feedback.js)
     if (typeof this.drawBanner === "function") this.drawBanner(ctx);
     if (this.mode === "playing" && !this.isLevelGateOpen()) this.drawLevelIntro(ctx);
 

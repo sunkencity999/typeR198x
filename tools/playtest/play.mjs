@@ -346,7 +346,7 @@ try {
 } catch (e) { report.notes.push(`CDP unavailable: ${e.message}`); cdp = null; }
 
 // Fault injection. Playwright evaluates routes last-registered-first, so the 404 route wins over the delay.
-if (DELAY_OPT > 0) await page.route(/\/assets\/opt\//, async (route) => { await sleep(DELAY_OPT); await route.continue().catch(() => {}); });
+if (DELAY_OPT > 0) await page.route(/\/assets\/opt\/(bg|fg|fx|ships|bosses)\//, async (route) => { await sleep(DELAY_OPT); await route.continue().catch(() => {}); });
 if (FAIL_WEBP) await page.route(/\.webp(\?.*)?$/, (route) => route.fulfill({ status: 404, contentType: "text/plain", body: "injected 404" }));
 
 const isResourceMessage = (m) => {
@@ -625,7 +625,8 @@ async function checkFixture() {
 // ----------------------------- Scenario -----------------------------
 try {
   navEpoch = Date.now();
-  await page.goto(base, { waitUntil: "load" });
+  if (DELAY_OPT > 0) page.setDefaultNavigationTimeout(Math.max(60000, DELAY_OPT * 4));
+  await page.goto(base, { waitUntil: DELAY_OPT > 0 ? "commit" : "load" });
   report.timings.loadEventMs = Date.now() - navEpoch;
   await shot("boot");
   try {

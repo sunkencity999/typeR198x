@@ -205,39 +205,12 @@ Object.assign(Game.prototype, {
     ctx.restore();
   },
 
-  // ------------------------- Render stopgap -------------------------
-  // Wraps Game.prototype.render once so floaters, banners and the boss hazard meter are visible before the
-  // renderer adopts the L10/L13/L15 calls. Each draw method bumps a counter; whatever the frame already drew is
-  // not drawn again. Also retires the legacy canvas boss-intro / boss-clear text (amendment C-10): the banner
-  // system owns that copy now. Installed on DOMContentLoaded (every script has run by then) and lazily from update().
+  // Installed once on DOMContentLoaded: binds the finale tap-to-skip. (The render stopgap that used to live here is
+  // gone: 70-render.js calls drawBossHazardMeter at L10, drawFloaters at L13 and drawBanner at L15 directly.)
   installFeedbackHooks() {
     const proto = Game.prototype;
     if (proto._feedbackHooked) return;
-    const base = proto.render;
-    if (typeof base !== "function") return;
     proto._feedbackHooked = true;
-    proto.render = function (dt) {
-      const drawsBefore = this._feedbackDraws | 0;
-      const hazardBefore = this._hazardDraws | 0;
-      base.call(this, dt);
-      const drewFeedback = (this._feedbackDraws | 0) !== drawsBefore;
-      const drewHazard = (this._hazardDraws | 0) !== hazardBefore;
-      if (drewFeedback && drewHazard) return;
-      const ctx = this.ctx;
-      const s = this.renderScale || 1;
-      ctx.save();
-      ctx.setTransform(s, 0, 0, s, 0, 0);
-      if (!drewHazard && this.inBoss && this.boss && typeof this.drawBossHazardMeter === "function") {
-        this.drawBossHazardMeter(ctx, this.bossHazardRect ? this.bossHazardRect() : null);
-      }
-      if (!drewFeedback) {
-        this.drawFloaters(ctx);
-        this.drawBanner(ctx);
-      }
-      ctx.restore();
-    };
-    if (typeof proto.drawBossIntro === "function" && !proto.drawBossIntro.bannerAware) proto.drawBossIntro = function () {};
-    if (typeof proto.drawBossClearText === "function" && !proto.drawBossClearText.bannerAware) proto.drawBossClearText = function () {};
     // Finale skip on a canvas tap (B8): letters / Enter / Space are routed in 30-input.js.
     const canvas = document.getElementById("game");
     if (canvas && !canvas._finaleTapBound) {

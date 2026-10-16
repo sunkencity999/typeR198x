@@ -270,7 +270,7 @@ Object.assign(Game.prototype, {
     clearTimeout(entry.timer);
     if (immediate) { entry.el.remove(); return; }
     entry.el.classList.remove("is-in");
-    entry.el.classList.add("is-out");
+    entry.el.classList.add("is-out", "is-leaving");
     setTimeout(() => entry.el.remove(), 220);
   },
 
@@ -404,6 +404,8 @@ Object.assign(Game.prototype, {
     const canContinue = resumeIndex !== null;
     this.btnContinue.disabled = !canContinue;
     this.btnContinue.classList.toggle("disabled", !canContinue);
+    // Stopgap until renderResumeCard (C5) owns the card: Continue must be clickable whenever a run can resume.
+    document.getElementById("resumeCard")?.classList.toggle("hidden", !canContinue);
     const shipId = this.getSelectedShipId();
     this.shipInputs.forEach(input => {
       input.checked = (input.value === shipId);

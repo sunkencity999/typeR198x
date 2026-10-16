@@ -255,6 +255,11 @@ class Boss {
   // Today's draw box (pre-D6): scale = min(.65*720/h, .7), x = boss.x - .35*artW, y = boss.y - .45*artH.
   // Without known art it falls back to the console slab so minion spawns still have an anchor.
   get artRect() {
+    const g = (typeof window !== "undefined" && window.game) || null;
+    if (g && typeof g.bossArtRect === "function") {
+      const r = g.bossArtRect(this);
+      if (r && r.w > 0 && r.h > 0) return r;
+    }
     const a = this.artSize;
     if (a && a.w > 0 && a.h > 0) {
       const scale = Math.min((720 * 0.65) / a.h, 0.7);
