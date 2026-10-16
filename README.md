@@ -372,7 +372,9 @@ tools/deploy-check.sh https://typer198x.com --strict            # 5. go/no-go
 - **Cache policy (audit G025).** The live host currently answers `/index.html` with
   `Cache-Control: max-age=15552000` (180 days), so a returning browser would keep the old shell next to
   new scripts. `--htaccess` merges `tools/deploy/htaccess-cache.txt` into the web root's `.htaccess`
-  (never replaces it): HTML and `manifest.js` `no-cache`, versioned assets `immutable`, the WebP / WOFF2 /
+  (never replaces it: the download is kept as `tools/deploy/backups/htaccess-<ms>.previous.txt`, the uploaded
+  text as `htaccess-<ms>.merged.txt`, and a listed file that cannot be downloaded makes the step skip and the
+  run exit 1): HTML and `manifest.js` `no-cache`, versioned assets `immutable`, the WebP / WOFF2 /
   MP3 MIME types. `tools/nginx-cache.conf` is the equivalent server-block include for an nginx host. If
   the host's own static cache still serves `.html` with a long `max-age`, exclude `.html` from it and
   purge it in the hosting panel.

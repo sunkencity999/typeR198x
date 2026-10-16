@@ -64,7 +64,10 @@ certificate failure aborts with exit 1, and `--secure false` is the only way to 
 which it warns about before connecting), web-root detection, backup to
 `tools/deploy/backups/<timestamp>/` (`light` skips files over 4 MB; use `--backup full` before a risky
 release), upload of `assets/` first, then CSS/JS, then `assets/opt/manifest.js`, then `index.html` last, `.htaccess` cache policy merged
-into the existing file (a copy of the previous `.htaccess` is kept under `tools/deploy/backups/`), then an
+into the existing file (the host's file is downloaded first and kept as
+`tools/deploy/backups/htaccess-<ms>.previous.txt`; the uploaded text is `htaccess-<ms>.merged.txt`; if the host
+lists an `.htaccess` that cannot be downloaded the step is skipped, the run exits 1 and you merge
+`tools/deploy/htaccess-cache.txt` by hand), then an
 HTTPS verification that `index.html` and `game.js` match the local files and a print of their cache
 headers. Add `--force` only if a size-equal binary must be re-uploaded.
 
@@ -121,7 +124,9 @@ omit files over 4 MB, which are the masters already in git and unchanged on the 
    ```
    (`--force` re-uploads size-equal files, which a rollback usually needs.) Alternatively upload the
    backup folder from step 1 with any FTP client.
-3. The previous `.htaccess` copy is in `tools/deploy/backups/htaccess-<ms>.txt`; restore it only if the
-   cache policy itself caused the problem (it should stay, it is what lets a fix reach players).
+3. The previous `.htaccess` is in `tools/deploy/backups/htaccess-<ms>.previous.txt` (the file as downloaded
+   before the merge; `htaccess-<ms>.merged.txt` is what was uploaded, and `backups/<timestamp>/.htaccess` holds
+   the same original when the server lists dotfiles); restore it only if the cache policy itself caused the
+   problem (it should stay, it is what lets a fix reach players).
 4. Purge the host cache (step 6) so the restored shell is what players receive, then run step 5 without
    `--strict` to confirm the site is back.

@@ -161,22 +161,41 @@ async function remoteWalk(dir, out = []) {
   }
   console.log(`\nupload done: ${up} uploaded, ${skip} unchanged binaries skipped`);
 
-  // optional Apache cache policy (.htaccess): append our block to an existing file, never replace it
+  // optional Apache cache policy (.htaccess): append our block to an existing file, never replace it.
+  // Existence comes from the listing fetched above; a listed file that cannot be downloaded is left alone (review R24).
+  // The download is kept as htaccess-<ms>.previous.txt and the uploaded text written to a separate
+  // htaccess-<ms>.merged.txt, so the previous copy really is the previous copy (review R16/R25).
+  let htaccessSkipped = false;
   if (HTACCESS) {
     const snippet = fs.readFileSync(path.join(HERE, "htaccess-cache.txt"), "utf8");
     const marker = "Type-R 198X cache policy";
     const remotePath = root === "/" ? "/.htaccess" : `${root}/.htaccess`;
-    const tmp = path.join(HERE, "backups", `htaccess-${Date.now()}.txt`);
-    fs.mkdirSync(path.dirname(tmp), { recursive: true });
+    const ms = Date.now();
+    const prev = path.join(HERE, "backups", `htaccess-${ms}.previous.txt`);
+    const mergedPath = path.join(HERE, "backups", `htaccess-${ms}.merged.txt`);
+    fs.mkdirSync(path.dirname(prev), { recursive: true });
+    const listed = remoteSize.has(".htaccess");
     let existing = "";
-    try { await client.downloadTo(tmp, remotePath); existing = fs.readFileSync(tmp, "utf8"); } catch { existing = ""; }
-    if (existing.includes(marker)) {
-      console.log(".htaccess: cache policy already present, left unchanged");
+    if (listed) {
+      try { await client.downloadTo(prev, remotePath); existing = fs.readFileSync(prev, "utf8"); }
+      catch (e) {
+        try { fs.rmSync(prev, { force: true }); } catch { /* nothing to remove */ }
+        console.error(`.htaccess: the host lists one but it could not be downloaded (${e.message}); left untouched. Merge tools/deploy/htaccess-cache.txt into it by hand.`);
+        htaccessSkipped = true;
+      }
+    }
+    if (htaccessSkipped) {
+      // nothing uploaded
+    } else if (existing.includes(marker)) {
+      console.log(`.htaccess: cache policy already present, left unchanged (copy at ${prev})`);
     } else {
       const merged = existing ? `${existing.replace(/\s*$/, "")}\n\n${snippet}` : snippet;
-      fs.writeFileSync(tmp, merged);
-      await client.uploadFrom(tmp, remotePath);
-      console.log(`.htaccess: ${existing ? "appended the cache policy to the existing file" : "created"} (previous copy kept at ${tmp})`);
+      fs.writeFileSync(mergedPath, merged);
+      await client.uploadFrom(mergedPath, remotePath);
+      const how = existing ? `appended the cache policy to the existing file (previous copy kept at ${prev})`
+        : listed ? `the listed file was empty, wrote the cache policy (previous empty copy kept at ${prev})`
+        : "created (the host listed no .htaccess, so there is no previous copy)";
+      console.log(`.htaccess: ${how}; uploaded text at ${mergedPath}`);
     }
   }
   client.close();
@@ -192,4 +211,5 @@ async function remoteWalk(dir, out = []) {
     } catch (e) { console.log(`verify ${f} failed: ${e.message}`); }
   }
   console.log("reminder: index.html must come back with Cache-Control: no-cache (audit G025) so a new ?v= token reaches returning players; see tools/nginx-cache.conf or tools/deploy/htaccess-cache.txt (--htaccess), then run tools/deploy-check.sh " + SITE + " --strict.");
+  if (htaccessSkipped) { console.error("deploy finished, but the .htaccess step was skipped (see above): exit 1"); process.exitCode = 1; }
 })().catch((e) => { console.error("deploy failed:", e.message); client.close(); process.exit(1); });
