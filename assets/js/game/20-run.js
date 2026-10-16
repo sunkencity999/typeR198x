@@ -30,6 +30,9 @@ Object.assign(Game.prototype, {
       shipId: this.player.shipId || this.getSelectedShipId(),
       difficulty: "standard",
       retries: 0,
+      // review R3: the headline before this run. newHigh (results cards) compares against this snapshot, never
+      // the live save.highScore, which the autosave and the sector-10 clear raise before the card is built.
+      baselineHigh: this.save.highScore | 0,
       checkpoint: null,
       bossCheckpoint: null,
       boss: null,
@@ -47,6 +50,7 @@ Object.assign(Game.prototype, {
       ship: run.shipId,
       name: this.save.playerName || "",
       legacy: !!run.legacy,
+      baselineHigh: Number.isFinite(run.baselineHigh) ? run.baselineHigh : (this.save.highScore | 0),   // review R3
       victory: false
     };
   },
@@ -436,6 +440,8 @@ Object.assign(Game.prototype, {
       bonusLines.push({ label: "Surges countered", value: tally.surges | 0 });
       if ((tally.retries | 0) > 0) bonusLines.push({ label: "Retry penalty", value: `x${m}` });
     }
+    // review R3: the badge means "beat the headline this run started against", not the live save.highScore.
+    const baselineHigh = Number.isFinite(meta.baselineHigh) ? meta.baselineHigh : (this.save.highScore | 0);
     const title = scope === "run" ? "RUN COMPLETE" : scope === "over" ? "SIGNAL LOST" : `SECTOR ${L} CLEAR`;
     return {
       title,
@@ -451,7 +457,7 @@ Object.assign(Game.prototype, {
       kills: (level ? ls.kills : st.kills) | 0,
       timeMs,
       rank,
-      newHigh: !!(meta.startLevel === 1 || meta.legacy) && (st.score | 0) > (this.save.highScore | 0),
+      newHigh: !!(meta.startLevel === 1 || meta.legacy) && (st.score | 0) > baselineHigh,
       newSectorBest: level && (!prevBest || levelScore > (prevBest.score | 0)),
       newWpm: wpm > (this.save.bestWpm | 0),
       retries: ls.retries | 0,

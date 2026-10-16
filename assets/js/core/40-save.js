@@ -199,6 +199,8 @@ function migrateSave(obj) {
   save.playerName = typeof obj.playerName === "string" ? obj.playerName : "";
   save.selectedShip = typeof obj.selectedShip === "string" && obj.selectedShip ? obj.selectedShip : "coconut";
   save.run = migrateRun(obj.run);
+  // review R3: a run saved before baselineHigh existed takes the headline as it stands at migration time.
+  if (save.run && !Number.isFinite(save.run.baselineHigh)) save.run.baselineHigh = save.highScore;
   if (!save.legacySeeded) {
     if (save.highScore > 0 && !save.highScores.length) {
       save.highScores.push({
