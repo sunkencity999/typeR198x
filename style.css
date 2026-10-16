@@ -1624,7 +1624,7 @@ fieldset.shipGrid > legend {
 .toastStack {
   position: absolute;
   left: 50%;
-  bottom: 14%;
+  bottom: 19%; /* review R33: clears the boss console slab (its top sits at 16.7% of the playfield) at every 16:9 size */
   transform: translateX(-50%);
   z-index: var(--z-toast);
   display: flex;
@@ -2367,7 +2367,6 @@ fieldset.shipGrid > legend {
   .modalInner { padding: 20px 18px; max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); }
   .modalActions { flex-direction: column; }
   .modalActions .btn-arcade { width: 100%; }
-  .toastStack { bottom: 10%; }
   .toast { font-size: 11px; letter-spacing: 0.08em; padding: 6px 10px; }
   .dialogueLine { font-size: var(--fs-md); }
 }
