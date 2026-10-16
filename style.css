@@ -1843,6 +1843,8 @@ fieldset.shipGrid > legend {
 }
 
 #storyModal .modalBody { max-height: 44vh; }
+/* review R5: the scroll body is a Tab stop (tabindex=0 from bindModals); the ring sits inside the clip. */
+.modalScroll .modalBody:focus-visible { outline-offset: -2px; border-radius: var(--r-sm); }
 
 .modalBody p { margin: 0 0 1rem; }
 .modalBody p:last-child { margin-bottom: 0; }

@@ -12,7 +12,7 @@
 // feature-detected; the shell runs without it.
 
 const PAUSE_REASON_COPY = { user: "Paused", blur: "Window lost focus", hidden: "Tab hidden", fullscreen: "Left fullscreen" };
-const MODAL_FOCUSABLE = 'button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),a[href],[tabindex]:not([tabindex="-1"])';
+const MODAL_FOCUSABLE = 'button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),a[href],summary,[tabindex]:not([tabindex="-1"])';   // review R5: summary
 const SETTINGS_SAVE_DEBOUNCE_MS = 300;
 const TAP_TO_TYPE_DELAY_MS = 1200;
 const DEATH_FREEZE_MS = 600;
@@ -76,7 +76,8 @@ Object.assign(Game.prototype, {
 
   focusables(container) {
     if (!container) return [];
-    return Array.from(container.querySelectorAll(MODAL_FOCUSABLE)).filter((el) => this.isVisible(el) && !el.closest("[inert]"));
+    // tabIndex >= 0 keeps a roving-tabindex group (the sector grid) to its single Tab stop (review R20).
+    return Array.from(container.querySelectorAll(MODAL_FOCUSABLE)).filter((el) => el.tabIndex >= 0 && this.isVisible(el) && !el.closest("[inert]"));
   },
 
   // Canvas normally; #typeInput on touch devices while playing (the soft keyboard needs a real text field).
@@ -486,6 +487,7 @@ Object.assign(Game.prototype, {
         this.cancelModal(overlay);
       });
       for (const body of overlay.querySelectorAll(".modalScroll .modalBody")) {
+        if (!body.hasAttribute("tabindex")) body.setAttribute("tabindex", "0");   // review R5: a Tab stop that takes arrow / PageDown scrolling
         body.addEventListener("scroll", () => this.updateModalScroll(overlay), { passive: true });
       }
     }
@@ -529,10 +531,12 @@ Object.assign(Game.prototype, {
       if (opts.onClose) existing.onClose = opts.onClose;
       return el;
     }
+    const opener = document.activeElement;
     const entry = {
       el,
       primary: opts.primary || null,
-      returnFocusTo: opts.returnFocusTo || document.activeElement || null,
+      // review R17: <body> / <html> means "no opener"; closeModal then falls back to focusPrimary.
+      returnFocusTo: opts.returnFocusTo || (opener && opener !== document.body && opener !== document.documentElement ? opener : null),
       onClose: typeof opts.onClose === "function" ? opts.onClose : null,
       danger: !!opts.danger
     };
@@ -578,7 +582,7 @@ Object.assign(Game.prototype, {
         if (first) { try { first.focus({ preventScroll: true }); } catch (_) {} }
       } else {
         const back = entry.returnFocusTo;
-        if (back && back.isConnected && this.isVisible(back) && !back.closest(".modalOverlay")) {
+        if (back && back !== document.body && back.isConnected && this.isVisible(back) && !back.closest(".modalOverlay")) {
           try { back.focus({ preventScroll: true }); } catch (_) {}
         } else {
           this.focusPrimary(this.mode);

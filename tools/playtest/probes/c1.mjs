@@ -133,6 +133,7 @@ P.check("#srAnnounce contains 'cleared' after a clear", (await g(() => document.
 P.check("levelComplete: amber accent on .screen--clear", await g(() => getComputedStyle(document.getElementById("screenLevelComplete")).getPropertyValue("--panel-accent").trim().length > 0 && getComputedStyle(document.getElementById("screenLevelComplete")).borderColor === "rgba(255, 193, 74, 0.55)"), await g(() => getComputedStyle(document.getElementById("screenLevelComplete")).borderColor));
 await P.shot("level-complete");
 const li0 = await g(() => window.game.levelIndex);
+await sleep(400); // the results screen ignores a trusted Enter / Space for its first 350 ms (review R26)
 await page.keyboard.press("Enter");
 await page.waitForFunction(() => window.game.mode === "playing", null, { timeout: 10000 });
 P.check("Enter on levelComplete advances levelIndex", (await g(() => window.game.levelIndex)) === li0 + 1, `${li0} -> ${await g(() => window.game.levelIndex)}`);

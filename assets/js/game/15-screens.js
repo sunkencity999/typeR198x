@@ -233,7 +233,7 @@ Object.assign(Game.prototype, {
         return;
       }
       if (e.key === "Tab") {
-        const focusable = Array.from(top.querySelectorAll('button:not([disabled]),input:not([disabled]),select,a[href],[tabindex]:not([tabindex="-1"])')).filter((n) => n.offsetParent !== null);
+        const focusable = Array.from(top.querySelectorAll('button:not([disabled]),input:not([disabled]),select,a[href],[tabindex]:not([tabindex="-1"])')).filter((n) => n.offsetParent !== null && n.tabIndex >= 0);   // review R20
         if (!focusable.length) return;
         const first = focusable[0], last = focusable[focusable.length - 1];
         if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
