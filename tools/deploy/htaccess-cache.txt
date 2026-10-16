@@ -1,0 +1,27 @@
+# Type-R 198X cache policy for Apache hosts (the live site answers with x-httpd-modphp / x-proxy-cache-info
+# headers, i.e. Apache behind the host's nginx static cache). Upload as .htaccess in the web root with
+# `node tools/deploy/deploy.mjs --htaccess` or paste the block into an existing .htaccess.
+#
+# Goal (audit G025/G026): the HTML shell must revalidate on every visit so a new ?v= token reaches returning
+# players, while versioned assets stay cacheable for a year. If the host's own static cache still serves
+# index.html with a long max-age after this change, disable that cache for .html in the hosting panel
+# (SiteGround: Site Tools > Speed > Caching > NGINX Direct Delivery / Dynamic Cache exclusions) and purge it.
+
+<IfModule mod_headers.c>
+  <FilesMatch "\.(html)$">
+    Header set Cache-Control "no-cache, max-age=0, must-revalidate"
+  </FilesMatch>
+  <FilesMatch "\.(js|css|webp|png|jpg|svg|woff2|mp3|wav|json)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+  <FilesMatch "^manifest\.js$">
+    Header set Cache-Control "no-cache, max-age=0, must-revalidate"
+  </FilesMatch>
+</IfModule>
+
+<IfModule mod_mime.c>
+  AddType image/webp .webp
+  AddType font/woff2 .woff2
+  AddType audio/mpeg .mp3
+  AddType application/javascript .js
+</IfModule>

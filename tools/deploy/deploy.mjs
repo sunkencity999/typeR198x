@@ -4,7 +4,7 @@
 //   TYPER_FTP_PASSWORD=... node tools/deploy/deploy.mjs \
 //       --host ftp.typer198x.com --user <ftp-user> [--port 21] \
 //       [--remote-dir auto|/public_html] [--secure auto|true|false] \
-//       [--backup light|full|none] [--dry-run] [--force] [--site https://typer198x.com]
+//       [--backup light|full|none] [--dry-run] [--force] [--site https://typer198x.com] [--htaccess]
 //
 // What it does, in order:
 //   1. connects (explicit FTPS first when --secure auto, plain FTP only as a fallback),
@@ -32,6 +32,8 @@ const DRY = opt("dry-run", "false") === "true";
 const FORCE = opt("force", "false") === "true";
 const SITE = opt("site", "https://typer198x.com");
 const PASSWORD_FILE = opt("password-file", "");
+// --htaccess: install tools/deploy/htaccess-cache.txt as .htaccess in the web root (merged into an existing one).
+const HTACCESS = opt("htaccess", "false") === "true";
 const PASSWORD = PASSWORD_FILE ? fs.readFileSync(PASSWORD_FILE, "utf8").trim() : (process.env.TYPER_FTP_PASSWORD || "");
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -147,6 +149,25 @@ async function remoteWalk(dir, out = []) {
     process.stdout.write(`\r  uploaded ${up} (${(bytes / 1048576).toFixed(1)} MB)  skipped ${skip}   `);
   }
   console.log(`\nupload done: ${up} uploaded, ${skip} unchanged binaries skipped`);
+
+  // optional Apache cache policy (.htaccess): append our block to an existing file, never replace it
+  if (HTACCESS) {
+    const snippet = fs.readFileSync(path.join(HERE, "htaccess-cache.txt"), "utf8");
+    const marker = "Type-R 198X cache policy";
+    const remotePath = root === "/" ? "/.htaccess" : `${root}/.htaccess`;
+    const tmp = path.join(HERE, "backups", `htaccess-${Date.now()}.txt`);
+    fs.mkdirSync(path.dirname(tmp), { recursive: true });
+    let existing = "";
+    try { await client.downloadTo(tmp, remotePath); existing = fs.readFileSync(tmp, "utf8"); } catch { existing = ""; }
+    if (existing.includes(marker)) {
+      console.log(".htaccess: cache policy already present, left unchanged");
+    } else {
+      const merged = existing ? `${existing.replace(/\s*$/, "")}\n\n${snippet}` : snippet;
+      fs.writeFileSync(tmp, merged);
+      await client.uploadFrom(tmp, remotePath);
+      console.log(`.htaccess: ${existing ? "appended the cache policy to the existing file" : "created"} (previous copy kept at ${tmp})`);
+    }
+  }
   client.close();
 
   // verify
@@ -159,5 +180,5 @@ async function remoteWalk(dir, out = []) {
       console.log(`${ok ? "OK  " : "DIFF"} ${f}  status ${res.status}  cache-control: ${res.headers.get("cache-control") || "(none)"}  content-type: ${res.headers.get("content-type")}`);
     } catch (e) { console.log(`verify ${f} failed: ${e.message}`); }
   }
-  console.log("reminder: the server should send Cache-Control: no-cache for index.html so ?v= busting works (audit G025).");
+  console.log("reminder: index.html must come back with Cache-Control: no-cache (audit G025) so a new ?v= token reaches returning players; see tools/nginx-cache.conf or tools/deploy/htaccess-cache.txt (--htaccess), then run tools/deploy-check.sh " + SITE + " --strict.");
 })().catch((e) => { console.error("deploy failed:", e.message); client.close(); process.exit(1); });
