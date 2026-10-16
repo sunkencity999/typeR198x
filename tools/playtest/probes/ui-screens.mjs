@@ -104,8 +104,13 @@ async function showScreen(page, mode) {
       card.querySelectorAll("[data-stat]").forEach((el) => { el.textContent = vals[el.dataset.stat] || "0"; });
       card.querySelector(".resultsSub").textContent = "Sector 1 · THE S.S. SOFRITO";
       if (card.id === "resultsLevel") {
-        card.querySelector(".bonusList").innerHTML = ["Clear|+1,850", "Time|+900", "Accuracy|+400", "Perfect waves|+250", "Flawless boss|+500"]
-          .map((r) => { const [l, v] = r.split("|"); return `<li class="bonusRow"><span class="bonusLabel">${l}</span><span class="bonusValue mono">${v}</span></li>`; }).join("");
+        // Level Complete list as renderResultsCard builds it (review R2): the rows under the Bonus tile add up to it
+        // (+ the retry penalty line), then a caption and the three rows banked live during the sector.
+        const row = (l, v, mod) => `<li class="bonusRow${mod ? ` ${mod}` : ""}"><span class="bonusLabel">${l}</span><span class="bonusValue mono">${v}</span></li>`;
+        card.querySelector(".bonusList").innerHTML =
+          row("Clear", "+2,450") + row("Time", "+900") + row("Accuracy", "+400") + row("Flawless boss", "+500") + row("Retry penalty", "x0.75", "bonusRow--penalty") +
+          `<li class="bonusCaption">Banked during the sector</li>` +
+          row("Perfect waves", "+250", "bonusRow--banked") + row("Boss phases", "+600", "bonusRow--banked") + row("Surges countered", "+0", "bonusRow--banked");
         card.querySelector(".newBest").classList.remove("hidden");
       }
     });
