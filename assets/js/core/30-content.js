@@ -4,8 +4,8 @@
 
 const EXPLOSION_SHEET = {
   src: "./assets/explosions/explosions.png",
-  width: 2048,
-  height: 1117
+  width: 2816,   // the PNG master's pixel size; the synthetic manifest (no TYPER_ASSET_MANIFEST) derives the half-sheet
+  height: 1536   // prepare and ExplosionSprite.scaleFor from it (review R1 follow-up); content-tables.mjs checks both
 };
 
 // Rects in the sheet's original pixel space. Indices are stable: frames 10, 18 and 20 are empty on the sheet and 16
