@@ -55,7 +55,10 @@ resolve and `btnStart`'s handler stops before `handleLaunchRequest()`. The contr
 `_unlockPromise`; please also give any remaining media prime a timeout (`Promise.race` with ~1.5 s).
 Acceptance you can cite: `node play.mjs --root . --out out/native --scenario smoke --ua native` →
 `timings.startToPlayingMs < 5000` and no "forced the run start" note. Until then the harness forces
-the run start after 15 s and records that note.
+the run start after 15 s and records that note. Nuance: the same build served from `file://`
+(`--file --ua native`, the real shell's situation) enters play in ~0.4 s with no stall, so this is
+an HTTP-served-under-Chrome media quirk rather than a shipped-app bug; the timeout guard is cheap
+insurance either way.
 
 ## A2 / C5 owner (victory path)
 The harness enters the ending via `startSector(9)` when it exists, else
