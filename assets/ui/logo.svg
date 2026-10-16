@@ -1,4 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="820" height="220" viewBox="0 0 820 220">
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="220" viewBox="0 0 820 220" role="img" aria-labelledby="logoTitle">
+  <title id="logoTitle">Type-R 198X</title>
   <defs>
     <linearGradient id="g" x1="0" x2="1">
       <stop offset="0" stop-color="#39F5FF"/>
@@ -23,16 +24,16 @@
     <path d="M250 70 L310 120 L370 70 V165" stroke="url(#g)" stroke-width="14" stroke-linecap="round" fill="none" stroke-linejoin="round"/>
   </g>
 
-  <text x="410" y="110" text-anchor="middle"
+  <text x="400" y="110" text-anchor="start"
         font-family="ui-monospace, Menlo, Monaco, Consolas, monospace"
         font-size="42" letter-spacing="3"
         fill="rgba(255,255,255,0.92)" filter="url(#glow)">
     TYPE-R 198X
   </text>
 
-  <text x="410" y="150" text-anchor="middle"
+  <text x="400" y="150" text-anchor="start"
         font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial"
-        font-size="16" letter-spacing="2"
+        font-size="13" letter-spacing="1.5"
         fill="rgba(57,245,255,0.78)">
     TYPE-R HOMAGE • NEON LASERS • WORD BOSSES
   </text>
