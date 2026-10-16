@@ -281,7 +281,8 @@ Object.assign(Game.prototype, {
 
   // Plate font in logical px: 22 at desktop scales, larger on small playfields (CONTRACT section 7).
   plateFontPx() {
-    return clamp(22, Math.ceil(14 / (this.cssScale || 1)), 28);
+    // 22 px on desktop scales; grows up to 28 px when the playfield is small (14 CSS px minimum on screen).
+    return clamp(Math.ceil(14 / (this.cssScale || 1)), 22, 28);
   },
 
   // Text metrics cached on the entity (keyed by font + string + spriteEpoch); publishes textW / plateW / plateH.
