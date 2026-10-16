@@ -233,7 +233,7 @@ Object.assign(Game.prototype, {
         return;
       }
       if (e.key === "Tab") {
-        const focusable = Array.from(top.querySelectorAll('button:not([disabled]),input:not([disabled]),select,a[href],[tabindex]:not([tabindex="-1"])')).filter((n) => n.offsetParent !== null);
+        const focusable = Array.from(top.querySelectorAll('button:not([disabled]),input:not([disabled]),select,a[href],[tabindex]:not([tabindex="-1"])')).filter((n) => n.offsetParent !== null && n.tabIndex >= 0);   // review R20
         if (!focusable.length) return;
         const first = focusable[0], last = focusable[focusable.length - 1];
         if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
@@ -477,6 +477,14 @@ Object.assign(Game.prototype, {
     const run = this.save.run;
     const show = !!run && this.runHasProgress(run);
     card.classList.toggle("hidden", !show);
+    const press = document.getElementById("pressStart");
+    if (press) {   // review R14: the blinking line names the real primary (Enter / tap = Continue while the card shows)
+      const kbd = press.querySelector(".pressStart__kbd"), tap = press.querySelector(".pressStart__tap");
+      const kbdText = show ? "Press Enter to continue" : "Press Enter to start";
+      const tapText = show ? "Tap to continue" : "Tap start";
+      if (kbd && kbd.textContent !== kbdText) kbd.textContent = kbdText;
+      if (tap && tap.textContent !== tapText) tap.textContent = tapText;
+    }
     if (E.btnStart) {
       const labelEl = E.btnStart.querySelector(".btnLabel") || E.btnStart;
       const label = (show || (this.save.victories | 0) > 0) ? "NEW RUN" : "START NEW RUN";

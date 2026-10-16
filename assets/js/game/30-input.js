@@ -1,4 +1,6 @@
 // Type-R 198X — typing input, lock rules v2 (SYS-01), scoring hooks (SYS-07/SYS-09). Methods are mixed into Game.prototype; load order is defined in index.html.
+const MODE_SETTLE_MS = 350;   // review R26: Level Complete / Game Over / Victory ignore a trusted Enter / Space this long after appearing
+
 Object.assign(Game.prototype, {
   // ------------------------- Keydown routing (CONTRACT §10) -------------------------
   // Order follows CONTRACT section 10: modal stack, editable targets, fullscreen combos, Tab trap, Escape, Enter, repeat guard,
@@ -16,7 +18,7 @@ Object.assign(Game.prototype, {
       if (e.key === "Tab") { this.trapFocus(top.el, e); return; }
       if (e.key === "Enter" || e.key === "NumpadEnter") {
         const a = document.activeElement;
-        const control = a && top.el.contains(a) && /^(button|input|select|textarea|a)$/i.test(a.tagName);
+        const control = a && top.el.contains(a) && /^(button|input|select|textarea|a|summary)$/i.test(a.tagName);   // review R5: summary
         if (control) return; // native activation
         const primary = this.modalPrimary(top);
         e.preventDefault();
@@ -34,8 +36,11 @@ Object.assign(Game.prototype, {
       (target && target.isContentEditable) ||
       (document.activeElement && document.activeElement.isContentEditable));
     if (e.isTrusted && /^(Key[A-Z]|Digit\d|Space)$/.test(e.code || "")) this.noteKeyboardEvidence();
-    if (isEditable) return;
     const fsCombo = ((e.key === "Enter" || e.key === "NumpadEnter") && (e.altKey || e.metaKey)) || e.key === "F11";
+    // review R11: the pause screen's own settings controls still honour Esc / F1 / fullscreen / M (arrows and Space stay native).
+    const pauseSettingsCtl = isEditable && this.mode === "paused" && !!(target.closest && target.closest("#settingsPanel"));
+    const passThrough = pauseSettingsCtl && (e.key === "Escape" || e.key === "F1" || fsCombo || e.key === "m" || e.key === "M");
+    if (isEditable && !passThrough) return;
     if (isTypeInput && !fsCombo && !["Escape", "Enter", "NumpadEnter", "Tab"].includes(e.key)) return;
 
     // 3. fullscreen combos (C2): Alt+Enter / Meta+Enter / F11.
@@ -50,7 +55,8 @@ Object.assign(Game.prototype, {
     // 4. Tab outside play wraps inside the active screen (plus the top bar); in play it stays native.
     if (e.key === "Tab" && this.mode !== "playing") {
       const screen = document.querySelector(".screen.is-active");
-      if (screen) { this.trapFocus([document.getElementById("topBar"), screen], e); return; }
+      // review R6: the same regions syncInert releases, so the footer links are reachable
+      if (screen) { this.trapFocus([document.getElementById("topBar"), screen, document.querySelector(".footer"), document.getElementById("rotateHint")], e); return; }
     }
 
     // 5. Escape by mode.
@@ -71,10 +77,21 @@ Object.assign(Game.prototype, {
       return;
     }
 
+    // 5b. review R26: for MODE_SETTLE_MS after Level Complete / Game Over / Victory appear, a trusted Enter or Space is
+    //     consumed even on the focused primary (the second Enter of a finale skip must not start the next sector).
+    if (e.isTrusted && (e.key === "Enter" || e.key === "NumpadEnter" || e.key === " ") &&
+        (this.mode === "levelComplete" || this.mode === "gameOver" || this.mode === "victory") &&
+        nowMs() - (this._modeAt || 0) < MODE_SETTLE_MS) {
+      e.preventDefault();
+      return;
+    }
+
     // 6. Enter / NumpadEnter. Playing: finale skip from 2.0 s, boss-intro skip for returning players; otherwise
     //    ignored and never counted. Other modes: native when a control inside the active screen has focus, else
-    //    the mode's primary action.
+    //    the mode's primary action. A focused link follows natively in every mode (review R6).
     if (e.key === "Enter" || e.key === "NumpadEnter") {
+      const a = document.activeElement;
+      if (a && a.closest && a.closest("a[href]")) return;   // review R6: a focused link follows natively in every mode
       if (this.mode === "playing") {
         e.preventDefault();
         if (e.repeat) return;
@@ -82,7 +99,6 @@ Object.assign(Game.prototype, {
         if (this.bossIntro && this.bossIntro.locked) this.skipBossIntro();
         return;
       }
-      const a = document.activeElement;
       const screen = document.querySelector(".screen.is-active");
       const inScreen = a && (screen && screen.contains(a) || (a.closest && a.closest("#topBar")));
       const control = inScreen && /^(button|input|select|textarea|a)$/i.test(a.tagName);

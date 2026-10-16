@@ -12,7 +12,7 @@
 // feature-detected; the shell runs without it.
 
 const PAUSE_REASON_COPY = { user: "Paused", blur: "Window lost focus", hidden: "Tab hidden", fullscreen: "Left fullscreen" };
-const MODAL_FOCUSABLE = 'button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),a[href],[tabindex]:not([tabindex="-1"])';
+const MODAL_FOCUSABLE = 'button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),a[href],summary,[tabindex]:not([tabindex="-1"])';   // review R5: summary
 const SETTINGS_SAVE_DEBOUNCE_MS = 300;
 const TAP_TO_TYPE_DELAY_MS = 1200;
 const DEATH_FREEZE_MS = 600;
@@ -76,7 +76,8 @@ Object.assign(Game.prototype, {
 
   focusables(container) {
     if (!container) return [];
-    return Array.from(container.querySelectorAll(MODAL_FOCUSABLE)).filter((el) => this.isVisible(el) && !el.closest("[inert]"));
+    // tabIndex >= 0 keeps a roving-tabindex group (the sector grid) to its single Tab stop (review R20).
+    return Array.from(container.querySelectorAll(MODAL_FOCUSABLE)).filter((el) => el.tabIndex >= 0 && this.isVisible(el) && !el.closest("[inert]"));
   },
 
   // Canvas normally; #typeInput on touch devices while playing (the soft keyboard needs a real text field).
@@ -405,6 +406,10 @@ Object.assign(Game.prototype, {
     this.run = null;
     this.runMeta = null;
     this._hsCommitted = null;
+    // review R28/R50: session state follows the erased save (title ship, a tip still on screen, the tutorial 'shown' map).
+    this.setPlayerShip(this.getSelectedShipId());
+    if (typeof this.dismissTutorialToast === "function") this.dismissTutorialToast();
+    if (typeof this.initOnboarding === "function") this.initOnboarding();
     storeSave(this.save);
     this.applySettings();
     this.refreshMenu();
@@ -486,6 +491,12 @@ Object.assign(Game.prototype, {
         this.cancelModal(overlay);
       });
       for (const body of overlay.querySelectorAll(".modalScroll .modalBody")) {
+        if (!body.hasAttribute("tabindex")) body.setAttribute("tabindex", "0");   // review R5: a Tab stop that takes arrow / PageDown scrolling
+        // review R5 follow-up (K2): a focusable scroll body needs a role and a name, or the Tab stop reads as an unnamed group
+        if (!body.hasAttribute("role")) body.setAttribute("role", "region");
+        if (!body.hasAttribute("aria-label") && !body.hasAttribute("aria-labelledby") && overlay.hasAttribute("aria-labelledby")) {
+          body.setAttribute("aria-labelledby", overlay.getAttribute("aria-labelledby"));
+        }
         body.addEventListener("scroll", () => this.updateModalScroll(overlay), { passive: true });
       }
     }
@@ -529,10 +540,12 @@ Object.assign(Game.prototype, {
       if (opts.onClose) existing.onClose = opts.onClose;
       return el;
     }
+    const opener = document.activeElement;
     const entry = {
       el,
       primary: opts.primary || null,
-      returnFocusTo: opts.returnFocusTo || document.activeElement || null,
+      // review R17: <body> / <html> means "no opener"; closeModal then falls back to focusPrimary.
+      returnFocusTo: opts.returnFocusTo || (opener && opener !== document.body && opener !== document.documentElement ? opener : null),
       onClose: typeof opts.onClose === "function" ? opts.onClose : null,
       danger: !!opts.danger
     };
@@ -578,7 +591,7 @@ Object.assign(Game.prototype, {
         if (first) { try { first.focus({ preventScroll: true }); } catch (_) {} }
       } else {
         const back = entry.returnFocusTo;
-        if (back && back.isConnected && this.isVisible(back) && !back.closest(".modalOverlay")) {
+        if (back && back !== document.body && back.isConnected && this.isVisible(back) && !back.closest(".modalOverlay")) {
           try { back.focus({ preventScroll: true }); } catch (_) {}
         } else {
           this.focusPrimary(this.mode);
@@ -720,7 +733,7 @@ Object.assign(Game.prototype, {
       // same key: replace in place and restart the timer
       clearTimeout(entry.timer);
       entry.el.textContent = text;
-      entry.el.className = `toast toast--${kind} is-in`;
+      entry.el.className = `toast toast--${kind}`;
       entry.el.dataset.kind = kind;
     } else {
       const el = document.createElement("div");
@@ -732,8 +745,7 @@ Object.assign(Game.prototype, {
       entry = { el, key, timer: null };
       this.toasts.push(entry);
       while (this.toasts.length > 2) this.removeToast(this.toasts[0], true);
-      void el.offsetWidth; // commit the start state so the enter transition runs
-      el.classList.add("is-in");
+      // toastIn runs on insertion: no forced layout / is-in class needed (review R32)
     }
     entry.timer = setTimeout(() => this.removeToast(entry), ms);
     this.announce(text);
@@ -746,7 +758,6 @@ Object.assign(Game.prototype, {
     if (i >= 0) this.toasts.splice(i, 1);
     clearTimeout(entry.timer);
     if (immediate) { entry.el.remove(); return; }
-    entry.el.classList.remove("is-in");
     entry.el.classList.add("is-out", "is-leaving");
     setTimeout(() => entry.el.remove(), 220);
   },
@@ -757,13 +768,17 @@ Object.assign(Game.prototype, {
   },
 
   // ------------------------- Announcer -------------------------
-  // Clear, then write 30 ms later, so a repeated message is re-announced by the live region.
+  // #srAnnounce holds two live regions that take turns (review R32): one write per announce (the old clear-then-write
+  // 30 ms later cost a second layout), and a repeated message still lands in a region whose text changed, so it is
+  // re-announced. #srAnnounce.textContent is always the latest message (the other slot is emptied in the same task).
   announce(text) {
-    const el = this.srAnnounce || this.$("srAnnounce");
-    if (!el) return;
-    clearTimeout(this._announceTimer);
-    el.textContent = "";
-    this._announceTimer = setTimeout(() => { el.textContent = String(text || ""); }, 30);
+    const wrap = this.srAnnounce || this.$("srAnnounce");
+    if (!wrap) return;
+    const slots = wrap.querySelectorAll(".srAnnounceSlot");
+    if (slots.length < 2) { wrap.textContent = String(text || ""); return; }
+    const i = (this._announceSlot = 1 - (this._announceSlot | 0));
+    slots[1 - i].textContent = "";
+    slots[i].textContent = String(text || "");
   },
 
   announceMode(m, prev) {
@@ -839,7 +854,14 @@ Object.assign(Game.prototype, {
   setMode(m) {
     const prev = this.mode;
     if (prev === "menu" && m !== "menu" && typeof this.stopAttract === "function") this.stopAttract();   // D8
+    // review R29: the results count-ups / rank stamp and the ending typewriter end with the screen they belong to.
+    if (prev !== m && typeof this.cancelResultsAnimation === "function") {
+      const leaving = prev === "levelComplete" ? "resultsLevel" : prev === "gameOver" ? "resultsOver" : prev === "victory" ? "resultsRun" : null;
+      if (leaving) this.cancelResultsAnimation(this.$(leaving));
+    }
+    if (prev === "victory" && m !== "victory" && typeof this.cancelEndingTypewriter === "function") this.cancelEndingTypewriter();
     this.mode = m;
+    this._modeAt = nowMs();   // review R26: results screens settle before Enter / Space act on them (30-input.js)
     document.body.dataset.mode = m;
     const screens = this.screens();
     for (const key of Object.keys(screens)) {

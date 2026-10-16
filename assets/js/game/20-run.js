@@ -314,8 +314,9 @@ Object.assign(Game.prototype, {
     this.clearChips();
     if (this.floaters) this.floaters.length = 0;
     if (this.sfx && typeof this.sfx.setMusicState === "function") this.sfx.setMusicState("end");
-    this.setMode("menu");
+    // review R14: render the menu first so setMode's announcement and focus follow the real primary (Continue vs Start).
     this.refreshMenu();
+    this.setMode("menu");
     // Until refreshMenu() calls renderMenuScreens() itself (shell hook), the cabinet is re-rendered here.
     if (!this._menuScreensHooked && typeof this.renderMenuScreens === "function") {
       this.renderMenuScreens(typeof SCREENS_SELF !== "undefined" ? SCREENS_SELF : "self");

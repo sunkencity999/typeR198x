@@ -698,7 +698,10 @@
 
     // wave | boss | finale | end | pause ('resume' restores the state that was active before 'pause').
     setMusicState(state) {
-      if (state === "resume") state = this.musicStateBeforePause || "wave";
+      if (state === "resume") {
+        if (this.musicState !== "pause") return;   // review R9: only a paused bus resumes (a restart's 'wave' survives the pause -> playing hop)
+        state = this.musicStateBeforePause || "wave";
+      }
       if (!(state in STATE_FILTER)) return;
       const prev = this.musicState;
       if (state === "pause" && prev !== "pause") this.musicStateBeforePause = prev;
