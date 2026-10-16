@@ -108,7 +108,7 @@ const defaultSave = () => ({
 // Bring a run record (v1 or v2) up to the v2 shape. Pure: returns a new object.
 function migrateRun(run) {
   if (!run || typeof run !== "object") return null;
-  const i = clamp(Number.isFinite(run.levelIndex) ? run.levelIndex : 0, 0, 9);
+  const i = clamp((Number.isFinite(run.levelIndex) ? run.levelIndex : 0) | 0, 0, 9);   // integer: LEVELS[2.5] is undefined (review R21)
   const cfg = LEVELS[i];
   const r = { ...run };
   const legacy = !r.id;
@@ -143,9 +143,10 @@ function migrateRun(run) {
     phaseStarts: Array.isArray(r.boss.phaseStarts) ? r.boss.phaseStarts.slice() : [0]
   } : null;
   // review R21: a checkpoint is usable only as a non-array object with a finite levelIndex (Continue on a saved
-  // death restores it and starts that level); anything else is dropped here and rebuilt below.
+  // death restores it and starts that level); anything else is dropped here and rebuilt below. The index is
+  // floored to an integer before the clamp: LEVELS[2.5] is undefined (re-review S-1).
   const validCp = (cp) => !!cp && typeof cp === "object" && !Array.isArray(cp) && Number.isFinite(cp.levelIndex);
-  r.bossCheckpoint = validCp(r.bossCheckpoint) ? { ...r.bossCheckpoint, levelIndex: clamp(r.bossCheckpoint.levelIndex, 0, 9) } : null;
+  r.bossCheckpoint = validCp(r.bossCheckpoint) ? { ...r.bossCheckpoint, levelIndex: clamp(r.bossCheckpoint.levelIndex | 0, 0, 9) } : null;
   // B-10: a v1 save taken inside a boss has no boss record; resume it in the approach to a fresh boss.
   if (r.inBoss && !r.boss) {
     r.inBoss = false;
@@ -159,7 +160,7 @@ function migrateRun(run) {
   // F003: never resume past the boss trigger.
   r.levelT = clamp(Number.isFinite(r.levelT) ? r.levelT : 0, 0, cfg.duration - 1);
   r.checkpoint = validCp(r.checkpoint)
-    ? { ...r.checkpoint, levelIndex: clamp(r.checkpoint.levelIndex, 0, 9) }
+    ? { ...r.checkpoint, levelIndex: clamp(r.checkpoint.levelIndex | 0, 0, 9) }
     : snapshotCheckpoint("level", i, r.stats, r.maxHp, r.retries);
   if (r.inBoss && !r.bossCheckpoint) {
     r.bossCheckpoint = snapshotCheckpoint("boss", i, r.stats, r.maxHp, r.retries, { bossPhase: r.boss.phase });
