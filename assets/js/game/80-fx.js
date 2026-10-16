@@ -24,11 +24,7 @@ Object.assign(Game.prototype, {
       this.parallax.bgOffset += (this.currentTheme.bgSpeed || 0) * dt;
       this.parallax.fgOffset += (this.currentTheme.fgSpeed || 0) * dt;
     }
-    for (const s of this.stars) {
-      const spd = lerp(30, 140, 1 - s.z);
-      s.x -= spd * dt;
-      if (s.x < -5) { s.x = this.w + rand(0, 80); s.y = rand(0, this.h); s.z = Math.random(); }
-    }
+    this.updateStars(dt);
   },
 
   // Zero every transient presentation effect. Called at the top of startLevel(), stopToMenu(), onGameOver().
@@ -99,9 +95,21 @@ Object.assign(Game.prototype, {
     }
   },
 
+  // Sheet explosions read the loader's sheet each frame (ExplosionSprite.getSheet). Caps (CONTRACT section 7):
+  // 4 concurrent large, 10 total; a new one replaces the oldest of its class.
   addExplosionSprite(x, y, type = "small") {
-    if (!this.explosionSheet) return;
-    this.explosions.push(new ExplosionSprite({ x, y, type, sheet: this.explosionSheet }));
+    const caps = (typeof FX_CAPS === "object" && FX_CAPS) || { explosionsLarge: 4, explosionsTotal: 10 };
+    const list = this.explosions;
+    if (type === "large") {
+      let larges = 0;
+      for (const e of list) if (e.type === "large") larges++;
+      if (larges >= caps.explosionsLarge) {
+        const i = list.findIndex((e) => e.type === "large");
+        if (i >= 0) list.splice(i, 1);
+      }
+    }
+    if (list.length >= caps.explosionsTotal) list.shift();
+    list.push(new ExplosionSprite({ x, y, type }));
   },
 
   getExplosionTypeForEnemy(en) {
