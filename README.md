@@ -365,7 +365,7 @@ tools/deploy-check.sh https://typer198x.com --strict            # 5. go/no-go
   anywhere. It connects over explicit FTPS and never falls back to plain FTP (a TLS failure aborts;
   `--secure false` is an explicit opt-in that sends the password in cleartext), finds the web root, backs the remote tree up to
   `tools/deploy/backups/<timestamp>/` (`--backup light` skips files over 4 MB, `full` takes everything,
-  `none` skips), uploads assets first, then CSS/JS, then `index.html` last, skips unchanged binaries by
+  `none` skips), uploads assets first, then CSS/JS, then `assets/opt/manifest.js`, then `index.html` last, skips unchanged binaries by
   size, and verifies over HTTPS that `index.html` and `game.js` match. `TOP_FILES` lists the root pages
   (`index.html`, `game.js`, `style.css`, `privacy-policy.html`, `privacy.html`, `info.html`, `support.html`
   and the optional `robots.txt`/`sitemap.xml`/`site.webmanifest`); `assets/` is walked whole.

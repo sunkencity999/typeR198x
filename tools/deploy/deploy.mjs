@@ -3,7 +3,7 @@
 //
 //   TYPER_FTP_PASSWORD=... node tools/deploy/deploy.mjs \
 //       --host ftp.typer198x.com --user <ftp-user> [--port 21] \
-//       [--remote-dir auto|/public_html] [--secure true|false] \
+//       [--remote-dir auto|/public_html (an absolute path)] [--secure true|false] \
 //       [--backup light|full|none] [--dry-run] [--force] [--site https://typer198x.com] [--htaccess]
 //
 // What it does, in order:
@@ -12,7 +12,8 @@
 //   2. finds the remote web root (looks for index.html in /, /public_html, /httpdocs, /www, /htdocs),
 //   3. backs up the remote tree to tools/deploy/backups/<timestamp>/ (light = skip files > 4 MB,
 //      which are the art/audio masters already in git),
-//   4. uploads assets first, then css/js, then index.html last; unchanged binaries (same size) are skipped,
+//   4. uploads assets first, then css/js, then assets/opt/manifest.js, then index.html last; unchanged binaries
+//      (same size) are skipped,
 //   5. verifies over HTTPS that index.html and game.js now match the local files and prints cache headers.
 // The password is read from TYPER_FTP_PASSWORD (or --password-file) and never written anywhere.
 import { Client } from "basic-ftp";
@@ -60,8 +61,9 @@ for (const f of TOP_FILES) if (fs.existsSync(path.join(ROOT, f))) local.push(pat
 for (const d of ASSET_DIRS) if (fs.existsSync(path.join(ROOT, d))) walk(path.join(ROOT, d), local);
 const rel = (p) => path.relative(ROOT, p).split(path.sep).join("/");
 const isText = (p) => /\.(html|js|mjs|css|json|svg|txt|xml|webmanifest|md)$/i.test(p);
-// upload order: assets (new files first), then css/js, then index.html last
-const order = (p) => p.endsWith("index.html") ? 3 : /\.(css|js)$/.test(p) && !p.includes("/assets/opt/") ? 2 : 1;
+// upload order: assets (new files first), then css/js, then assets/opt/manifest.js, then index.html last.
+// manifest.js is served no-cache and read by the old shell, so it must not name files that are still uploading (review R42).
+const order = (p) => p.endsWith("index.html") ? 4 : p.endsWith("/assets/opt/manifest.js") ? 3 : /\.(css|js)$/.test(p) && !p.includes("/assets/opt/") ? 2 : 1;
 local.sort((a, b) => order(a) - order(b) || a.localeCompare(b));
 const totalBytes = local.reduce((n, p) => n + fs.statSync(p).size, 0);
 console.log(`local set: ${local.length} files, ${(totalBytes / 1048576).toFixed(1)} MB (root ${ROOT})`);
@@ -87,7 +89,9 @@ async function connect() {
   console.log(`connected to ${HOST}:${PORT} ${secure ? "with explicit FTPS (TLS)" : "over PLAIN FTP (cleartext credentials!)"}`);
 }
 async function findRemoteRoot() {
-  if (REMOTE_DIR !== "auto") { await client.cd(REMOTE_DIR); return REMOTE_DIR; }
+  // review R41: normalise once so every later path is absolute (a relative --remote-dir would otherwise make
+  // ensureDir nest a copy of it inside the web root and the following cd(root) fail)
+  if (REMOTE_DIR !== "auto") { await client.cd(REMOTE_DIR); return await client.pwd(); }
   for (const c of ["/", "/public_html", "/httpdocs", "/www", "/htdocs", "/web", "/typer198x.com"]) {
     try {
       const list = await client.list(c);

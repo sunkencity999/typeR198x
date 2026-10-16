@@ -48,8 +48,8 @@ node tools/deploy/deploy.mjs --dry-run --user <ftp-user>
 
 Prints the local set in upload order (about 189 files, ~370 MB listed; on a real run the ~341 MB of
 PNG/WAV masters are skipped when the remote size matches) and exits without connecting, so no password
-is needed. Check that `index.html` is last and that `privacy-policy.html` and every `assets/opt` file are in
-the list.
+is needed. Check that `index.html` is last, `assets/opt/manifest.js` just before it, and that `privacy-policy.html`
+and every `assets/opt` file are in the list.
 
 ## 4. Backup and deploy with the cache policy
 
@@ -63,7 +63,7 @@ What happens, in order: FTPS connect (explicit TLS; the script never falls back 
 certificate failure aborts with exit 1, and `--secure false` is the only way to log in over cleartext FTP,
 which it warns about before connecting), web-root detection, backup to
 `tools/deploy/backups/<timestamp>/` (`light` skips files over 4 MB; use `--backup full` before a risky
-release), upload of `assets/` first, then CSS/JS, then `index.html` last, `.htaccess` cache policy merged
+release), upload of `assets/` first, then CSS/JS, then `assets/opt/manifest.js`, then `index.html` last, `.htaccess` cache policy merged
 into the existing file (a copy of the previous `.htaccess` is kept under `tools/deploy/backups/`), then an
 HTTPS verification that `index.html` and `game.js` match the local files and a print of their cache
 headers. Add `--force` only if a size-equal binary must be re-uploaded.
