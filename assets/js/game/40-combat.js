@@ -147,6 +147,10 @@ Object.assign(Game.prototype, {
   setWavePhase(phase) {
     this.wavePhase = phase;
     this.phaseT = 0;
+    // Debug trail for the harness (phases can last a single frame).
+    if (!this.phaseLog) this.phaseLog = [];
+    this.phaseLog.push(phase);
+    if (this.phaseLog.length > 64) this.phaseLog.shift();
   },
 
   tickWaves(dt) {
@@ -174,7 +178,7 @@ Object.assign(Game.prototype, {
       }
       case "drain": {
         const alive = this.countAliveEnemies();
-        if (alive === 0 || this.phaseT >= DRAIN_MAX_S) {
+        if ((alive === 0 && this.phaseT >= DRAIN_MIN_S) || this.phaseT >= DRAIN_MAX_S) {
           if (alive) this.detonateLeftovers();
           if (this.wave < 2) {
             this.setWavePhase("banner");

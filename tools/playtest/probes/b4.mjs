@@ -1,5 +1,5 @@
 // B4 acceptance: HP, damage table, shield economy, i-frames, hull meter DOM.
-import { openProbe, sleep, state, startFresh, jumpTo, clearField, placeEnemy, hold } from "./b_lib.mjs";
+import { openProbe, sleep, state, startFresh, jumpTo, clearField, placeEnemy, hold, continueRun } from "./b_lib.mjs";
 
 const P = await openProbe("b4");
 await startFresh(P, "B4");
@@ -62,7 +62,7 @@ P.check("hp crossing below 25 % turns the lowHp beeper on", low.on === true, low
 
 // fresh L7 via Continue -> maxHp 800
 await P.goto({ playerName: "SEVEN", selectedShip: "coconut", highScore: 0, lastUnlockedLevel: 7, storySeen: true, keyboardHintSeen: true, settings: { muted: true, crt: true }, run: null });
-await P.clickContinue();
+await continueRun(P);
 await sleep(200);
 const l7 = await P.g(() => ({ maxHp: window.game.player.maxHp, hp: window.game.player.hp, levelIndex: window.game.levelIndex }));
 P.check("fresh L7 via Continue -> maxHp 800 (getHpBonusForLevel)", l7.maxHp === 800 && l7.hp === 800 && l7.levelIndex === 6, l7);

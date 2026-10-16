@@ -1,5 +1,5 @@
 // B3 acceptance: waves and pacing (state machine, hungry spawner, pressure valve, stage bar, level intro gate, approach).
-import { openProbe, sleep, state, typeFor, waitFor, startFresh, jumpTo, press } from "./b_lib.mjs";
+import { openProbe, sleep, state, typeFor, waitFor, startFresh, jumpTo, press, continueRun } from "./b_lib.mjs";
 
 const P = await openProbe("b3");
 
@@ -51,9 +51,13 @@ await typeFor(P, 95, { wpm: 55, accuracy: 0.93, onTick: async (st, elapsed) => {
 const seqWanted = ["spawn", "drain", "banner", "spawn", "drain", "banner", "spawn", "drain", "approach"];
 let si = 0;
 for (const p of phases) if (p === seqWanted[si]) si++;
+const phaseLog = await P.g(() => window.game.phaseLog);
+let li = 0;
+for (const p of phaseLog) if (p === seqWanted[li]) li++;
 const firstBoss = await P.g(() => ({ enemies: window.game.enemies.length, lock: window.game.lock, inBoss: window.game.inBoss, locked: !!(window.game.bossIntro && window.game.bossIntro.locked) }));
 P.check("55 WPM / .93 typist on fresh L1 reaches inBoss between 25 and 70 s", bossAt !== null && bossAt >= 25 && bossAt <= 70, { bossAt, phases });
-P.check("wavePhase sequence contains spawn,drain,banner,spawn,drain,banner,spawn,drain,approach in order", si === seqWanted.length, { phases, matched: si });
+P.check("wavePhase sequence (polled) contains spawn,drain,banner,spawn,drain,banner,spawn,drain,approach in order", si === seqWanted.length, { phases, matched: si });
+P.check("game.phaseLog (every transition) contains the same sequence in order", li === seqWanted.length, { phaseLog, matched: li });
 P.check("wave goes 0, 1, 2", JSON.stringify(waves) === JSON.stringify([0, 1, 2]), waves);
 P.check("at inBoss first true: enemies.length === 0 && lock === null", firstBoss.inBoss && firstBoss.enemies === 0 && firstBoss.lock === null, firstBoss);
 P.check("screenshot during wave 2 shows #stageBar with one .isDone segment", !!stageShot && stageShot.done === 1, stageShot);
@@ -76,20 +80,19 @@ P.check("forceBoss (levelT = duration + .01) yields inBoss within 12 s via appro
 
 // ---- incomingCps at L5 wave 2 within +-15 % of 3.7 over 20 s (80 WPM typist keeps the field moving) ----
 await jumpTo(P, 4);
-await P.g(() => { const g = window.game; g.wave = 2; g.waveKills = 0; g.beginWave(2); });
-await sleep(10500);   // let the trailing-10 s window fill
+await P.g(() => { const g = window.game; g.beginWave(1); g.levelT = LEVELS[4].cap; });
 const cpsSamples = [];
-await typeFor(P, 20, { wpm: 80, accuracy: 0.97, onTick: async () => { cpsSamples.push((await P.g(() => window.TypeRDebug.stats().incomingCps))); } });
+await typeFor(P, 30, { wpm: 80, accuracy: 0.97, onTick: async (st, elapsed) => { if (elapsed >= 10000 && st.wavePhase === "spawn") cpsSamples.push((await P.g(() => window.TypeRDebug.stats().incomingCps))); }, until: (st) => st.wave !== 1 });
 const cpsAvg = cpsSamples.reduce((a, b) => a + b, 0) / Math.max(1, cpsSamples.length);
-P.check("TypeRDebug.stats().incomingCps at L5 wave 3 within +-15 % of 3.7 over 20 s", Math.abs(cpsAvg - 3.7) / 3.7 <= 0.15, { avg: Math.round(cpsAvg * 100) / 100, min: Math.min(...cpsSamples), max: Math.max(...cpsSamples), n: cpsSamples.length });
+P.check("TypeRDebug.stats().incomingCps at L5 wave 2 (index 1) within +-15 % of 3.7 over 20 s (80 WPM typist)", cpsSamples.length > 20 && Math.abs(cpsAvg - 3.7) / 3.7 <= 0.15, { avg: Math.round(cpsAvg * 100) / 100, min: Math.min(...cpsSamples), max: Math.max(...cpsSamples), n: cpsSamples.length });
 
-// ---- reload mid-wave-2 + Continue -> wave 1, waveKills 0, inBoss false ----
+// ---- "reload" mid-wave-2 + Continue -> wave 1, waveKills 0, inBoss false ----
+// (the probe's fixture init script would wipe localStorage on a real navigation, so the stored blob is re-read
+//  through loadSave() in place: the same migrateSave -> continueRun -> startLevel path a reload takes)
 await jumpTo(P, 0);
 await P.g(() => { const g = window.game; g.beginWave(1); g.waveKills = 4; g.levelT = 30; g.saveRun(true); });
-await P.page.reload({ waitUntil: "load" });
-await P.page.waitForFunction(() => { const el = document.getElementById("loadingOverlay"); return !el || el.classList.contains("hidden"); }, null, { timeout: 60000 });
-const saved = await P.g(() => ({ wave: window.game.save.run.wave, waveKills: window.game.save.run.waveKills, phase: window.game.save.run.wavePhase }));
-await P.clickContinue();
+const saved = await P.g(() => { const g = window.game; const blob = localStorage.getItem(LS_KEY); g.stopToMenu(true); localStorage.setItem(LS_KEY, blob); g.save = loadSave(); g.run = null; g.refreshMenu(); return { wave: g.save.run.wave, waveKills: g.save.run.waveKills, phase: g.save.run.wavePhase }; });
+await continueRun(P);
 await sleep(300);
 const resumed = await P.g(() => ({ wave: window.game.wave, waveKills: window.game.waveKills, inBoss: window.game.inBoss, levelT: window.game.levelT, intro: !!window.game.levelIntro, phase: window.game.wavePhase }));
 P.check("reload mid-wave-2 + Continue -> wave 1, waveKills 0, inBoss false (levelT = wave * cap)", saved.wave === 1 && resumed.wave === 1 && resumed.waveKills === 0 && !resumed.inBoss && resumed.levelT === 22, { saved, resumed });

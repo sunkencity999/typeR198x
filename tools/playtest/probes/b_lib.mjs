@@ -106,6 +106,15 @@ export async function placePowerup(P, type, x, lane = 2, speed = 0) {
   }, { type, x, lane, speed });
 }
 
+// #btnContinue lives in #resumeCard, which stays .hidden until C5's renderResumeCard() lands: click it
+// programmatically (same handler), then wait for play.
+export async function continueRun(P) {
+  await P.g(() => document.getElementById("btnContinue").click());
+  const story = P.page.locator("#btnStoryLaunch");
+  try { await story.waitFor({ state: "visible", timeout: 1200 }); await story.click(); } catch {}
+  await P.page.waitForFunction(() => window.game && window.game.mode === "playing", null, { timeout: 30000 });
+}
+
 export async function press(P, key) {
   await P.page.keyboard.press(key);
 }

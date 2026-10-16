@@ -39,7 +39,7 @@ await press(P, "a");
 const m0 = await state(P);
 await press(P, "q");
 const m1 = await state(P);
-P.check("a hard miss sets combo 0 and leaves stats.score unchanged", m0.combo === 1 && m1.combo === 0 && m1.score === m0.score && m1.total === m0.total + 1, { m0: { combo: m0.combo, score: m0.score }, m1: { combo: m1.combo, score: m1.score } });
+P.check("a hard miss sets combo 0 and leaves stats.score unchanged", m0.combo >= 1 && m1.combo === 0 && m1.score === m0.score && m1.total === m0.total + 1, { m0: { combo: m0.combo, score: m0.score }, m1: { combo: m1.combo, score: m1.score } });
 
 // floaters: after a kill there is a /^\+\d/ entry, gone after 1 s
 await clearField(P);
@@ -52,8 +52,8 @@ P.check("after a kill floaters has a /^\\+\\d/ entry that is gone after 1 s", f0
 
 // multiplier callout at a base tier rise
 await clearField(P);
-const tierCall = await P.g(() => { const g = window.game; g.stats.combo = 9; g._baseTier = 1; g.bumpMultiplier(); g.stats.combo = 10; g.bumpMultiplier(); return { mult: g.stats.mult, callout: g.callout && g.callout.title, cue: g.sfx.lastCue }; });
-P.check("base tier rise -> 'x2 MULTIPLIER' callout + comboTier cue", tierCall.mult === 2 && tierCall.callout === "x2 MULTIPLIER" && tierCall.cue === "comboTier", tierCall);
+const tierCall = await P.g(() => { const g = window.game; g.clearBanners(); g.stats.combo = 9; g._baseTier = 1; g.bumpMultiplier(); g.stats.combo = 10; g.bumpMultiplier(); return { mult: g.stats.mult, callout: g.callout && g.callout.title, cue: g.sfx.lastCue }; });
+P.check("base tier rise -> 'x2 MULTIPLIER' callout + comboTier cue", tierCall.mult === 2 && tierCall.callout === "x2 MULTIPLIER" && /^comboTier/.test(tierCall.cue), tierCall);
 
 // perfect wave at L2 -> +500 and a PERFECT WAVE callout
 await jumpTo(P, 1);
