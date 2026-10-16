@@ -163,6 +163,7 @@ selects rows; `PLAY_ARGS="--cpu 4"` is appended to every row.
 Extra one-off scripts live in `probes/` (shipped) or `out/` (ignored). They can import nothing from
 `play.mjs`; copy the `installProbe` function if they need the canvas counters. Shipped:
 
+- Staged acceptance probes from the build (`probes/a2.mjs`, `a3.mjs`, `a4.mjs`) keep the expectations of their stage (a 40-click budget for the ending, the pre-tally clear-bonus sums, a Cyrillic layout fallback) and are kept for history; they are not release gates. The gates are the matrix, `e2-*`, `c*`, `d*`, `b-fixtures` and `review-runtime`.
 - `probes/harness-report-check.mjs <report.json> [--all] [--budget-mb 2.5]` — asserts every v2 report
   field is present (including `mediaAborts`, `networkTotals.mediaBytes`,
   `bytesFinishedBeforeFirstKeystrokeNonMedia/Media`, `config.noMusic`), checks their shapes

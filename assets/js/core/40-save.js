@@ -121,6 +121,11 @@ function migrateRun(run) {
   r.retries = Number.isFinite(r.retries) ? r.retries : 0;
   r.stats = { ...defaultStats(), ...((r.stats && typeof r.stats === "object") ? r.stats : {}) };
   r.levelStats = { ...defaultLevelStats(), ...((r.levelStats && typeof r.levelStats === "object") ? r.levelStats : {}) };
+  // Every level counter is a finite number (a hand-edited or truncated blob can carry strings, objects or NaN).
+  for (const [k, d] of Object.entries(defaultLevelStats())) {
+    const v = r.levelStats[k];
+    r.levelStats[k] = (typeof v === "number" && Number.isFinite(v)) ? v : d;
+  }
   r.power = { spread: 0, pierce: 0, rapid: 0, multiplier: 0, ...((r.power && typeof r.power === "object") ? r.power : {}) };
   r.shield = Number.isFinite(r.shield) ? r.shield : 0;
   const curve = getHpBonusForLevel(i + 1);

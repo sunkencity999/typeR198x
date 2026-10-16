@@ -59,10 +59,19 @@ Object.assign(Game.prototype, {
       if (e.key === "Tab") { this.trapFocus(overlay, e); return; }
       if (e.key === "Enter" || e.key === "NumpadEnter" || e.key === " ") {
         const a = document.activeElement;
-        if (a && overlay.contains(a) && /^(button|a)$/i.test(a.tagName)) return;   // native activation
+        if (a && overlay.contains(a) && /^(button|a)$/i.test(a.tagName) && !e.repeat) return;   // native activation, once
         e.preventDefault();
         return;
       }
+      e.preventDefault();   // no menu shortcuts (?, F1, m) under the spinner; the fullscreen combos were handled above
+      return;
+    }
+    // 3c. After the overlay hands focus to the menu primary, a held Enter / Space (auto-repeat) must not run on into it:
+    //     the same MODE_SETTLE_MS the results screens use. A fresh press is a new decision and goes through.
+    if (e.repeat && e.isTrusted && (e.key === "Enter" || e.key === "NumpadEnter" || e.key === " ") && this.mode !== "playing" &&
+        nowMs() - (this._loadingHandoffAt || 0) < MODE_SETTLE_MS) {
+      e.preventDefault();
+      return;
     }
 
     // 4. Tab outside play wraps inside the active screen (plus the top bar); in play it stays native.
@@ -432,6 +441,7 @@ Object.assign(Game.prototype, {
   // The single scoring entry: applies diff().score, banks into stats/levelStats and shows a floater.
   // Callers pass the multiplied amount for kills/pickups/boss chars and the flat amount for bonuses.
   addScore(amount, opts = {}) {
+    if (this.mode === "gameOver") return 0;   // a kill resolving in the death tick must not outrun the committed score
     const n = Math.round(Math.max(0, amount) * (this.diff().score || 1));
     if (n <= 0) return 0;
     this.stats.score += n;

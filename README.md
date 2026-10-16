@@ -278,7 +278,8 @@ Numbers from the harness on the merged build (`tools/playtest/run-matrix.sh`, 14
 | Translucent full-frame fill alpha | .12 (storm tint .22 multiply is the documented exception) | <= .12 |
 | Decoded bitmap pixels at DPR 2, sector 1 | ~10.9 Mpx (~19 Mpx with the next sector prefetched) | <= 12 Mpx resident |
 
-Known and tracked: `layoutCountPer5s` sits at 30-70 while typing (target <= 10, not yet profiled); the
+Known and tracked: `layoutCountPer5s` while typing reads 17-30 with the probe run alone (target <= 40 per 5 s:
+the 5 Hz HUD commits plus event-driven writes, see `probes/e2-layout.mjs`); idle play is 1; the
 first frame of a sector entered by a direct `startLevel(i)` jump costs 45-80 ms at DPR 2 (GPU upload;
 `advanceLevel` is pre-warmed and does not hitch).
 
@@ -384,13 +385,14 @@ tools/deploy-check.sh https://typer198x.com --strict            # 5. go/no-go
   WOFF2 / MP3 MIME types. `tools/nginx-cache.conf` is the equivalent server-block include for an nginx host. If
   the host's own static cache still serves `.html` with a long `max-age`, exclude `.html` from it and
   purge it in the hosting panel.
-- **Go/no-go.** `tools/deploy-check.sh https://typer198x.com --strict` fails when `index.html` or `/` lacks
+- **Go/no-go.** `tools/deploy-check.sh https://typer198x.com --strict` fails when `index.html` has a wrong
+  status or MIME type, when `index.html` or `/` lacks
   `no-cache`/`max-age=0`, when the served `?v=` tokens disagree, when a script, stylesheet, WebP or MP3 comes
   back with the wrong status or MIME type (the font: wrong status or a non-font type), when the served
   `game.js` fails `node --check` or no served script carries the `window.SFX` guard, when
   `assets/opt/manifest.js` differs from the local one, when a ship-card `?v=` differs from the served manifest
   version, or when the footer privacy target is missing. Without `--strict` the cache-header findings are
-  warnings; a font served as `application/octet-stream` stays a warning either way.
+  warnings; a `/` that does not answer 200 and a font served as `application/octet-stream` stay warnings either way.
 
 ## Native wrappers
 

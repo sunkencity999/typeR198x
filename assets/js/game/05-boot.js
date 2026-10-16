@@ -246,6 +246,7 @@ Object.assign(Game.prototype, {
     overlay.classList.add("is-dismissed");
     // Keyboard sweep: Continue anyway / Retry activated from the keyboard (or a bare <body>) hands focus to the mode's primary.
     const a = document.activeElement;
+    this._loadingHandoffAt = nowMs();   // 30-input.js: Enter / Space settle after the hand-off
     if ((!a || a === document.body || overlay.contains(a)) && typeof this.focusPrimary === "function") this.focusPrimary(this.mode);
     setTimeout(hide, LOADING_FADE_MS + 100);
     if (reason !== "ready") this.degradedAssets = this.degradedAssets || !this.assetsReady;

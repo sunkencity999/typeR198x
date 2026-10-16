@@ -348,7 +348,12 @@ Object.assign(Game.prototype, {
     this.bumpMultiplier();
     this.player.maxHp = Math.max(getHpBonusForLevel(cp.levelIndex + 1), Number.isFinite(cp.maxHp) ? cp.maxHp : 0);
     this.player.hp = this.player.maxHp;
-    if (run) run.retries = (run.retries | 0) + 1;
+    if (run) {
+      run.retries = (run.retries | 0) + 1;
+      // The NEW HIGH badge after a retry means "beat the record this run has banked so far", ties included (review R3/R7).
+      run.baselineHigh = Math.max(run.baselineHigh | 0, this.save.highScore | 0);
+      if (this.runMeta && this.runMeta.id === run.id) this.runMeta.baselineHigh = run.baselineHigh;
+    }
     this.stats.retries = (this.stats.retries | 0) + 1;
     this.levelStats = { ...defaultLevelStats(), retries: run ? run.retries : 1 };
     this.levelIndex = clamp(cp.levelIndex | 0, 0, 9);
@@ -807,8 +812,14 @@ Object.assign(Game.prototype, {
     };
     const idx = list.findIndex(h => h && h.runId === meta.id);
     if (idx >= 0) {
-      if ((list[idx].score | 0) >= score && list[idx].levelReached === row.levelReached) return false;
-      list[idx] = { ...list[idx], ...row };
+      const prev = list[idx];
+      if ((prev.score | 0) >= score) {
+        // A lower score after a retry never replaces the row's best numbers; the sector it reached still advances.
+        if (prev.levelReached === row.levelReached) return false;
+        list[idx] = { ...prev, levelReached: row.levelReached };
+      } else {
+        list[idx] = { ...prev, ...row };
+      }
     } else {
       list.push(row);
     }

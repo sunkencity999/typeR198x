@@ -23,7 +23,7 @@ const ROTATE_HINT_KEY = "typer.rotateHintDismissed";
 Object.assign(Game.prototype, {
   // ------------------------- Ship helpers -------------------------
   getSelectedShipId() {
-    return this.save.selectedShip || "coconut";
+    return getShipConfig(this.save.selectedShip || "coconut").id;   // an unknown id in the save falls back to a real ship
   },
 
   setPlayerShip(id) {
@@ -471,6 +471,8 @@ Object.assign(Game.prototype, {
   onStoryLaunch() {
     if (this.storyLaunchMode) {
       this.closeModal(this.storyModal, { result: "ok", silent: true, restoreFocus: false });
+      // Keyboard focus stays on a live control while the audio primes spool (the modal's Launch becomes unfocusable).
+      if (this.btnStart && !this.touchMode) { try { this.btnStart.focus({ preventScroll: true }); } catch (_) {} }
       this.launchNewRun();
     } else {
       this.closeModal(this.storyModal, { result: "ok" });
@@ -843,6 +845,7 @@ Object.assign(Game.prototype, {
     const apply = () => {
       if (seq !== this._focusSeq || this.mode !== mode || this.modalStack.length) return;
       if (mode === "playing") { this.focusGameCanvas(); return; }
+      if (this.touchMode && !this.keyboardSeen) return;   // a phone shows no focus ring until a hardware key is seen
       const el = this.primaryFor(mode);
       if (el && document.activeElement !== el) {
         try { el.focus({ preventScroll: true }); } catch (_) {}

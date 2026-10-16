@@ -186,6 +186,9 @@ export async function openProbe(name, opts = {}) {
     async startRun(name = "PROBE") {
       await page.fill("#playerName", name).catch(() => {});
       await page.click("#btnStart");
+      // Start over a saved run asks "Abandon current run?" (review R34): confirm it.
+      const abandon = page.locator("#btnConfirmOk");
+      try { await abandon.waitFor({ state: "visible", timeout: 800 }); await abandon.click(); } catch {}
       const story = page.locator("#btnStoryLaunch");
       try { await story.waitFor({ state: "visible", timeout: 2500 }); await story.click(); } catch {}
       await page.waitForFunction(() => window.game && window.game.mode === "playing", null, { timeout: 30000 });

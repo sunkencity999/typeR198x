@@ -29,7 +29,7 @@ await P.g(() => { window.game.stats.score = 9000; window.game.stats.combo = 12; 
 await die();
 await P.shot("gameover-l3");
 const over1 = await P.g(() => ({ retryBossHidden: document.getElementById("btnRetryBoss").classList.contains("hidden"), runHp: window.game.save.run.hp, label: document.getElementById("btnTryAgain").textContent, note: (document.getElementById("retryNote") || {}).textContent }));
-P.check("wave death: #btnRetryBoss hidden, run saved with hp 0, 'Retry sector' label + retryNote", over1.retryBossHidden && over1.runHp === 0 && /Retry sector/i.test(over1.label) && /sector start/i.test(over1.note || ""), over1);
+P.check("wave death: #btnRetryBoss hidden, run saved with hp 0, 'Retry sector' label + retryNote", over1.retryBossHidden && over1.runHp === 0 && /Retry sector/i.test(over1.label) && /sector start|checkpoint/i.test(over1.note || ""), over1);
 await P.page.click("#btnTryAgain");
 await sleep(300);
 const r1 = await P.g(() => { const g = window.game; return { score: g.stats.score, combo: g.stats.combo, hp: g.player.hp, maxHp: g.player.maxHp, retries: g.save.run.retries, levelIndex: g.levelIndex, mode: g.mode, levelStatsRetries: g.levelStats.retries }; });

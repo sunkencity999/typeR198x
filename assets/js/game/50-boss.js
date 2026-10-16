@@ -631,9 +631,9 @@ Object.assign(Game.prototype, {
     const accuracy = SCORE.accuracy(accPct, L);
     const phases = SCORE.phase(L) * (info.phasesCleared | 0);
     const surges = SCORE.surgeCountered(L) * (ls.surgesCancelled | 0);
-    // The money actually banked (each wave at the multiplier of its moment); the product is the fallback for a run
-    // record saved before the sum existed.
-    const perfectWaves = (ls.perfectWaveBonus | 0) > 0 ? (ls.perfectWaveBonus | 0) : Math.round(SCORE.perfectWave(L) * retryMul) * (ls.perfectWaves | 0);
+    // The money actually banked (each wave at the multiplier of its moment). Retries only grow inside a sector, so the
+    // product at the current multiplier never exceeds that sum; it wins only for a run record saved before the sum existed.
+    const perfectWaves = Math.max(ls.perfectWaveBonus | 0, Math.round(SCORE.perfectWave(L) * retryMul) * (ls.perfectWaves | 0));
     const total = Math.round(retryMul * (clear + time + flawless + accuracy));
     return { clear, time, flawless, phases, surges, accuracy, perfectWaves, retryMul, retries, accPct, par, elapsed, total };
   },
