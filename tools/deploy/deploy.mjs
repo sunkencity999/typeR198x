@@ -162,7 +162,9 @@ async function remoteWalk(dir, out = []) {
   console.log(`\nupload done: ${up} uploaded, ${skip} unchanged binaries skipped`);
 
   // optional Apache cache policy (.htaccess): append our block to an existing file, never replace it.
-  // Existence comes from the listing fetched above; a listed file that cannot be downloaded is left alone (review R24).
+  // The download is always attempted, because servers may hide dotfiles from LIST/MLSD: a new file is created only
+  // when the listing has no .htaccess AND the RETR itself answers "no such file". A listed file that cannot be
+  // downloaded, or any other download error, leaves the host's file alone (review R24).
   // The download is kept as htaccess-<ms>.previous.txt and the uploaded text written to a separate
   // htaccess-<ms>.merged.txt, so the previous copy really is the previous copy (review R16/R25).
   let htaccessSkipped = false;
@@ -175,12 +177,17 @@ async function remoteWalk(dir, out = []) {
     const mergedPath = path.join(HERE, "backups", `htaccess-${ms}.merged.txt`);
     fs.mkdirSync(path.dirname(prev), { recursive: true });
     const listed = remoteSize.has(".htaccess");
-    let existing = "";
-    if (listed) {
-      try { await client.downloadTo(prev, remotePath); existing = fs.readFileSync(prev, "utf8"); }
-      catch (e) {
-        try { fs.rmSync(prev, { force: true }); } catch { /* nothing to remove */ }
-        console.error(`.htaccess: the host lists one but it could not be downloaded (${e.message}); left untouched. Merge tools/deploy/htaccess-cache.txt into it by hand.`);
+    const byHand = "left untouched. Merge tools/deploy/htaccess-cache.txt into it by hand.";
+    let existing = "", found = false;
+    try { await client.downloadTo(prev, remotePath); existing = fs.readFileSync(prev, "utf8"); found = true; }
+    catch (e) {
+      try { fs.rmSync(prev, { force: true }); } catch { /* nothing to remove */ }
+      // 550 alone is ambiguous (Pure-FTPd/ProFTPD use it for "permission denied" too), so absence needs the text as well
+      const absent = !listed && e.code === 550 && /no such file|not found|does not exist|cannot find/i.test(e.message);
+      if (!absent) {
+        console.error(listed
+          ? `.htaccess: the host lists one but it could not be downloaded (${e.message}); ${byHand}`
+          : `.htaccess: not in the listing, but the download attempt failed with "${e.message}" instead of "no such file", so one may exist; ${byHand}`);
         htaccessSkipped = true;
       }
     }
@@ -192,9 +199,10 @@ async function remoteWalk(dir, out = []) {
       const merged = existing ? `${existing.replace(/\s*$/, "")}\n\n${snippet}` : snippet;
       fs.writeFileSync(mergedPath, merged);
       await client.uploadFrom(mergedPath, remotePath);
-      const how = existing ? `appended the cache policy to the existing file (previous copy kept at ${prev})`
-        : listed ? `the listed file was empty, wrote the cache policy (previous empty copy kept at ${prev})`
-        : "created (the host listed no .htaccess, so there is no previous copy)";
+      const hidden = listed ? "" : " that the listing hid";
+      const how = existing ? `appended the cache policy to the existing file${hidden} (previous copy kept at ${prev})`
+        : found ? `the existing file${hidden} was empty, wrote the cache policy (previous empty copy kept at ${prev})`
+        : "created (the host neither listed nor served an .htaccess, so there is no previous copy)";
       console.log(`.htaccess: ${how}; uploaded text at ${mergedPath}`);
     }
   }

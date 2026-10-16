@@ -65,8 +65,10 @@ which it warns about before connecting), web-root detection, backup to
 `tools/deploy/backups/<timestamp>/` (`light` skips files over 4 MB; use `--backup full` before a risky
 release), upload of `assets/` first, then CSS/JS, then `assets/opt/manifest.js`, then `index.html` last, `.htaccess` cache policy merged
 into the existing file (the host's file is downloaded first and kept as
-`tools/deploy/backups/htaccess-<ms>.previous.txt`; the uploaded text is `htaccess-<ms>.merged.txt`; if the host
-lists an `.htaccess` that cannot be downloaded the step is skipped, the run exits 1 and you merge
+`tools/deploy/backups/htaccess-<ms>.previous.txt`; the uploaded text is `htaccess-<ms>.merged.txt`; the download
+is attempted even when the listing shows no `.htaccess`, because some servers hide dotfiles, and a new file is
+created only after that download answers "no such file"; if a listed `.htaccess` cannot be downloaded, or an
+unlisted one fails for any other reason, the step is skipped, the run exits 1 and you merge
 `tools/deploy/htaccess-cache.txt` by hand), then an
 HTTPS verification that `index.html` and `game.js` match the local files and a print of their cache
 headers. Add `--force` only if a size-equal binary must be re-uploaded.

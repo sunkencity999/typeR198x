@@ -377,7 +377,8 @@ tools/deploy-check.sh https://typer198x.com --strict            # 5. go/no-go
   `Cache-Control: max-age=15552000` (180 days), so a returning browser would keep the old shell next to
   new scripts. `--htaccess` merges `tools/deploy/htaccess-cache.txt` into the web root's `.htaccess`
   (never replaces it: the download is kept as `tools/deploy/backups/htaccess-<ms>.previous.txt`, the uploaded
-  text as `htaccess-<ms>.merged.txt`, and a listed file that cannot be downloaded makes the step skip and the
+  text as `htaccess-<ms>.merged.txt`, a new file is created only after a download attempt answers "no such
+  file" even when the listing hides dotfiles, and any other download failure makes the step skip and the
   run exit 1): HTML and `manifest.js` `no-cache`, URLs carrying `?v=` `immutable` for a year, bare js/css/json
   revalidating and bare media/fonts 30 days (immutability is gated on the token, not the extension), the WebP /
   WOFF2 / MP3 MIME types. `tools/nginx-cache.conf` is the equivalent server-block include for an nginx host. If
