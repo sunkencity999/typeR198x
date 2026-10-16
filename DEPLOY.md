@@ -59,7 +59,9 @@ node tools/deploy/deploy.mjs --user <ftp-user> --backup light --htaccess
 unset TYPER_FTP_PASSWORD
 ```
 
-What happens, in order: FTPS connect (plain FTP only as a fallback), web-root detection, backup to
+What happens, in order: FTPS connect (explicit TLS; the script never falls back to plain FTP, a TLS or
+certificate failure aborts with exit 1, and `--secure false` is the only way to log in over cleartext FTP,
+which it warns about before connecting), web-root detection, backup to
 `tools/deploy/backups/<timestamp>/` (`light` skips files over 4 MB; use `--backup full` before a risky
 release), upload of `assets/` first, then CSS/JS, then `index.html` last, `.htaccess` cache policy merged
 into the existing file (a copy of the previous `.htaccess` is kept under `tools/deploy/backups/`), then an

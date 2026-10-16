@@ -3,11 +3,12 @@
 //
 //   TYPER_FTP_PASSWORD=... node tools/deploy/deploy.mjs \
 //       --host ftp.typer198x.com --user <ftp-user> [--port 21] \
-//       [--remote-dir auto|/public_html] [--secure auto|true|false] \
+//       [--remote-dir auto|/public_html] [--secure true|false] \
 //       [--backup light|full|none] [--dry-run] [--force] [--site https://typer198x.com] [--htaccess]
 //
 // What it does, in order:
-//   1. connects (explicit FTPS first when --secure auto, plain FTP only as a fallback),
+//   1. connects with explicit FTPS (TLS). It never falls back to plain FTP: a TLS failure aborts with exit 1,
+//      and only an explicit --secure false logs in over cleartext FTP (warned about before connecting),
 //   2. finds the remote web root (looks for index.html in /, /public_html, /httpdocs, /www, /htdocs),
 //   3. backs up the remote tree to tools/deploy/backups/<timestamp>/ (light = skip files > 4 MB,
 //      which are the art/audio masters already in git),
@@ -25,7 +26,7 @@ const opt = (k, d) => { const i = argv.indexOf(`--${k}`); return i >= 0 ? (argv[
 const HOST = opt("host", process.env.TYPER_FTP_HOST || "ftp.typer198x.com");
 const USER = opt("user", process.env.TYPER_FTP_USER || "");
 const PORT = Number(opt("port", process.env.TYPER_FTP_PORT || 21));
-const SECURE = opt("secure", "auto");
+const SECURE = opt("secure", "true"); // review R4/R23: TLS unless the operator opts out explicitly
 const REMOTE_DIR = opt("remote-dir", "auto");
 const BACKUP = opt("backup", "light");
 const DRY = opt("dry-run", "false") === "true";
@@ -39,6 +40,7 @@ const PASSWORD = PASSWORD_FILE ? fs.readFileSync(PASSWORD_FILE, "utf8").trim() :
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..");
 if (!USER) { console.error("missing --user"); process.exit(2); }
+if (SECURE !== "true" && SECURE !== "false") { console.error(`--secure must be true or false (got ${SECURE}); plain FTP is never chosen automatically`); process.exit(2); }
 if (!PASSWORD && !DRY) { console.error("missing TYPER_FTP_PASSWORD (or --password-file)"); process.exit(2); }
 
 // ------------------------------------------------------------------ local file set
@@ -68,16 +70,21 @@ console.log(`local set: ${local.length} files, ${(totalBytes / 1048576).toFixed(
 const client = new Client(120000);
 client.ftp.verbose = false;
 async function connect() {
-  const tries = SECURE === "true" ? [true] : SECURE === "false" ? [false] : [true, false];
-  let lastErr;
-  for (const secure of tries) {
-    try {
-      await client.access({ host: HOST, user: USER, password: PASSWORD, port: PORT, secure, secureOptions: { servername: HOST } });
-      console.log(`connected to ${HOST}:${PORT} ${secure ? "with explicit FTPS (TLS)" : "over PLAIN FTP (cleartext credentials!)"}`);
-      return;
-    } catch (e) { lastErr = e; console.warn(`connect (secure=${secure}) failed: ${e.message}`); client.close(); }
+  // review R4/R23: no automatic downgrade. TLS failures (bad certificate, AUTH TLS refused, reset handshake) abort.
+  const secure = SECURE !== "false";
+  if (!secure) console.warn(`WARNING: --secure false: logging in to ${HOST}:${PORT} over PLAIN FTP, the password crosses the network in cleartext`);
+  try {
+    await client.access({ host: HOST, user: USER, password: PASSWORD, port: PORT, secure, secureOptions: { servername: HOST } });
+  } catch (e) {
+    client.close();
+    if (secure) {
+      console.error(`FTPS connect to ${HOST}:${PORT} failed: ${e.message}`);
+      console.error("not retrying over plain FTP; re-run with --secure false only if you accept sending the password in cleartext");
+      process.exit(1);
+    }
+    throw e;
   }
-  throw lastErr;
+  console.log(`connected to ${HOST}:${PORT} ${secure ? "with explicit FTPS (TLS)" : "over PLAIN FTP (cleartext credentials!)"}`);
 }
 async function findRemoteRoot() {
   if (REMOTE_DIR !== "auto") { await client.cd(REMOTE_DIR); return REMOTE_DIR; }

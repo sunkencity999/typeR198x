@@ -362,7 +362,8 @@ tools/deploy-check.sh https://typer198x.com --strict            # 5. go/no-go
 ```
 
 - `deploy.mjs` reads the password from `TYPER_FTP_PASSWORD` (or `--password-file`) and never writes it
-  anywhere. It connects (explicit FTPS first), finds the web root, backs the remote tree up to
+  anywhere. It connects over explicit FTPS and never falls back to plain FTP (a TLS failure aborts;
+  `--secure false` is an explicit opt-in that sends the password in cleartext), finds the web root, backs the remote tree up to
   `tools/deploy/backups/<timestamp>/` (`--backup light` skips files over 4 MB, `full` takes everything,
   `none` skips), uploads assets first, then CSS/JS, then `index.html` last, skips unchanged binaries by
   size, and verifies over HTTPS that `index.html` and `game.js` match. `TOP_FILES` lists the root pages
