@@ -1305,10 +1305,10 @@ Object.assign(Game.prototype, {
     if (boss) this.drawBossSlab(ctx, boss);                    // L10
     if (boss && typeof this.drawBossHazardMeter === "function") this.drawBossHazardMeter(ctx, this.bossHazardRect()); // L10 surge cell
     this.drawShip(ctx);                                        // L11
-    this.drawExplosionSprites(ctx);                            // L12
-    this.drawDyingPlates(ctx);
+    this.drawExplosionSprites(ctx);                            // L12 (smoke frames, dying plates, then the additive batch opens)
     this.drawParticles(ctx);
-    // rings / bolts / debris / muzzles are drawn by drawBullets (L7) and drawParticles (L12) in 75-fx-draw.js
+    // dying plates are drawn by drawExplosionSprites before its additive batch (review R13); rings / bolts / debris /
+    // muzzles by drawBullets (L7) and drawParticles (L12) in 75-fx-draw.js
     if (typeof this.drawFloaters === "function") this.drawFloaters(ctx); // L13 (D5)
     this.drawWorldOverlays(ctx);                               // L14
     ctx.restore();

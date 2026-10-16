@@ -424,8 +424,9 @@ Object.assign(Game.prototype, {
   },
 
   // ------------------------- L12: explosions, dying plates, particles, rings, bolts -------------------------
-  // The additive batch opens at the end of drawExplosionSprites (after the source-over smoke frames and the white
-  // impact plates) and closes at the end of drawParticles: two composite assignments for the whole layer.
+  // drawExplosionSprites draws the source-over smoke frames, then the dying plates (impact plates and fades,
+  // 70-render.js), and only then opens the additive batch for the flash frames; drawParticles closes it: two
+  // composite assignments for the whole layer (review R13: plates inside the batch lost their text and fill).
   openAdditive(ctx) {
     if (this._fxAdditive) return;
     ctx.globalCompositeOperation = "lighter";
@@ -445,6 +446,7 @@ Object.assign(Game.prototype, {
       if (ex.isFlash()) { flashes++; continue; }
       ex.drawFrame(ctx);
     }
+    if (typeof this.drawDyingPlates === "function") this.drawDyingPlates(ctx);   // source-over, before the batch (review R13)
     if (!this.needsAdditiveBatch(flashes)) return;
     this.openAdditive(ctx);
     if (flashes) for (const ex of list) if (!ex.done && ex.isFlash()) ex.drawFrame(ctx);
