@@ -106,9 +106,17 @@ Object.assign(Game.prototype, {
     this.levelIndex = clamp(levelIndex, 0, 9);
     const cfg = LEVELS[this.levelIndex];
 
-    this.currentTheme = getThemeForLevel(this.levelIndex);
-    if (this.sfx && !this.save.settings.muted) {
-      this.sfx.playMusic();
+    const i = this.levelIndex;
+
+    // Sector art (render track): starts this level's loads; isLevelGateOpen() holds the sector card while they land.
+    if (typeof this.loadLevelAssets === "function") this.loadLevelAssets(i);
+
+    this.currentTheme = getThemeForLevel(i);
+    // Music is a gain, never a condition: the same track keeps playing (no restart), a new tier crossfades.
+    if (this.sfx) {
+      if (typeof this.sfx.trackForLevel === "function") this.sfx.playMusic(this.sfx.trackForLevel(i));
+      else this.sfx.playMusic();
+      if (typeof this.sfx.setMusicState === "function") this.sfx.setMusicState("wave");
     }
     this.parallax.bgOffset = 0;
     this.parallax.fgOffset = 0;
@@ -122,7 +130,7 @@ Object.assign(Game.prototype, {
     this.lock = null;
     this.inBoss = false;
     this.boss = null;
-    this.ui.bossBar.classList.add("hidden");
+    this.showBossBar(false);
     this.layoutStrikes = 0;
     this.imeStrikes = 0;
 
@@ -145,32 +153,79 @@ Object.assign(Game.prototype, {
       run.levelT = 0;
       run.wave = 0;
       run.waveKills = 0;
-      run.wavePhase = "spawn";
+      run.wavePhase = "intro";
       run.inBoss = false;
       run.boss = null;
       run.bossCheckpoint = null;
       run.retries = 0;
       run.checkpoint = this.makeCheckpoint("level");
     }
+    this.resetLevelRuntime();
 
-    this.levelT = restoredRun ? clamp(restoredRun.levelT ?? 0, 0, cfg.duration - 1) : 0;
-    this.wave = restoredRun ? clamp(restoredRun.wave | 0, 0, 2) : 0;
-    this.waveKills = restoredRun ? (restoredRun.waveKills | 0) : 0;
-    this.wavePhase = (restoredRun && restoredRun.wavePhase) || "spawn";
     this.spawnAcc = restoredRun?.spawnAcc ?? 0;
     this.powerAcc = restoredRun?.powerAcc ?? 0;
     this.minionAcc = restoredRun?.minionAcc ?? 0;
     this.hazardAcc = restoredRun?.hazardAcc ?? 0;
+    this.waveKills = 0;
 
-    // A run saved inside a boss resumes the same boss (segments, phase, segment index; progress 0).
-    if (restoredRun?.inBoss) {
+    if (restoredRun && restoredRun.inBoss) {
+      // A run saved inside a boss resumes the same boss (segments, phase, segment index; progress 0):
+      // no sector card, the boss intro replays (skippable).
+      this.wave = 2;
+      this.levelT = cfg.duration - 1;
+      this.setWavePhase("boss");
       this.beginBossFight({ restored: restoredRun.boss });
+    } else if (restoredRun && restoredRun.wavePhase === "approach") {
+      // Legacy in-boss save (B-10) or a save taken during the approach: the warning, then a fresh boss.
+      this.wave = 2;
+      this.waveKills = cfg.quota[2];
+      this.levelT = cfg.duration - 1;
+      this.setWavePhase("spawn");
+      this.beginBossApproach();
+    } else {
+      // Fresh entry or a mid-wave resume: back to the start of that wave, behind the sector card.
+      this.wave = restoredRun ? clamp(restoredRun.wave | 0, 0, 2) : 0;
+      this.levelT = restoredRun ? this.wave * cfg.cap : 0;
+      this.levelIntro = { t: 0, dur: LEVEL_INTRO_S };
+      this.setWavePhase("intro");
+      this.sfx.sectorStart();
+      this.showBanner({ kind: "sector", eyebrow: "ENTERING", title: `SECTOR ${cfg.level}`, sub: `3 WAVES // ${cfg.bossName}` });
     }
 
     if (fromMenu) this.setMode("playing");
     this.updateHUD();
     this.saveRun(true);
-    this.sfx.powerup();
+  },
+
+  // Per-level runtime state that is not part of the save: timers, rings, presentation lists, HUD chips.
+  resetLevelRuntime() {
+    this.levelIntro = null;
+    this.bossIntro = null;
+    this.phaseT = 0;
+    this.waveT = 0;
+    this.waveDmg = 0;
+    this._waveFinished = false;
+    this.hungryT = 0;
+    this.invulnT = 0;
+    this.lockMisses = 0;
+    this.lastSpawnLane = -1;
+    this.lastMinionLane = -1;
+    this.recentWords = [];
+    this.chainTargets = [];
+    this.floaters = [];
+    this.clearBanners();
+    this.clearChips();
+    this._prefetched = false;
+    this._baseTier = comboTier(this.stats.combo | 0);
+    this.player.hitT = 0;
+    this.player.kick = 0;
+    this.player.shieldFlash = 0;
+    this.typoFlash = 0;
+    this.damageFlash = 0;
+    this.whiteFlash = 0;
+    this._lowHpOn = false;
+    if (this.sfx && typeof this.sfx.lowHp === "function") this.sfx.lowHp(false);
+    this.updateLowHp();
   },
 
   // Pause "Restart sector" / Game Over "Retry sector": back to the level checkpoint.
@@ -228,6 +283,11 @@ Object.assign(Game.prototype, {
     this.enemies.length = 0;
     this.powerups.length = 0;
     this.lock = null;
+    this.levelIntro = null;
+    this.clearBanners();
+    this.clearChips();
+    if (this.floaters) this.floaters.length = 0;
+    if (this.sfx && typeof this.sfx.setMusicState === "function") this.sfx.setMusicState("end");
     this.setMode("menu");
     this.refreshMenu();
   },
@@ -266,17 +326,22 @@ Object.assign(Game.prototype, {
     info.committed = true;
     const L = info.level;
     const i = info.levelIndex;
-    const clear = 2500 + 450 * L;
-    const tally = info.tally || { clear, total: clear }; // B8 itemises time/accuracy/flawless bonuses
+    // B8: clear + time + flawless + accuracy (x retry multiplier); phase/surge/perfect-wave money was banked live.
+    const tally = info.tally || this.computeClearTally(info);
     info.tally = tally;
     this.stats.score += tally.total | 0;
+    this.levelStats.levelScore = (this.levelStats.levelScore | 0) + (tally.total | 0);
+    this.lastTally = tally;
 
     this.save.lastUnlockedLevel = Math.max(this.save.lastUnlockedLevel || 1, Math.min(10, L + 1));
     const nextMax = getHpBonusForLevel(Math.min(L + 1, 10));
     if (nextMax > this.player.maxHp) this.player.maxHp = nextMax;
     this.player.hp = this.player.maxHp;
 
-    this.recordSectorBest(L, this.buildClearResults());
+    const results = this.buildResults("level");
+    this.lastResults = results;
+    this.recordSectorBest(L, results);
+    if (results.wpm > (this.save.bestWpm | 0)) this.save.bestWpm = results.wpm;
 
     const run = this.run;
     if (L >= 10) {
@@ -311,15 +376,61 @@ Object.assign(Game.prototype, {
     storeSave(this.save);
   },
 
-  // Stand-in for B9's buildResults('level'): score earned this sector, accuracy, best combo.
-  buildClearResults() {
+  grossWpm(chars, timeMs) {
+    if (!(timeMs >= 3000)) return 0;
+    return Math.round(((chars | 0) / 5) / (timeMs / 60000));
+  },
+
+  // scope: 'level' (this sector; Level Complete) | 'over' (the run so far; Game Over) | 'run' (whole run; Victory).
+  // Flags (newHigh / newSectorBest / newWpm) compare against the save as it stands when called, so call before
+  // recordSectorBest / commitHighScore.
+  buildResults(scope = "level") {
+    const cfg = LEVELS[this.levelIndex];
+    const L = cfg.level;
+    const st = this.stats;
+    const ls = this.levelStats || defaultLevelStats();
+    const level = scope === "level";
+    const src = level ? ls : st;
+    const timeMs = Math.round(src.timeMs || 0);
+    const wpm = this.grossWpm(src.chars | 0, timeMs);
+    const acc = level ? this.getLevelAccuracyPct() : ((st.total | 0) > 0 ? Math.round((st.correct / st.total) * 10000) / 100 : 100);
+    const hpPts = (ls.damageTaken | 0) === 0 ? 1 : clamp(1 - (ls.damageTaken | 0) / Math.max(1, this.player.maxHp), 0, 1);
+    const rank = rankFor(acc, wpm, hpPts);
     const cpScore = (this.run && this.run.checkpoint) ? (this.run.checkpoint.score | 0) : 0;
+    const levelScore = Math.max(0, (st.score | 0) - cpScore);
+    const meta = this.runMeta || {};
+    const prevBest = (this.save.sectorBests || {})[String(L)];
+    const tally = level ? (this.lastTally || null) : null;
+    const bonusLines = [];
+    if (tally) {
+      const m = tally.retryMul;
+      bonusLines.push({ label: "Clear", value: Math.round(tally.clear * m) });
+      bonusLines.push({ label: "Time", value: Math.round(tally.time * m) });
+      bonusLines.push({ label: "Accuracy", value: Math.round(tally.accuracy * m) });
+      bonusLines.push({ label: "Perfect waves", value: tally.perfectWaves | 0 });
+      bonusLines.push({ label: "Flawless boss", value: Math.round(tally.flawless * m) });
+      bonusLines.push({ label: "Surges countered", value: tally.surges | 0 });
+      if ((tally.retries | 0) > 0) bonusLines.push({ label: "Retry penalty", value: `x${m}` });
+    }
+    const title = scope === "run" ? "RUN COMPLETE" : scope === "over" ? "SIGNAL LOST" : `SECTOR ${L} CLEAR`;
     return {
-      score: Math.max(0, (this.stats.score | 0) - cpScore),
-      rank: null,
-      wpm: 0,
-      acc: this.getAccuracyPct(),
-      maxCombo: this.stats.maxCombo | 0,
+      title,
+      scope,
+      level: L,
+      score: st.score | 0,
+      levelScore,
+      bonusLines,
+      wpm,
+      acc,
+      maxCombo: (level ? ls.maxCombo : st.maxCombo) | 0,
+      words: (level ? ls.words : st.words) | 0,
+      kills: (level ? ls.kills : st.kills) | 0,
+      timeMs,
+      rank,
+      newHigh: !!(meta.startLevel === 1 || meta.legacy) && (st.score | 0) > (this.save.highScore | 0),
+      newSectorBest: level && (!prevBest || levelScore > (prevBest.score | 0)),
+      newWpm: wpm > (this.save.bestWpm | 0),
+      retries: ls.retries | 0,
       date: Date.now()
     };
   },
@@ -329,14 +440,30 @@ Object.assign(Game.prototype, {
     if (!this.save.sectorBests || typeof this.save.sectorBests !== "object") this.save.sectorBests = {};
     const key = String(level);
     const prev = this.save.sectorBests[key];
-    if (!prev || (results.score | 0) > (prev.score | 0)) this.save.sectorBests[key] = { ...results };
+    const score = (results.levelScore != null ? results.levelScore : results.score) | 0;
+    if (!prev || score > (prev.score | 0)) {
+      this.save.sectorBests[key] = {
+        score,
+        rank: results.rank || null,
+        wpm: results.wpm | 0,
+        acc: results.acc,
+        maxCombo: results.maxCombo | 0,
+        date: results.date || Date.now()
+      };
+    }
   },
 
   onLevelComplete(info) {
     this.commitLevelClear(info);
+    if (this.sfx) {
+      if (typeof this.sfx.setMusicState === "function") this.sfx.setMusicState("end");
+      this.sfx.fanfare("levelClear");
+    }
     this.setMode("levelComplete");
+    const r = this.lastResults;
     const bonus = (info && info.tally) ? info.tally.total : 0;
-    this.ui.levelCompleteText.textContent = `Level ${info.level} cleared! Bonus +${formatInt(bonus)} • Max HP boosted to ${this.player.maxHp}!`;
+    this.ui.levelCompleteText.textContent = `Sector ${info.level} cleared! Bonus +${formatInt(bonus)} • Rank ${r ? r.rank : "-"} • ${r ? r.wpm : 0} WPM • Max HP ${this.player.maxHp}`;
+    if (typeof this.renderResultsCard === "function" && r) this.renderResultsCard(document.getElementById("resultsLevel"), r, { animate: true });
   },
 
   onGameOver() {
@@ -345,11 +472,20 @@ Object.assign(Game.prototype, {
     this.deathsBySector[lvl] = (this.deathsBySector[lvl] || 0) + 1;
     this.deathInBoss = !!(this.inBoss && this.boss);
     this.resetTransientFx();
+    this.clearBanners();
+    const r = this.buildResults("over");
+    this.lastResults = r;
+    if (r.wpm > (this.save.bestWpm | 0)) this.save.bestWpm = r.wpm;
     // Keep the real run (no resume stub): hp 0 tells Continue to restore the checkpoint (F030).
     if (this.run) this.writeRunSave({ dead: true });
+    if (this.sfx) {
+      if (typeof this.sfx.setMusicState === "function") this.sfx.setMusicState("end");
+      this.sfx.fanfare("gameOver");
+    }
     this.setMode("gameOver");
     const acc = this.getAccuracyPct();
-    this.ui.gameOverText.textContent = `Final score: ${formatInt(this.stats.score)} • Accuracy: ${acc}%`;
+    this.ui.gameOverText.textContent = `Final score: ${formatInt(this.stats.score)} • Accuracy: ${acc}% • ${r.wpm} WPM • Rank ${r.rank}`;
+    if (typeof this.renderResultsCard === "function") this.renderResultsCard(document.getElementById("resultsOver"), r, { animate: true });
     this.commitHighScore();
     const canRetryBoss = this.deathInBoss && !!(this.run && this.run.bossCheckpoint && this.run.boss);
     if (this.btnRetryBoss) this.btnRetryBoss.classList.toggle("hidden", !canRetryBoss);
@@ -357,13 +493,22 @@ Object.assign(Game.prototype, {
 
   onVictory() {
     // Bank the score first: the dialogue below must never stand between a win and the high score (F001).
+    const r = this.buildResults("run");
+    this.lastResults = r;
+    if (r.wpm > (this.save.bestWpm | 0)) this.save.bestWpm = r.wpm;
     this.commitHighScore();
     this.save.run = null;
     this.run = null;
     storeSave(this.save);
+    this.clearBanners();
+    if (this.sfx) {
+      if (typeof this.sfx.setMusicState === "function") this.sfx.setMusicState("end");
+      this.sfx.fanfare("victory");
+    }
     this.setMode("victory");
     const acc = this.getAccuracyPct();
-    this.ui.victoryText.textContent = `You beat all 10 levels! Score: ${formatInt(this.stats.score)} • Accuracy: ${acc}%`;
+    this.ui.victoryText.textContent = `You beat all 10 sectors! Score: ${formatInt(this.stats.score)} • Accuracy: ${acc}% • ${r.wpm} WPM • Rank ${r.rank}`;
+    if (typeof this.renderResultsCard === "function") this.renderResultsCard(document.getElementById("resultsRun"), r, { animate: true });
     this.resetEndingDialogue();
     this.advanceEndingDialogue();
   },
@@ -399,7 +544,7 @@ Object.assign(Game.prototype, {
       score,
       levelReached: meta.victory ? 11 : this.levelIndex + 1,
       startLevel: meta.startLevel,
-      wpm: 0, // B9 fills grossWpm
+      wpm: this.grossWpm(this.stats.chars | 0, this.stats.timeMs | 0),
       acc: this.getAccuracyPct(),
       maxCombo: this.stats.maxCombo | 0,
       ship: meta.ship,

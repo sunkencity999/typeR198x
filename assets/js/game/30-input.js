@@ -1,10 +1,7 @@
-// Type-R 198X — typing input, lock acquisition, combo/multiplier. Methods are mixed into Game.prototype; load order is defined in index.html.
+// Type-R 198X — typing input, lock rules v2 (SYS-01), scoring hooks (SYS-07/SYS-09). Methods are mixed into Game.prototype; load order is defined in index.html.
 Object.assign(Game.prototype, {
-  // isEntityVisible is the lock-acquisition visibility filter used by handleTyped.
-
   // ------------------------- Keydown routing (CONTRACT §10) -------------------------
-  // Steps 1, 4 (full), 5, 7 and 8 (release) are owned by C1/B1; their slots are kept in order so the
-  // routing survives when they land.
+  // Steps 1, 4 (non-play screens) and 7 are owned by C1; their slots are kept in order so the routing survives when they land.
   isReleaseKey(e) {
     return e.key === " " || e.key === "Backspace";
   },
@@ -42,7 +39,15 @@ Object.assign(Game.prototype, {
       return;
     }
 
-    // 5. Enter / NumpadEnter (C1): primary action per screen; B8 adds the finale skip.
+    // 5. Enter / NumpadEnter while playing: finale skip from 2.0 s, boss-intro skip for returning players;
+    //    otherwise ignored and never counted. Other modes: C1's primary action.
+    if ((e.key === "Enter" || e.key === "NumpadEnter") && this.mode === "playing") {
+      e.preventDefault();
+      if (e.repeat) return;
+      if (this.bossClear) { this.skipFinale("enter"); return; }
+      if (this.bossIntro && this.bossIntro.locked) this.skipBossIntro();
+      return;
+    }
 
     // 6. repeat guard: auto-repeat of a key the game owns is swallowed while playing (G007).
     if (e.repeat) {
@@ -53,9 +58,11 @@ Object.assign(Game.prototype, {
     // 7. not playing (C1): ? / F1 help, m mute.
     if (this.mode !== "playing") return;
 
-    // 8. Space / Backspace: lock release (B1). Until then ignored and never counted.
+    // 8. Space / Backspace: lock release (B1); during the finale they skip it. Never counted.
     if (this.isReleaseKey(e)) {
       e.preventDefault();
+      if (this.bossClear) { this.skipFinale("space"); return; }
+      if (this.lock && !this.inBoss) this.releaseLock("manual");
       return;
     }
 
@@ -71,13 +78,23 @@ Object.assign(Game.prototype, {
     if (!ch) return;
     e.preventDefault();
     this.keyboardSeen = true;
-    if (this.sfx && typeof this.sfx.resumeIfNeeded === "function") this.sfx.resumeIfNeeded();
+    this.pokeAudio();
     if (!this.audioReady && !this.audioUnavailable) {
       // Only keystrokes before the first successful unlock wait for audio; afterwards typing never awaits.
       this.ensureAudio().then(() => this.handleTyped(ch));
       return;
     }
     this.handleTyped(ch);
+  },
+
+  // Resume a suspended context on a gesture; when it still needs one, say so (audio-HANDOFF §2).
+  pokeAudio() {
+    const sfx = this.sfx;
+    if (!sfx) return;
+    if (typeof sfx.resumeIfNeeded === "function") sfx.resumeIfNeeded();
+    if (sfx.needsGesture && typeof this.showToast === "function") {
+      this.showToast("TAP TO RESTORE AUDIO", { key: "audio", kind: "warn" });
+    }
   },
 
   // Layout / IME strikes (G001, G002): three non-Latin keys without a correct hit in between, or three
@@ -103,185 +120,231 @@ Object.assign(Game.prototype, {
     this.imeStrikes = 0;
   },
 
-  // ------------------------- Typing -------------------------
-  handleTyped(ch) {
-    if (this.bossClear) return;
-    this.stats.total++;
-
-    // Boss priority: if inBoss, we type against boss (lock implied).
-    if (this.inBoss && this.boss) {
-      const expect = this.boss.nextChar;
-      if (ch === expect) {
-        this.noteCorrectKey();
-        this.stats.correct++;
-        this.stats.combo++;
-        this.bumpMultiplier();
-
-        this.fireLaserTo(this.boss.x - 140, this.boss.y + 10, "cyan");
-        this.sfx.laser();
-        this.sfx.hit();
-
-        this.boss.advance();
-        this.addSparks(this.boss.x - 180, this.boss.y + rand(-40, 40), 10);
-
-        // segment change hint
-        this.ui.bossSegment.textContent = `segment ${Math.min(this.boss.segmentIndex + 1, this.boss.segments.length)}/${this.boss.segments.length}  •  ${this.boss.remaining}`;
-
-        if (this.boss.done) {
-          // boss defeated
-          const centerX = this.boss.x - 150;
-          const centerY = this.boss.y;
-          this.sfx.explosion();
-          this.screenShake(10);
-          this.addExplosion(centerX, centerY, 120);
-          this.sfx.bossExplosion();
-          for (let i = 0; i < 9; i++) {
-            this.addExplosionSprite(
-              centerX + rand(-140, 140),
-              centerY + rand(-120, 120),
-              "large"
-            );
-          }
-          for (let i = 0; i < 6; i++) {
-            this.addExplosionSprite(
-              centerX + rand(-220, 220),
-              centerY + rand(-200, 200),
-              "medium"
-            );
-          }
-
-          this.endBossFight(true);
-
-          // Nothing is banked here (F039/F040): commitLevelClear(bossClear) runs once when the finale ends
-          // or earlier on any forced save (pause, blur, Stop, hidden tab).
-          const completedLevel = LEVELS[this.levelIndex].level;
-          const target = (this.levelIndex >= 9) ? "victory" : "level";
-          const finaleS = (typeof BOSS_FINALE_S === "number") ? BOSS_FINALE_S : 6.3;
-          this.bossClear = {
-            t: 0,
-            duration: finaleS,
-            target,
-            level: completedLevel,
-            levelIndex: this.levelIndex,
-            elapsed: this.levelT,
-            bossName: LEVELS[this.levelIndex].boss.name,
-            nextLevelIndex: target === "level" ? Math.min(this.levelIndex + 1, 9) : null,
-            tally: null,
-            committed: false
-          };
-          this.startBossFinale(centerX, centerY);
-        }
-      } else {
-        this.onWrongKey();
-      }
-
-      return;
-    }
-
-    // If we have a lock, try to type into it
-    if (this.lock?.ref && this.lock.ref.alive) {
-      const ref = this.lock.ref;
-      const expect = ref.nextChar();
-      if (ch === expect) {
-        this.onCorrectKey(ref);
-      } else {
-        this.onWrongKey();
-      }
-      return;
-    }
-
-    // Acquire a new lock: check powerups first (reward), then enemies.
-    const candPower = this.powerups
-      .filter(p => p.alive && this.isEntityVisible(p) && p.nextChar() === ch)
-      .sort((a,b) => a.x - b.x)[0];
-
-    if (candPower) {
-      this.lock = { kind: "powerup", ref: candPower };
-      candPower.locked = true;
-      this.onCorrectKey(candPower);
-      return;
-    }
-
-    const candEnemy = this.enemies
-      .filter(en => en.alive && this.isEntityVisible(en) && en.nextChar() === ch)
-      .sort((a,b) => a.x - b.x)[0];
-
-    if (candEnemy) {
-      this.lock = { kind: "enemy", ref: candEnemy };
-      candEnemy.locked = true;
-      this.onCorrectKey(candEnemy);
-      return;
-    }
-
-    this.onWrongKey(true);
+  // ------------------------- Targetability -------------------------
+  // Lockable once the plate's left edge is inside the canvas (CONTRACT §4); dying plates are never targets.
+  isTargetable(obj) {
+    if (!obj || obj.alive === false || obj.dying) return false;
+    const half = (obj.plateW || 60) / 2;
+    return obj.x - half <= this.w - TARGETABLE_MARGIN;
   },
 
-  onCorrectKey(ref) {
-    this.noteCorrectKey();
-    this.stats.correct++;
-    this.stats.combo++;
-    this.bumpMultiplier();
-
-    // Fire visuals
-    const beamColor = this.power.multiplier > 0 ? "lime" : (this.power.spread > 0 ? "magenta" : "cyan");
-    this.fireLaserTo(ref.x, ref.y, beamColor);
-    this.sfx.laser();
-    ref.progress++;
-    ref.flash = 0.18;
-
-    const isDone = (ref.kind === "powerup")
-      ? (ref.progress >= ref.label.length)
-      : (ref.progress >= ref.text.length);
-
-    if (isDone) {
-      // Resolve
-      if (ref.kind === "powerup") {
-        this.collectPowerup(ref);
-      } else {
-        this.killEnemy(ref);
-      }
-      this.lock = null;
-    } else {
-      // Mild hit feedback
-      if (ref.kind !== "powerup") this.sfx.hit();
-      this.addSparks(ref.x, ref.y, 6);
-    }
+  hasVisibleTargets() {
+    if (this.inBoss && this.boss) return true;
+    for (const en of this.enemies) if (this.isTargetable(en)) return true;
+    for (const p of this.powerups) if (this.isTargetable(p)) return true;
+    return false;
   },
 
-  onWrongKey(noTarget = false) {
-    // Break combo
-    this.stats.combo = 0;
-    this.stats.mult = 1;
-    this.sfx.error();
-    this.flash = 0.08;
-
-    // Optional small penalty when typing truly wrong (but not too harsh)
-    if (!noTarget) {
-      this.stats.score = Math.max(0, this.stats.score - 15);
-    }
-
-    // If we had a lock on something, keep lock (so user can recover) in early levels.
-    // In later levels, drop lock sometimes.
-    const lvl = LEVELS[this.levelIndex].level;
-    if (this.lock?.ref && lvl >= 6 && Math.random() < 0.35) {
-      this.lock.ref.locked = false;
-      this.lock = null;
-    }
+  // Typing is ignored (not counted) during the sector card, a locked boss intro and while the level gate is shut.
+  inputLockedOut() {
+    if (this.levelIntro) return true;
+    if (this.bossIntro && this.bossIntro.locked) return true;
+    if (typeof this.isLevelGateOpen === "function" && !this.isLevelGateOpen()) return true;
+    return false;
   },
 
-  bumpMultiplier() {
-    // using combo brackets + active multiplier powerup
-    const base = this.stats.combo >= 30 ? 3 : this.stats.combo >= 15 ? 2 : 1;
-    const pu = this.power.multiplier > 0 ? 2 : 1;
-    this.stats.mult = base * pu;
-    if (this.stats.combo > (this.stats.maxCombo || 0)) this.stats.maxCombo = this.stats.combo;
-  },
-
+  // Drawing helper kept for the renderer: generous on-screen test (NOT the lock rule).
   isEntityVisible(obj, padding = 20) {
     if (!obj) return false;
     const x = obj.x ?? 0;
     const y = obj.y ?? 0;
     const radius = obj.radius ?? 20;
     return (x + radius) >= -padding && (x - radius) <= (this.w + padding) && y >= -padding && y <= (this.h + padding);
+  },
+
+  // ------------------------- Lock rules -------------------------
+  // Enemies first (nearest to the ship wins), powerups only when no enemy wants the key.
+  findLockCandidate(ch) {
+    let best = null;
+    for (const en of this.enemies) {
+      if (!this.isTargetable(en) || en.nextChar() !== ch) continue;
+      if (!best || en.x < best.x) best = en;
+    }
+    if (best) return { ref: best, kind: "enemy" };
+    for (const p of this.powerups) {
+      if (!this.isTargetable(p) || p.nextChar() !== ch) continue;
+      if (!best || p.x < best.x) best = p;
+    }
+    return best ? { ref: best, kind: "powerup" } : null;
+  },
+
+  acquireLock(ref, kind) {
+    this.lock = { kind, ref };
+    ref.locked = true;
+    ref.cleanSoFar = true;
+    this.lockMisses = 0;
+    this.sfx.lock(kind);
+    return this.lock;
+  },
+
+  // reason: 'manual' (Space/Backspace), 'lost' (three wrong keys), 'dead' (target left or died: silent).
+  releaseLock(reason = "manual") {
+    const lock = this.lock;
+    if (!lock) return;
+    const ref = lock.ref;
+    this.lock = null;
+    this.lockMisses = 0;
+    if (ref) {
+      ref.locked = false;
+      if (reason === "manual" || reason === "lost") ref.progress = 0;
+    }
+    if (reason === "manual") {
+      this.sfx.lockRelease();
+      if (ref) this.addFloater(ref.x, ref.y - 30, "LOCK RELEASED", "white", 14);
+    } else if (reason === "lost") {
+      this.sfx.lockLost();
+      if (ref) this.addFloater(ref.x, ref.y - 30, "LOCK LOST", "danger", 14);
+    }
+  },
+
+  // ------------------------- Typing -------------------------
+  // Order (CONTRACT §10): finale skip -> intro lockouts -> boss branch -> lock branch.
+  handleTyped(ch) {
+    if (this.bossClear) { this.skipFinale("key"); return; }
+    if (this.mode !== "playing") return;
+    if (this.inputLockedOut()) {
+      if (this.bossIntro && this.bossIntro.locked) this.skipBossIntro();
+      return;
+    }
+
+    if (this.inBoss && this.boss) {
+      this.handleBossTyped(ch);
+      return;
+    }
+
+    const lock = this.lock;
+    if (lock && lock.ref && lock.ref.alive && !lock.ref.dying) {
+      const ref = lock.ref;
+      if (ch === ref.nextChar()) {
+        this.lockMisses = 0;
+        this.onCorrectKey(ref);
+      } else {
+        this.lockMisses = (this.lockMisses | 0) + 1;
+        this.onHardMiss(ref);
+        if (this.lockMisses >= 3) this.releaseLock("lost");
+      }
+      return;
+    }
+    if (lock) this.releaseLock("dead");
+
+    const cand = this.findLockCandidate(ch);
+    if (cand) {
+      this.acquireLock(cand.ref, cand.kind);
+      this.onCorrectKey(cand.ref);
+      return;
+    }
+    if (this.hasVisibleTargets()) this.onHardMiss(null);
+    else this.onDryFire();
+  },
+
+  // A correct key on an enemy or powerup lock: stats, combo, laser, weapon side-effects, kill / collect.
+  onCorrectKey(ref) {
+    this.noteCorrectKey();
+    this.countCorrect();
+    const len = ref.kind === "powerup" ? ref.label.length : ref.text.length;
+    this.fireLaserTo(ref.x, ref.y, this.power.multiplier > 0 ? "lime" : (this.power.spread > 0 ? "magenta" : "cyan"));
+    ref.progress++;
+    ref.flash = 0.18;
+    this.sfx.zap(clamp(ref.progress / Math.max(1, len), 0, 1));
+
+    const ch = ref.kind === "powerup" ? ref.label[ref.progress - 1] : ref.text[ref.progress - 1];
+    if (ref.kind !== "powerup") {
+      if (this.power.pierce > 0) this.applyPierce(ref, ch);
+      if (this.power.rapid > 0) this.applyRapid(ref, ch);
+    }
+
+    if (ref.progress >= len) {
+      if (ref.kind === "powerup") this.collectPowerup(ref);
+      else this.killEnemy(ref);
+      if (this.lock && this.lock.ref === ref) { this.lock = null; this.lockMisses = 0; }
+    } else {
+      this.addSparks(ref.x, ref.y, 6);
+    }
+  },
+
+  // Shared bookkeeping for every counted correct character (enemy, powerup, boss char, minion letter).
+  countCorrect() {
+    this.stats.total++;
+    this.stats.correct++;
+    this.stats.chars++;
+    this.stats.combo++;
+    if (this.stats.combo > (this.stats.maxCombo | 0)) this.stats.maxCombo = this.stats.combo;
+    const ls = this.levelStats;
+    ls.total++; ls.correct++; ls.chars++;
+    if (this.stats.combo > (ls.maxCombo | 0)) ls.maxCombo = this.stats.combo;
+    this.noteTypedChar();
+    this.bumpMultiplier();
+  },
+
+  // Hard miss: wrong key while locked, or nothing matches while targets are visible. Counted, combo breaks,
+  // never a score penalty (F033).
+  onHardMiss(ref) {
+    this.stats.total++;
+    this.stats.misses++;
+    this.levelStats.total++;
+    if (ref) {
+      ref.cleanSoFar = false;
+      ref.typoT = 0.12;
+      ref.flinch = 1;
+    }
+    const lost = this.stats.combo | 0;
+    this.onComboBreak(lost);
+    if (lost < 10) this.sfx.error();
+    this.typoFlash = 0.08;
+    this.flash = Math.max(this.flash, 0.08);
+  },
+
+  // Dry fire: nothing on screen to type. Nothing changes but a quiet buzz.
+  onDryFire() {
+    this.sfx.error(0.45);
+  },
+
+  // ------------------------- Combo / multiplier -------------------------
+  // Returns { old, new }; onMultTier fires only when the BASE tier rose (MULTI pickups do not announce).
+  bumpMultiplier() {
+    const old = this.stats.mult | 0 || 1;
+    const baseTier = comboTier(this.stats.combo | 0);
+    const bonus = this.power.multiplier > 0 ? MULTI_TIER_BONUS : 0;
+    const next = Math.min(MULT_CAP, baseTier + bonus);
+    this.stats.mult = next;
+    const prevBase = this._baseTier | 0 || 1;
+    this._baseTier = baseTier;
+    if (baseTier > prevBase && next > old) this.onMultTier(next, old);
+    return { old, new: next };
+  },
+
+  onMultTier(newMult, oldMult) {
+    this.sfx.comboTier(newMult);
+    this.showBanner({ kind: "callout", title: `x${newMult} MULTIPLIER`, color: this.tierColor(newMult) });
+  },
+
+  onComboBreak(lost) {
+    this.stats.combo = 0;
+    this._baseTier = 1;
+    this.bumpMultiplier();
+    if (lost >= 10) {
+      this.sfx.comboBreak(lost);
+      this.addFloater(this.player.x + 20, this.player.y - 60, `COMBO LOST -${lost}`, "danger", 16);
+    }
+  },
+
+  tierColor(mult) {
+    return mult >= 4 ? "amber" : mult === 3 ? "violet" : mult === 2 ? "cyan" : "white";
+  },
+
+  // ------------------------- Score sink -------------------------
+  // The single scoring entry: applies diff().score, banks into stats/levelStats and shows a floater.
+  // Callers pass the multiplied amount for kills/pickups/boss chars and the flat amount for bonuses.
+  addScore(amount, opts = {}) {
+    const n = Math.round(Math.max(0, amount) * (this.diff().score || 1));
+    if (n <= 0) return 0;
+    this.stats.score += n;
+    this.levelStats.levelScore = (this.levelStats.levelScore | 0) + n;
+    if (Number.isFinite(opts.x) && Number.isFinite(opts.y)) {
+      const text = opts.label ? `${opts.label} +${formatInt(n)}` : `+${formatInt(n)}`;
+      const color = opts.kind === "bonus" ? "amber" : this.tierColor(this.stats.mult | 0);
+      this.addFloater(opts.x, opts.y, text, color, opts.kind === "bonus" ? 20 : 16);
+    }
+    return n;
   },
 });

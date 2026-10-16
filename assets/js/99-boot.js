@@ -9,11 +9,15 @@ if (SAVE_STATE.unavailable) game.onPersistUnavailable();
 game.setMode("menu");
 game.refreshMenu();
 
-// Harness / debugging hooks (CONTRACT §4). stats() reports partial telemetry until B3/B9 land.
+// Harness / debugging hooks (CONTRACT §4 + content-HANDOFF). stats() -> { incomingCps, leaksPerMin, deathsBySector, liveChars }.
 window.TypeRDebug = {
   LEVELS,
   normalizeKey,
   foldLatin,
   buildBossSegments,
+  buildBossPlan,
+  rankFor,
+  comboTier,
+  getThemeForLevel,
   stats: () => game.debugStats()
 };
