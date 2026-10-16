@@ -53,19 +53,37 @@ Object.assign(Game.prototype, {
 
   // ------------------------- Run/Level control -------------------------
   startNewRun() {
+    this.beginRunAt(0);
+  },
+
+  // Sector select (C5 / SYS-12): a fresh run that starts at sector levelIndex+1 with that sector's HP curve, score 0
+  // and a level checkpoint; run.startLevel > 1 keeps it off the headline high score (commitHighScore) but in the
+  // top-10 table. Locked sectors are refused. The menu confirm (a saved run at stake) lives in enterSectorFromMenu.
+  startSector(levelIndex) {
+    const i = clamp(levelIndex | 0, 0, 9);
+    if (i + 1 > ((this.save.lastUnlockedLevel | 0) || 1)) return false;
+    this.beginRunAt(i);
+    return true;
+  },
+
+  // Shared by startNewRun (sector 1) and startSector(i): bank the abandoned run, reset player/stats, new run record.
+  beginRunAt(levelIndex) {
+    const i = clamp(levelIndex | 0, 0, 9);
+    const L = i + 1;
     this.commitHighScore(); // bank whatever run is being abandoned (F009)
     this.setPlayerShip(this.getSelectedShipId());
-    this.levelIndex = 0;
+    this.levelIndex = i;
     this.stats = defaultStats();
     this.levelStats = defaultLevelStats();
-    this.player.maxHp = getHpBonusForLevel(1);
+    this.player.maxHp = getHpBonusForLevel(L);
     this.player.hp = this.player.maxHp;
     this.player.shield = 0;
     this.power = { spread: 0, pierce: 0, rapid: 0, multiplier: 0 };
     this.toastOnce.clear();
-    this.run = this.save.run = this.newRunRecord(0, 1);
+    this._accuracyTipPending = false;
+    this.run = this.save.run = this.newRunRecord(i, L);
     this.setRunMeta(this.run);
-    this.startLevel(0, { fromMenu: true, fresh: true });
+    this.startLevel(i, { fromMenu: true, fresh: true });
   },
 
   continueRun() {
@@ -290,6 +308,10 @@ Object.assign(Game.prototype, {
     if (this.sfx && typeof this.sfx.setMusicState === "function") this.sfx.setMusicState("end");
     this.setMode("menu");
     this.refreshMenu();
+    // Until refreshMenu() calls renderMenuScreens() itself (shell hook), the cabinet is re-rendered here.
+    if (!this._menuScreensHooked && typeof this.renderMenuScreens === "function") {
+      this.renderMenuScreens(typeof SCREENS_SELF !== "undefined" ? SCREENS_SELF : "self");
+    }
   },
 
   // ------------------------- Checkpoints -------------------------

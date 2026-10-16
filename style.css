@@ -860,9 +860,6 @@ body[data-mode] .screen:not(.is-active) .screenInner > * {
   background: linear-gradient(135deg, rgba(57,245,255,0.08), rgba(255,57,209,0.06));
 }
 
-/* Compatibility shim: until C5's renderResumeCard lands, show the card only when Continue is enabled. */
-.resumeCard:has(> #btnContinue:disabled) { display: none; }
-
 #resumeShip { width: 64px; height: 48px; object-fit: contain; }
 .resumeMeta { min-width: 0; }
 .resumeMeta p { margin: 0; }
@@ -1073,6 +1070,68 @@ fieldset.shipGrid > legend {
   margin-top: var(--sp-4);
   padding-top: var(--sp-3);
   border-top: 1px solid var(--chrome0);
+}
+
+/* Cabinet states (screens track, C5): resume card moods, sector tile badges, saved marker, roving focus */
+.resumeCard { position: relative; overflow: hidden; }
+.resumeCard::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--c-ui);
+  opacity: 0.8;
+}
+.resumeCard[data-state="dead"] {
+  border-color: rgba(255,77,109,0.5);
+  background: linear-gradient(135deg, rgba(255,77,109,0.08), rgba(5,6,11,0.25));
+}
+.resumeCard[data-state="dead"]::before { background: var(--c-danger); }
+.resumeCard[data-state="dead"] .resumeMeta .label { color: var(--c-danger); opacity: 0.9; }
+.resumeCard .resumeMeta .label { color: var(--c-ui); opacity: 0.9; }
+.resumeCard .btn-arcade { white-space: nowrap; }
+#resumeShip { filter: drop-shadow(0 0 8px rgba(57,245,255,0.35)); }
+#resumeStats {
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.04em;
+  line-height: 1.5;
+  opacity: 0.75;
+  white-space: pre-line;
+}
+
+.sectorCard { padding-right: 14px; }
+.sectorCard.is-cleared {
+  border-color: rgba(57,245,255,0.45);
+  background: linear-gradient(180deg, rgba(57,245,255,0.07), rgba(0,0,0,0.35));
+}
+.sectorCard.is-cleared .sectorStatus { gap: 6px; }
+.sectorCard .sectorStatus .rankBadge {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  font-size: 9px;
+  border-radius: 4px;
+}
+.sectorCard .sectorBest { letter-spacing: 0.04em; opacity: 0.85; }
+.sectorCard.is-saved::after {
+  content: "";
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--c-score);
+  box-shadow: 0 0 6px var(--c-score);
+}
+.sectorCard:focus-visible {
+  outline: 2px solid var(--neon-cyan);
+  outline-offset: 2px;
+  border-color: var(--neon-cyan);
 }
 
 /* ----- 8. Pause and settings ---------------------------------------------------- */
@@ -1889,6 +1948,23 @@ fieldset.shipGrid > legend {
 .hsRow td:nth-child(3) { color: var(--c-score); }
 .hsRow td:nth-child(1) { opacity: 0.6; }
 .hsEmpty td { text-align: center; white-space: normal; opacity: 0.6; padding: 18px 8px; }
+
+/* Records table tags (screens track, C5 / B-12) */
+.hsTag {
+  display: inline-block;
+  padding: 1px 7px;
+  border: 1px solid var(--chrome1);
+  border-radius: var(--r-pill);
+  font-size: var(--fs-2xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+.hsTag[data-tag="LEGEND"] { color: var(--c-score); border-color: rgba(255,193,74,0.6); opacity: 1; }
+.hsTag[data-tag="FULL"] { color: var(--c-ui); border-color: rgba(57,245,255,0.45); }
+.hsRow.is-legend td:nth-child(2) { color: var(--c-score); }
+.hsTable th:nth-child(4), .hsTable td:nth-child(4) { text-align: center; }
+#storyModal[data-readonly] .modalEyebrow::after { content: " · archive"; opacity: 0.6; }
 
 /* ----- 13. Loading overlay ------------------------------------------------------- */
 #loadingOverlay {

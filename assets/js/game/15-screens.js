@@ -170,14 +170,21 @@ Object.assign(Game.prototype, {
   screensOpenModalFallback(el, opts = {}) {
     if (!el || el._screensOpen) return false;
     if (!Array.isArray(this.modalStack)) this.modalStack = [];
-    el._screensOpen = { returnFocusTo: opts.returnFocusTo || document.activeElement, onClose: opts.onClose || null };
+    el._screensOpen = { returnFocusTo: opts.returnFocusTo || document.activeElement, onClose: opts.onClose || null, hadHidden: el.classList.contains("hidden") };
     el.classList.remove("hidden");
     el.classList.remove("is-dismissed");
     el.setAttribute("aria-hidden", "false");
     this.modalStack.push(el);
     const focusEl = typeof opts.initialFocus === "string" ? el.querySelector(opts.initialFocus) : opts.initialFocus;
     const target = focusEl || el.querySelector(".modalActions .btn-arcade:last-child, .modalActions .btn-arcade, button");
-    requestAnimationFrame(() => { try { if (target) target.focus({ preventScroll: true }); } catch (_) { /* no focus */ } });
+    // The overlay's visibility transition keeps its content unfocusable for the first frame: retry until it sticks.
+    let tries = 0;
+    const tryFocus = () => {
+      if (!el._screensOpen || !target) return;
+      try { target.focus({ preventScroll: true }); } catch (_) { /* not focusable yet */ }
+      if (document.activeElement !== target && ++tries < 30) requestAnimationFrame(tryFocus);
+    };
+    requestAnimationFrame(tryFocus);
     this.screensBindModalKeys();
     return true;
   },
@@ -186,7 +193,8 @@ Object.assign(Game.prototype, {
     if (!el || !el._screensOpen) return false;
     const state = el._screensOpen;
     el._screensOpen = null;
-    el.classList.add("is-dismissed");
+    if (state.hadHidden) { el.classList.add("hidden"); el.classList.remove("is-dismissed"); }
+    else el.classList.add("is-dismissed");
     el.setAttribute("aria-hidden", "true");
     if (Array.isArray(this.modalStack)) {
       const i = this.modalStack.indexOf(el);
@@ -247,6 +255,347 @@ Object.assign(Game.prototype, {
   screensUiTick(kind) {
     const sfx = this.sfx;
     if (sfx && typeof sfx.uiTick === "function") { try { sfx.uiTick(kind); } catch (_) { /* audio optional */ } }
+  },
+});
+
+// ------------------------- Title cabinet (C5 / VIS-11 / UX-02 / UX-03 / SYS-12) -------------------------
+// renderSectorGrid(): ten .sectorCard tiles from save.lastUnlockedLevel / save.sectorBests with roving tabindex;
+// renderResumeCard(): "Resume Sector N" for a live run, "Replay Sector N" for a saved death; renderMenuStats();
+// records modal (top-10 with the B-12 tag column); briefing re-read; Start / Reset confirm guards.
+const SECTOR_TAG = (h) => (h.levelReached === 11 ? "LEGEND" : (h.startLevel > 1 ? `FROM S${h.startLevel}` : "FULL"));
+
+function screensCompact(n) {
+  const v = Math.max(0, n | 0);
+  if (v >= 100000) return `${Math.round(v / 1000)}k`;
+  if (v >= 10000) return `${(v / 1000).toFixed(1).replace(/\.0$/, "")}k`;
+  return formatInt(v);
+}
+
+function screensEscape(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+Object.assign(Game.prototype, {
+  initMenuScreens() {
+    const E = this.screenEls || {};
+    const on = (el, ev, fn) => { if (el) el.addEventListener(ev, fn); };
+    on(E.btnRecords, "click", () => this.openRecords());
+    on(E.btnRecordsClose, "click", () => this.closeRecords());
+    on(E.btnHelp, "click", () => { if (typeof this.openHelp === "function") this.openHelp(); });
+    on(E.btnPauseHelp, "click", () => { if (typeof this.openHelp === "function") this.openHelp(); });
+    on(E.btnHelpClose, "click", () => { if (typeof this.closeHelp === "function") this.closeHelp(); });
+    on(E.btnBriefing, "click", () => this.openBriefing());
+    on(E.btnMenuSettings, "click", () => this.openSettingsFromMenu());
+    on(E.sectorGrid, "click", (e) => {
+      const card = e.target && e.target.closest ? e.target.closest(".sectorCard") : null;
+      if (!card || card.disabled || card.getAttribute("aria-disabled") === "true") return;
+      this.enterSectorFromMenu(Number(card.dataset.level) - 1);
+    });
+    on(E.sectorGrid, "keydown", (e) => this.onSectorGridKey(e));
+
+    // Destructive actions confirm first. The guards run in the capture phase ahead of the shell's handlers and
+    // step aside when the shell marks its own handler as confirming (startHandlesConfirm / resetHandlesConfirm).
+    this.guardClick(E.btnStart, () => !this.startHandlesConfirm && this.runHasProgress(this.save.run), () => {
+      const run = this.save.run;
+      return {
+        eyebrow: "Saved run", title: "Abandon current run?",
+        body: `Sector ${(run.levelIndex | 0) + 1}, ${formatInt((run.stats && run.stats.score) | 0)} pts. Starting a new run replaces it.`,
+        okLabel: "Start new run", cancelLabel: "Keep my run", danger: true
+      };
+    });
+    this.guardClick(E.btnResetSave, () => !this.resetHandlesConfirm, () => ({
+      eyebrow: "Reset save", title: "Erase all progress?",
+      body: "High scores, sector bests, unlocked sectors and settings on this device will be reset.",
+      okLabel: "Erase everything", cancelLabel: "Keep my save", danger: true
+    }), () => this.renderMenuScreens(SCREENS_SELF));
+
+    // Enter on the menu with nothing focused starts (resume when the card shows). Fallback until the shell's router lands.
+    window.addEventListener("keydown", (e) => {
+      if (typeof this.primaryFor === "function") return;
+      if (this.mode !== "menu" || (e.key !== "Enter" && e.key !== "NumpadEnter") || e.repeat) return;
+      if (Array.isArray(this.modalStack) && this.modalStack.length) return;
+      const t = e.target;
+      const tag = (t && t.tagName) ? t.tagName.toLowerCase() : "";
+      if (tag === "button" || tag === "a" || tag === "select" || tag === "textarea") return;
+      if (tag === "input" && t.id !== "playerName") return;
+      const card = E.resumeCard;
+      const primary = (card && !card.classList.contains("hidden") && E.btnContinue && !E.btnContinue.disabled) ? E.btnContinue : E.btnStart;
+      if (!primary) return;
+      e.preventDefault();
+      primary.click();
+    });
+  },
+
+  guardClick(btn, needsConfirm, makeOpts, afterPass) {
+    if (!btn) return;
+    btn.addEventListener("click", (e) => {
+      if (btn._screensPass) { btn._screensPass = false; return; }
+      let need = false;
+      try { need = !!needsConfirm(); } catch (_) { need = false; }
+      if (!need) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      this.screensConfirm(makeOpts()).then((ok) => {
+        if (!ok) { this.screensUiTick("back"); return; }
+        this.screensUiTick("confirm");
+        btn._screensPass = true;
+        btn.click();
+        if (typeof afterPass === "function") afterPass();
+      });
+    }, true);
+  },
+
+  // A run worth a confirm: anything typed, any sector entered, or a saved death (its checkpoint still counts).
+  runHasProgress(run) {
+    if (!run) return false;
+    const dead = (Number.isFinite(run.hp) ? run.hp : 1) <= 0;
+    const score = (run.stats && run.stats.score) | 0;
+    return dead || (run.levelT || 0) > 0 || !!run.inBoss || score > 0 || (run.levelIndex | 0) > ((run.startLevel | 0) - 1);
+  },
+
+  // ------------------------- Sector grid -------------------------
+  renderSectorGrid() {
+    const grid = this.screenEls && this.screenEls.sectorGrid;
+    if (!grid) return;
+    const save = this.save;
+    const unlocked = clamp((save.lastUnlockedLevel | 0) || 1, 1, 10);
+    const bests = save.sectorBests || {};
+    const run = save.run;
+    let cards = Array.from(grid.querySelectorAll(".sectorCard"));
+    if (cards.length !== LEVELS.length) {
+      grid.textContent = "";
+      cards = LEVELS.map((cfg) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "sectorCard";
+        b.dataset.level = String(cfg.level);
+        b.innerHTML = '<span class="sectorNum"></span><span class="sectorBoss"></span><span class="sectorStatus"></span>';
+        grid.appendChild(b);
+        return b;
+      });
+    }
+    let focusIndex = -1;
+    cards.forEach((card, i) => {
+      const L = i + 1;
+      const cfg = LEVELS[i];
+      const best = bests[String(L)];
+      const locked = L > unlocked;
+      const cleared = !!best;
+      const current = !locked && !cleared && L === unlocked;
+      const saved = !!run && (run.levelIndex | 0) === i;
+      let accent = "cyan";
+      try { accent = (typeof getThemeForLevel === "function" && getThemeForLevel(i).accent) || "cyan"; } catch (_) { accent = "cyan"; }
+      card.dataset.level = String(L);
+      card.className = `sectorCard${cleared ? " is-cleared" : ""}${current ? " is-current" : ""}${locked ? " is-locked" : ""}${saved ? " is-saved" : ""}`;
+      card.disabled = locked;
+      card.setAttribute("aria-disabled", locked ? "true" : "false");
+      card.style.setProperty("--sector-accent", `var(--neon-${accent})`);
+      const num = card.querySelector(".sectorNum"), boss = card.querySelector(".sectorBoss"), status = card.querySelector(".sectorStatus");
+      if (num) num.textContent = String(L).padStart(2, "0");
+      if (boss) boss.textContent = cfg.bossName;
+      let aria = `Sector ${L}, ${cfg.bossName}`;
+      if (status) {
+        if (cleared) {
+          const rank = best.rank || "C";
+          status.innerHTML = `<span class="rankBadge" data-rank="${screensEscape(rank)}">${screensEscape(rank)}</span><span class="sectorBest mono">${screensEscape(screensCompact(best.score))}</span>`;
+          aria += `, cleared, rank ${rank}, best ${formatInt(best.score | 0)}`;
+        } else if (current) {
+          status.textContent = saved ? "RESUME" : "NEXT";
+          aria += saved ? ", saved run" : ", next";
+        } else if (locked) {
+          status.textContent = "";
+          aria += ", locked";
+        } else {
+          status.textContent = "CLEARED";
+          aria += ", cleared";
+        }
+      }
+      card.setAttribute("aria-label", aria);
+      if (!locked && (current || focusIndex < 0 || L === unlocked)) focusIndex = i;
+    });
+    cards.forEach((card, i) => card.setAttribute("tabindex", i === focusIndex ? "0" : "-1"));
+  },
+
+  // Roving focus: arrows move ±1 / ±5, Home / End jump; locked tiles are skipped over.
+  onSectorGridKey(e) {
+    const grid = this.screenEls && this.screenEls.sectorGrid;
+    if (!grid) return;
+    const cards = Array.from(grid.querySelectorAll(".sectorCard"));
+    const cur = cards.indexOf(document.activeElement);
+    if (cur < 0) return;
+    const delta = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: 5, ArrowUp: -5 }[e.key];
+    let next = -1;
+    if (delta) {
+      let j = cur + delta;
+      while (j >= 0 && j < cards.length && cards[j].disabled) j += Math.sign(delta) * (Math.abs(delta) === 5 ? 5 : 1);
+      if (j >= 0 && j < cards.length) next = j;
+    } else if (e.key === "Home") next = cards.findIndex((c) => !c.disabled);
+    else if (e.key === "End") { for (let j = cards.length - 1; j >= 0; j--) if (!cards[j].disabled) { next = j; break; } }
+    if (next < 0) return;
+    e.preventDefault();
+    cards.forEach((c, i) => c.setAttribute("tabindex", i === next ? "0" : "-1"));
+    try { cards[next].focus({ preventScroll: true }); } catch (_) { /* no focus */ }
+  },
+
+  // Sector tile -> confirm when a run is at stake -> audio unlock -> startSector(i) (20-run.js).
+  async enterSectorFromMenu(levelIndex) {
+    if (this._sectorEntering) return false;
+    this._sectorEntering = true;
+    try {
+      const i = clamp(levelIndex | 0, 0, 9);
+      if (i + 1 > ((this.save.lastUnlockedLevel | 0) || 1)) return false;
+      const run = this.save.run;
+      if (run && this.runHasProgress(run)) {
+        const ok = await this.screensConfirm({
+          eyebrow: "Saved run", title: `Start Sector ${i + 1} fresh?`,
+          body: `Your saved run (Sector ${(run.levelIndex | 0) + 1}, ${formatInt((run.stats && run.stats.score) | 0)} pts) will be replaced.`,
+          okLabel: `Start Sector ${i + 1}`, cancelLabel: "Keep my run", danger: true
+        });
+        if (!ok) { this.screensUiTick("back"); return false; }
+      }
+      const name = (this.ui && this.ui.playerName && this.ui.playerName.value || "").trim();
+      if (name) this.save.playerName = name;
+      this.screensUiTick("confirm");
+      if (typeof this.ensureAudio === "function") await this.ensureAudio();
+      // A fresh pilot's first sector goes through the briefing like Start does.
+      if (i === 0 && !this.save.storySeen && this.storyModal && typeof this.showStoryModal === "function") {
+        this.commitHighScore();
+        this.save.run = null;
+        this.run = null;
+        storeSave(this.save);
+        this.pendingLaunch = "new";
+        this.showStoryModal();
+        return true;
+      }
+      this.startSector(i);
+      if (typeof this.focusGameCanvas === "function") this.focusGameCanvas();
+      return true;
+    } finally {
+      this._sectorEntering = false;
+    }
+  },
+
+  // ------------------------- Resume card -------------------------
+  renderResumeCard() {
+    const E = this.screenEls || {};
+    const card = E.resumeCard;
+    if (!card) return;
+    const run = this.save.run;
+    const show = !!run && this.runHasProgress(run);
+    card.classList.toggle("hidden", !show);
+    if (E.btnStart) {
+      const labelEl = E.btnStart.querySelector(".btnLabel") || E.btnStart;
+      const label = (show || (this.save.victories | 0) > 0) ? "NEW RUN" : "START NEW RUN";
+      if (E.btnStart.getAttribute("aria-busy") === "true") E.btnStart.dataset.idleLabel = label;
+      else if (labelEl.textContent !== label) labelEl.textContent = label;
+    }
+    if (!show) return;
+    const i = clamp(run.levelIndex | 0, 0, 9);
+    const L = i + 1;
+    const cfg = LEVELS[i];
+    const dead = (Number.isFinite(run.hp) ? run.hp : 1) <= 0;
+    const bossRetry = dead && !!(run.inBoss && run.bossCheckpoint && run.boss);
+    const cp = (bossRetry ? run.bossCheckpoint : run.checkpoint) || null;
+    const stats = run.stats || {};
+    const acc = (stats.total | 0) > 0 ? Math.round((stats.correct / stats.total) * 100) : 100;
+    const clearedInRun = Math.max(0, i - ((run.startLevel | 0) - 1));
+    const shipId = run.shipId || this.getSelectedShipId();
+    card.dataset.state = dead ? "dead" : "live";
+    const label = card.querySelector(".resumeMeta .label");
+    if (label) label.textContent = dead ? "Signal lost" : (run.inBoss ? "Saved run · in the boss" : "Saved run");
+    if (E.resumeTitle) E.resumeTitle.textContent = `Sector ${L}`;
+    if (E.resumeStats) {
+      const where = `${cfg.bossName} · ${screensShipName(shipId)}`;
+      const numbers = dead
+        ? `Checkpoint ${formatInt(cp ? cp.score | 0 : 0)} pts · ${bossRetry ? `boss phase ${((cp && cp.bossPhase) | 0) + 1}` : "sector start"} · HP ${run.maxHp}/${run.maxHp}`
+        : `${formatInt(stats.score | 0)} pts · ${acc}% acc · HP ${Math.round(run.hp)}/${run.maxHp} · ${clearedInRun} sector${clearedInRun === 1 ? "" : "s"} cleared this run`;
+      E.resumeStats.textContent = `${where}\n${numbers}`;
+    }
+    if (E.btnContinue) {
+      const btnLabel = E.btnContinue.querySelector(".btnLabel") || E.btnContinue;
+      const text = `${dead ? (bossRetry ? "Retry boss" : "Replay") : "Resume"} Sector ${L}`;
+      if (E.btnContinue.getAttribute("aria-busy") === "true") E.btnContinue.dataset.idleLabel = text;
+      else if (btnLabel.textContent !== text) btnLabel.textContent = text;
+      E.btnContinue.disabled = false;
+      E.btnContinue.classList.remove("disabled");
+    }
+    if (E.resumeShip) {
+      const src = screensShipSrc(shipId);
+      if (src && E.resumeShip.getAttribute("src") !== src) E.resumeShip.src = src;
+      E.resumeShip.alt = screensShipName(shipId);
+    }
+  },
+
+  renderMenuStats() {
+    const E = this.screenEls || {};
+    const save = this.save;
+    if (E.statHigh) E.statHigh.textContent = formatInt(save.highScore || 0);
+    const unlocked = clamp((save.lastUnlockedLevel | 0) || 1, 1, 10);
+    const bestCount = Object.keys(save.sectorBests || {}).filter((k) => save.sectorBests[k]).length;
+    const cleared = (save.victories | 0) > 0 ? 10 : Math.min(10, Math.max(bestCount, unlocked - 1));
+    if (E.statUnlocked) E.statUnlocked.textContent = `${cleared}/10`;
+  },
+
+  // ------------------------- Records -------------------------
+  renderRecordsTable() {
+    const table = this.screenEls && this.screenEls.highScoreTable;
+    if (!table) return;
+    const tbody = table.querySelector("tbody") || table;
+    const rows = (Array.isArray(this.save.highScores) ? this.save.highScores : [])
+      .filter((h) => h && typeof h === "object")
+      .slice()
+      .sort((a, b) => ((b.score | 0) - (a.score | 0)) || ((b.date | 0) - (a.date | 0)))
+      .slice(0, 10);
+    if (!rows.length) {
+      tbody.innerHTML = '<tr class="hsRow hsEmpty"><td colspan="6">No runs recorded yet. Clear a sector to enter the hall.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map((h, i) => {
+      const tag = SECTOR_TAG(h);
+      const sector = h.levelReached === 11 ? "ALL" : String(h.levelReached | 0 || 1);
+      return `<tr class="hsRow${tag === "LEGEND" ? " is-legend" : ""}"><td>${i + 1}</td><td>${screensEscape(h.name || "PILOT")}</td><td>${formatInt(h.score | 0)}</td><td>${sector}</td><td>${h.wpm | 0}</td><td><span class="hsTag" data-tag="${screensEscape(tag)}">${screensEscape(tag)}</span></td></tr>`;
+    }).join("");
+  },
+
+  openRecords() {
+    const E = this.screenEls || {};
+    if (!E.recordsModal) return;
+    this.renderRecordsTable();
+    this.screensOpenModal(E.recordsModal, { returnFocusTo: E.btnRecords, initialFocus: "#btnRecordsClose" });
+  },
+
+  closeRecords() {
+    const E = this.screenEls || {};
+    this.screensCloseModal(E.recordsModal);
+  },
+
+  // Read-only briefing: Launch hidden, Back closes; the shell's showStoryModal({launch}) keeps the launch path.
+  openBriefing() {
+    const E = this.screenEls || {};
+    const modal = E.storyModal;
+    if (!modal) return;
+    const launch = document.getElementById("btnStoryLaunch");
+    const back = document.getElementById("btnStoryBack");
+    const hadLaunch = launch && !launch.classList.contains("hidden");
+    if (launch) launch.classList.add("hidden");
+    const onBack = () => this.screensCloseModal(modal);
+    if (back) back.addEventListener("click", onBack);
+    modal.dataset.readonly = "1";
+    this.screensOpenModal(modal, {
+      returnFocusTo: E.btnBriefing,
+      initialFocus: back || "#btnStoryBack",
+      onClose: () => {
+        delete modal.dataset.readonly;
+        if (launch && hadLaunch) launch.classList.remove("hidden");
+        if (back) back.removeEventListener("click", onBack);
+      }
+    });
+  },
+
+  openSettingsFromMenu() {
+    if (typeof this.openSettingsModal === "function") { this.openSettingsModal(); return; }
+    const btn = document.getElementById("btnSettings");
+    if (btn) btn.click();
   },
 });
 
