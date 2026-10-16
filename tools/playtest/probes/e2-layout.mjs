@@ -38,7 +38,7 @@ P.check("idle play: layoutCountPer5s <= 10", idle.layoutPer5s <= 10, idle);
 // the score tween settles between keystrokes). On top of that the window carries event-driven writes that each dirty
 // layout once and land or not depending on the wave: a tutorial tip / toast insert and its removal, the announcer slot,
 // a powerup pickup (flyLabel start state + chip insert), multiplier-tier and combo-break text, the sector prefetch bar.
-// Allow ~10 of those: 25 + 10 = 35. Measured on this branch, DPR 2, run alone: 22.9-31.3 depending on which events hit.
+// Allow ~15 of those: 25 + 15 = 40 (see the breakdown below). Measured on this branch, DPR 2, run alone: 25.6-36.8 depending on which events hit.
 // Typing target 40 on a FRESH save at DPR 2 (measured with out/review/e2-layout-verify.mjs after the review fixes):
 // ~26 from the 5 Hz HUD text commits plus chip/combo writes, ~9 for one onboarding tip toast lifecycle (insert,
 // toastIn, removal) that a fresh save shows in this window, ~2 for the lock-lost / pickup announcements (R48),
