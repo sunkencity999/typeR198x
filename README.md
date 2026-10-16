@@ -175,20 +175,24 @@ come from `PALETTE` / CSS variables rather than literals.
    tools/bump-version.sh 20261016a            # rewrite every shell token (index, info, support, privacy pages, game.js)
    tools/bump-version.sh                      # today's date + next letter
    tools/bump-version.sh --dry-run            # report only
-   tools/bump-version.sh --add-missing        # also stamp tags that have no ?v= yet
+   tools/bump-version.sh --add-missing        # also stamp script/stylesheet tags that have no ?v= yet (never the font preload)
    tools/bump-version.sh --root /tmp/copy     # rehearse on a copy
    ```
 
    It leaves the `withAssetVersion` literal line in `game.js` untouched because `native/sync-web.sh`
-   patches that exact line.
+   patches that exact line, and `--add-missing` never stamps the Orbitron `<link rel="preload" as="font">`:
+   its `href` must stay byte-identical to the `@font-face` `url()` in `assets/style/tokens.css`, otherwise the
+   browser preloads one URL, fetches another for the face and warns about an unused preload.
 2. **ART token**: the `"version"` in `assets/opt/manifest.json` (and the identical value in
    `manifest.js`), written by `tools/build-web-assets.sh`. `Assets.url()` and the music transport append
    it to every `assets/opt/*` URL; `bump-version.sh` stamps it on any `assets/opt` URL that appears in the
-   HTML. `manifest.js` itself takes the **shell** token because it is part of the shell.
+   HTML (`<script>`, `<link>` and the ship-card `<img>` tags). `manifest.js` itself takes the **shell** token
+   because it is part of the shell.
 
 Production must serve the HTML pages, `/` and `manifest.js` with `Cache-Control: no-cache` and every
 versioned URL as immutable; see [Deployment](#deployment). Bump the shell token before every deploy.
-`tools/deploy-check.sh` fails when the served tokens disagree or `manifest.js` differs from the local one.
+`tools/deploy-check.sh` fails when the served tokens disagree, `manifest.js` differs from the local one, or an
+`assets/opt` token on the shell (the ship cards) differs from the manifest version.
 
 ## Asset pipeline
 
@@ -340,7 +344,7 @@ Full flag, field and fixture tables: [tools/playtest/README.md](./tools/playtest
 | Script | Purpose |
 | --- | --- |
 | `tools/build-web-assets.sh` | Masters -> `assets/opt` + manifest (+ og-card); `MANIFEST_ONLY=1`, `OG_ONLY=1`, `SKIP_OG=1` |
-| `tools/bump-version.sh [token] [--root] [--dry-run] [--add-missing]` | Single writer of the shell token |
+| `tools/bump-version.sh [token] [--root] [--dry-run] [--add-missing] [--quiet]` | Single writer of the shell token |
 | `tools/deploy-check.sh <url> [--strict] [--local] [--unreferenced-out f]` | Remote header/MIME/token/privacy checks; `--local` adds source checks and the native sync dry run |
 | `tools/deploy/deploy.mjs` | FTP/FTPS deploy with backup, dry run and the `.htaccess` cache policy (see below) |
 | `tools/deploy/htaccess-cache.txt`, `tools/nginx-cache.conf` | Cache and MIME policy for Apache (`--htaccess`) and nginx hosts |
@@ -356,34 +360,41 @@ The full, ordered procedure is in [DEPLOY.md](./DEPLOY.md). In short:
 ```bash
 tools/bump-version.sh 20261016a                               # 1. new shell token (never deploy the old one)
 (cd tools/playtest && bash run-matrix.sh)                      # 2. matrix green
-node tools/deploy/deploy.mjs --dry-run --user <ftp-user>       # 3. what would upload (189 files, ~370 MB listed; unchanged binaries skipped by size)
+node tools/deploy/deploy.mjs --dry-run --user <ftp-user>       # 3. what would upload (about 190 files, ~370 MB listed; unchanged binaries skipped by size)
 TYPER_FTP_PASSWORD=... node tools/deploy/deploy.mjs --user <ftp-user> --htaccess   # 4. backup, upload, cache policy, verify
 tools/deploy-check.sh https://typer198x.com --strict            # 5. go/no-go
 ```
 
 - `deploy.mjs` reads the password from `TYPER_FTP_PASSWORD` (or `--password-file`) and never writes it
-  anywhere. It connects (explicit FTPS first), finds the web root, backs the remote tree up to
+  anywhere. It connects over explicit FTPS and never falls back to plain FTP (a TLS failure aborts;
+  `--secure false` is an explicit opt-in that sends the password in cleartext), finds the web root, backs the remote tree up to
   `tools/deploy/backups/<timestamp>/` (`--backup light` skips files over 4 MB, `full` takes everything,
-  `none` skips), uploads assets first, then CSS/JS, then `index.html` last, skips unchanged binaries by
+  `none` skips), uploads assets first, then CSS/JS, then `assets/opt/manifest.js`, then `index.html` last, skips unchanged binaries by
   size, and verifies over HTTPS that `index.html` and `game.js` match. `TOP_FILES` lists the root pages
   (`index.html`, `game.js`, `style.css`, `privacy-policy.html`, `privacy.html`, `info.html`, `support.html`
   and the optional `robots.txt`/`sitemap.xml`/`site.webmanifest`); `assets/` is walked whole.
 - **Cache policy (audit G025).** The live host currently answers `/index.html` with
   `Cache-Control: max-age=15552000` (180 days), so a returning browser would keep the old shell next to
   new scripts. `--htaccess` merges `tools/deploy/htaccess-cache.txt` into the web root's `.htaccess`
-  (never replaces it): HTML and `manifest.js` `no-cache`, versioned assets `immutable`, the WebP / WOFF2 /
-  MP3 MIME types. `tools/nginx-cache.conf` is the equivalent server-block include for an nginx host. If
+  (never replaces it: the download is kept as `tools/deploy/backups/htaccess-<ms>.previous.txt`, the uploaded
+  text as `htaccess-<ms>.merged.txt`, a new file is created only after a download attempt answers "no such
+  file" even when the listing hides dotfiles, and any other download failure makes the step skip and the
+  run exit 1): HTML and `manifest.js` `no-cache`, URLs carrying `?v=` `immutable` for a year, bare js/css/json
+  revalidating and bare media/fonts 30 days (immutability is gated on the token, not the extension), the WebP /
+  WOFF2 / MP3 MIME types. `tools/nginx-cache.conf` is the equivalent server-block include for an nginx host. If
   the host's own static cache still serves `.html` with a long `max-age`, exclude `.html` from it and
   purge it in the hosting panel.
 - **Go/no-go.** `tools/deploy-check.sh https://typer198x.com --strict` fails when `index.html` lacks
   `no-cache`/`max-age=0`, when the served `?v=` tokens disagree, when a script, stylesheet, WebP, MP3 or the
   font comes back with the wrong status or MIME type, when the served `game.js` has no `window.SFX` guard
-  or fails `node --check`, when `assets/opt/manifest.js` differs from the local one, or when the footer
-  privacy target is missing. Without `--strict` the cache-header findings are warnings.
+  or fails `node --check`, when `assets/opt/manifest.js` differs from the local one, when a ship-card `?v=`
+  differs from the served manifest version, or when the footer privacy target is missing. Without `--strict`
+  the cache-header findings are warnings.
 
 ## Native wrappers
 
-`native/sync-web.sh` still works with this build. It copies `index.html`, `game.js` and `style.css` and
+`native/sync-web.sh` still works with this build. It copies `index.html`, `game.js`, `style.css`, the footer's
+`privacy-policy.html` and `support.html` (plus `privacy.html` and `info.html`) and
 `rsync -a --delete`s the whole `assets/` tree into `native/ios/TypeR198XIOS/www` and
 `native/macos/typer198xMac/www`, then patches each copy: `class="hidden"` is inserted after
 `id="loadingOverlay"` (so that element keeps `id` as its first attribute and carries no `class` in source)

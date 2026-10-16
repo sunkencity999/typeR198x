@@ -4,7 +4,7 @@
 # The single writer of the web shell's version token (PLAN A10 / contract "Version token").
 # Rewrites, in one pass:
 #   * <meta name="asset-version" content="...">            (when present)
-#   * every ?v=<token> on <link>/<script> tags              in index.html, info.html, support.html,
+#   * every ?v=<token> on <link>/<script>/<img> tags        in index.html, info.html, support.html,
 #                                                          privacy-policy.html, privacy.html (when present)
 #   * const ASSET_VERSION = "...";                         in game.js
 # and leaves the withAssetVersion literal line (`return `${path}${sep}v=${ASSET_VERSION}`;`) untouched,
@@ -19,6 +19,8 @@
 # --dry-run  report what would change, write nothing.
 # --add-missing  also append ?v=<token> to local <link rel=stylesheet|preload> and <script src> tags
 #            that have no version yet (off by default: the html owners add the first token by hand).
+#            Font preloads (as="font") are skipped: their href must stay byte-identical to the @font-face
+#            url() in assets/style/tokens.css or the browser fetches the font twice (review R40).
 # Idempotent: a second run with the same token reports "no changes" and writes nothing. Exit 0 on success,
 # 1 when index.html or game.js is missing, 2 on usage errors.
 set -euo pipefail
@@ -110,7 +112,7 @@ function rewriteHtml(file) {
     }
     if (ADD_MISSING) {
       const isScript = /^<script/i.test(tag);
-      const isVersionedLink = /^<link/i.test(tag) && /\brel=["'](stylesheet|preload|modulepreload)["']/i.test(tag);
+      const isVersionedLink = /^<link/i.test(tag) && /\brel=["'](stylesheet|preload|modulepreload)["']/i.test(tag) && !/\bas=["']font["']/i.test(tag); // review R40
       if (isScript || isVersionedLink) {
         const next = `${url}${url.includes("?") ? "&" : "?"}v=${token}`;
         added++;
@@ -119,7 +121,7 @@ function rewriteHtml(file) {
     }
     return tag;
   };
-  out = out.replace(/<(?:link|script)\b[^>]*>/gi, bump);
+  out = out.replace(/<(?:link|script|img)\b[^>]*>/gi, bump); // img: the ship cards carry the ART token (review R39)
   let metaHit = false;
   out = out.replace(metaRe, (_, a, old, c) => { metaHit = true; if (old !== TOKEN) replaced++; return `${a}${TOKEN}${c}`; });
   if (!metaHit) out = out.replace(metaReAlt, (_, a, old, c) => { metaHit = true; if (old !== TOKEN) replaced++; return `${a}${TOKEN}${c}`; });
@@ -170,6 +172,8 @@ for (const f of ["index.html", "game.js", "assets/audio/sfx.js"]) {
   if (!exists(f)) continue;
   read(f).split("\n").forEach((line, i) => {
     const m = line.match(/\bv=(20\d{6}[a-z]?)\b/) || line.match(/VERSION\s*=\s*["']([^"']+)["']/);
+    // review R44: in a dry run game.js's own ASSET_VERSION line is the one this script rewrites, not a stale string
+    if (DRY && f === "game.js" && assetVersionRe.test(line)) return;
     if (m && m[1] !== TOKEN && m[1] !== ART && !(DRY && m[1] === currentShell) && !line.includes("${ASSET_VERSION}")) stale.push(`  ${f}:${i + 1}: ${line.trim()}`);
   });
 }

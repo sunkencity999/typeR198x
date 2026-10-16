@@ -3,15 +3,17 @@
 //
 //   TYPER_FTP_PASSWORD=... node tools/deploy/deploy.mjs \
 //       --host ftp.typer198x.com --user <ftp-user> [--port 21] \
-//       [--remote-dir auto|/public_html] [--secure auto|true|false] \
+//       [--remote-dir auto|/public_html (an absolute path)] [--secure true|false] \
 //       [--backup light|full|none] [--dry-run] [--force] [--site https://typer198x.com] [--htaccess]
 //
 // What it does, in order:
-//   1. connects (explicit FTPS first when --secure auto, plain FTP only as a fallback),
+//   1. connects with explicit FTPS (TLS). It never falls back to plain FTP: a TLS failure aborts with exit 1,
+//      and only an explicit --secure false logs in over cleartext FTP (warned about before connecting),
 //   2. finds the remote web root (looks for index.html in /, /public_html, /httpdocs, /www, /htdocs),
 //   3. backs up the remote tree to tools/deploy/backups/<timestamp>/ (light = skip files > 4 MB,
 //      which are the art/audio masters already in git),
-//   4. uploads assets first, then css/js, then index.html last; unchanged binaries (same size) are skipped,
+//   4. uploads assets first, then css/js, then assets/opt/manifest.js, then index.html last; unchanged binaries
+//      (same size) are skipped,
 //   5. verifies over HTTPS that index.html and game.js now match the local files and prints cache headers.
 // The password is read from TYPER_FTP_PASSWORD (or --password-file) and never written anywhere.
 import { Client } from "basic-ftp";
@@ -25,7 +27,7 @@ const opt = (k, d) => { const i = argv.indexOf(`--${k}`); return i >= 0 ? (argv[
 const HOST = opt("host", process.env.TYPER_FTP_HOST || "ftp.typer198x.com");
 const USER = opt("user", process.env.TYPER_FTP_USER || "");
 const PORT = Number(opt("port", process.env.TYPER_FTP_PORT || 21));
-const SECURE = opt("secure", "auto");
+const SECURE = opt("secure", "true"); // review R4/R23: TLS unless the operator opts out explicitly
 const REMOTE_DIR = opt("remote-dir", "auto");
 const BACKUP = opt("backup", "light");
 const DRY = opt("dry-run", "false") === "true";
@@ -39,6 +41,7 @@ const PASSWORD = PASSWORD_FILE ? fs.readFileSync(PASSWORD_FILE, "utf8").trim() :
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..");
 if (!USER) { console.error("missing --user"); process.exit(2); }
+if (SECURE !== "true" && SECURE !== "false") { console.error(`--secure must be true or false (got ${SECURE}); plain FTP is never chosen automatically`); process.exit(2); }
 if (!PASSWORD && !DRY) { console.error("missing TYPER_FTP_PASSWORD (or --password-file)"); process.exit(2); }
 
 // ------------------------------------------------------------------ local file set
@@ -58,8 +61,9 @@ for (const f of TOP_FILES) if (fs.existsSync(path.join(ROOT, f))) local.push(pat
 for (const d of ASSET_DIRS) if (fs.existsSync(path.join(ROOT, d))) walk(path.join(ROOT, d), local);
 const rel = (p) => path.relative(ROOT, p).split(path.sep).join("/");
 const isText = (p) => /\.(html|js|mjs|css|json|svg|txt|xml|webmanifest|md)$/i.test(p);
-// upload order: assets (new files first), then css/js, then index.html last
-const order = (p) => p.endsWith("index.html") ? 3 : /\.(css|js)$/.test(p) && !p.includes("/assets/opt/") ? 2 : 1;
+// upload order: assets (new files first), then css/js, then assets/opt/manifest.js, then index.html last.
+// manifest.js is served no-cache and read by the old shell, so it must not name files that are still uploading (review R42).
+const order = (p) => p.endsWith("index.html") ? 4 : p.endsWith("/assets/opt/manifest.js") ? 3 : /\.(css|js)$/.test(p) && !p.includes("/assets/opt/") ? 2 : 1;
 local.sort((a, b) => order(a) - order(b) || a.localeCompare(b));
 const totalBytes = local.reduce((n, p) => n + fs.statSync(p).size, 0);
 console.log(`local set: ${local.length} files, ${(totalBytes / 1048576).toFixed(1)} MB (root ${ROOT})`);
@@ -68,19 +72,26 @@ console.log(`local set: ${local.length} files, ${(totalBytes / 1048576).toFixed(
 const client = new Client(120000);
 client.ftp.verbose = false;
 async function connect() {
-  const tries = SECURE === "true" ? [true] : SECURE === "false" ? [false] : [true, false];
-  let lastErr;
-  for (const secure of tries) {
-    try {
-      await client.access({ host: HOST, user: USER, password: PASSWORD, port: PORT, secure, secureOptions: { servername: HOST } });
-      console.log(`connected to ${HOST}:${PORT} ${secure ? "with explicit FTPS (TLS)" : "over PLAIN FTP (cleartext credentials!)"}`);
-      return;
-    } catch (e) { lastErr = e; console.warn(`connect (secure=${secure}) failed: ${e.message}`); client.close(); }
+  // review R4/R23: no automatic downgrade. TLS failures (bad certificate, AUTH TLS refused, reset handshake) abort.
+  const secure = SECURE !== "false";
+  if (!secure) console.warn(`WARNING: --secure false: logging in to ${HOST}:${PORT} over PLAIN FTP, the password crosses the network in cleartext`);
+  try {
+    await client.access({ host: HOST, user: USER, password: PASSWORD, port: PORT, secure, secureOptions: { servername: HOST } });
+  } catch (e) {
+    client.close();
+    if (secure) {
+      console.error(`FTPS connect to ${HOST}:${PORT} failed: ${e.message}`);
+      console.error("not retrying over plain FTP; re-run with --secure false only if you accept sending the password in cleartext");
+      process.exit(1);
+    }
+    throw e;
   }
-  throw lastErr;
+  console.log(`connected to ${HOST}:${PORT} ${secure ? "with explicit FTPS (TLS)" : "over PLAIN FTP (cleartext credentials!)"}`);
 }
 async function findRemoteRoot() {
-  if (REMOTE_DIR !== "auto") { await client.cd(REMOTE_DIR); return REMOTE_DIR; }
+  // review R41: normalise once so every later path is absolute (a relative --remote-dir would otherwise make
+  // ensureDir nest a copy of it inside the web root and the following cd(root) fail)
+  if (REMOTE_DIR !== "auto") { await client.cd(REMOTE_DIR); return await client.pwd(); }
   for (const c of ["/", "/public_html", "/httpdocs", "/www", "/htdocs", "/web", "/typer198x.com"]) {
     try {
       const list = await client.list(c);
@@ -150,22 +161,49 @@ async function remoteWalk(dir, out = []) {
   }
   console.log(`\nupload done: ${up} uploaded, ${skip} unchanged binaries skipped`);
 
-  // optional Apache cache policy (.htaccess): append our block to an existing file, never replace it
+  // optional Apache cache policy (.htaccess): append our block to an existing file, never replace it.
+  // The download is always attempted, because servers may hide dotfiles from LIST/MLSD: a new file is created only
+  // when the listing has no .htaccess AND the RETR itself answers "no such file". A listed file that cannot be
+  // downloaded, or any other download error, leaves the host's file alone (review R24).
+  // The download is kept as htaccess-<ms>.previous.txt and the uploaded text written to a separate
+  // htaccess-<ms>.merged.txt, so the previous copy really is the previous copy (review R16/R25).
+  let htaccessSkipped = false;
   if (HTACCESS) {
     const snippet = fs.readFileSync(path.join(HERE, "htaccess-cache.txt"), "utf8");
     const marker = "Type-R 198X cache policy";
     const remotePath = root === "/" ? "/.htaccess" : `${root}/.htaccess`;
-    const tmp = path.join(HERE, "backups", `htaccess-${Date.now()}.txt`);
-    fs.mkdirSync(path.dirname(tmp), { recursive: true });
-    let existing = "";
-    try { await client.downloadTo(tmp, remotePath); existing = fs.readFileSync(tmp, "utf8"); } catch { existing = ""; }
-    if (existing.includes(marker)) {
-      console.log(".htaccess: cache policy already present, left unchanged");
+    const ms = Date.now();
+    const prev = path.join(HERE, "backups", `htaccess-${ms}.previous.txt`);
+    const mergedPath = path.join(HERE, "backups", `htaccess-${ms}.merged.txt`);
+    fs.mkdirSync(path.dirname(prev), { recursive: true });
+    const listed = remoteSize.has(".htaccess");
+    const byHand = "left untouched. Merge tools/deploy/htaccess-cache.txt into it by hand.";
+    let existing = "", found = false;
+    try { await client.downloadTo(prev, remotePath); existing = fs.readFileSync(prev, "utf8"); found = true; }
+    catch (e) {
+      try { fs.rmSync(prev, { force: true }); } catch { /* nothing to remove */ }
+      // 550 alone is ambiguous (Pure-FTPd/ProFTPD use it for "permission denied" too), so absence needs the text as well
+      const absent = !listed && e.code === 550 && /no such file|not found|does not exist|cannot find/i.test(e.message);
+      if (!absent) {
+        console.error(listed
+          ? `.htaccess: the host lists one but it could not be downloaded (${e.message}); ${byHand}`
+          : `.htaccess: not in the listing, but the download attempt failed with "${e.message}" instead of "no such file", so one may exist; ${byHand}`);
+        htaccessSkipped = true;
+      }
+    }
+    if (htaccessSkipped) {
+      // nothing uploaded
+    } else if (existing.includes(marker)) {
+      console.log(`.htaccess: cache policy already present, left unchanged (copy at ${prev})`);
     } else {
       const merged = existing ? `${existing.replace(/\s*$/, "")}\n\n${snippet}` : snippet;
-      fs.writeFileSync(tmp, merged);
-      await client.uploadFrom(tmp, remotePath);
-      console.log(`.htaccess: ${existing ? "appended the cache policy to the existing file" : "created"} (previous copy kept at ${tmp})`);
+      fs.writeFileSync(mergedPath, merged);
+      await client.uploadFrom(mergedPath, remotePath);
+      const hidden = listed ? "" : " that the listing hid";
+      const how = existing ? `appended the cache policy to the existing file${hidden} (previous copy kept at ${prev})`
+        : found ? `the existing file${hidden} was empty, wrote the cache policy (previous empty copy kept at ${prev})`
+        : "created (the host neither listed nor served an .htaccess, so there is no previous copy)";
+      console.log(`.htaccess: ${how}; uploaded text at ${mergedPath}`);
     }
   }
   client.close();
@@ -181,4 +219,5 @@ async function remoteWalk(dir, out = []) {
     } catch (e) { console.log(`verify ${f} failed: ${e.message}`); }
   }
   console.log("reminder: index.html must come back with Cache-Control: no-cache (audit G025) so a new ?v= token reaches returning players; see tools/nginx-cache.conf or tools/deploy/htaccess-cache.txt (--htaccess), then run tools/deploy-check.sh " + SITE + " --strict.");
+  if (htaccessSkipped) { console.error("deploy finished, but the .htaccess step was skipped (see above): exit 1"); process.exitCode = 1; }
 })().catch((e) => { console.error("deploy failed:", e.message); client.close(); process.exit(1); });

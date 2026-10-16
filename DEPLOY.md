@@ -46,10 +46,10 @@ before the first keystroke <= 2.5, every `fixture-*` row `pass`.
 node tools/deploy/deploy.mjs --dry-run --user <ftp-user>
 ```
 
-Prints the local set in upload order (about 189 files, ~370 MB listed; on a real run the ~341 MB of
+Prints the local set in upload order (about 190 files, ~370 MB listed; on a real run the ~341 MB of
 PNG/WAV masters are skipped when the remote size matches) and exits without connecting, so no password
-is needed. Check that `index.html` is last and that `privacy-policy.html` and every `assets/opt` file are in
-the list.
+is needed. Check that `index.html` is last, `assets/opt/manifest.js` just before it, and that `privacy-policy.html`
+and every `assets/opt` file are in the list.
 
 ## 4. Backup and deploy with the cache policy
 
@@ -59,10 +59,17 @@ node tools/deploy/deploy.mjs --user <ftp-user> --backup light --htaccess
 unset TYPER_FTP_PASSWORD
 ```
 
-What happens, in order: FTPS connect (plain FTP only as a fallback), web-root detection, backup to
+What happens, in order: FTPS connect (explicit TLS; the script never falls back to plain FTP, a TLS or
+certificate failure aborts with exit 1, and `--secure false` is the only way to log in over cleartext FTP,
+which it warns about before connecting), web-root detection, backup to
 `tools/deploy/backups/<timestamp>/` (`light` skips files over 4 MB; use `--backup full` before a risky
-release), upload of `assets/` first, then CSS/JS, then `index.html` last, `.htaccess` cache policy merged
-into the existing file (a copy of the previous `.htaccess` is kept under `tools/deploy/backups/`), then an
+release), upload of `assets/` first, then CSS/JS, then `assets/opt/manifest.js`, then `index.html` last, `.htaccess` cache policy merged
+into the existing file (the host's file is downloaded first and kept as
+`tools/deploy/backups/htaccess-<ms>.previous.txt`; the uploaded text is `htaccess-<ms>.merged.txt`; the download
+is attempted even when the listing shows no `.htaccess`, because some servers hide dotfiles, and a new file is
+created only after that download answers "no such file"; if a listed `.htaccess` cannot be downloaded, or an
+unlisted one fails for any other reason, the step is skipped, the run exits 1 and you merge
+`tools/deploy/htaccess-cache.txt` by hand), then an
 HTTPS verification that `index.html` and `game.js` match the local files and a print of their cache
 headers. Add `--force` only if a size-equal binary must be re-uploaded.
 
@@ -75,8 +82,9 @@ bash tools/deploy-check.sh https://typer198x.com --strict
 `FAIL 0` is the gate. The strict run fails on: `index.html` or `/` without `no-cache`/`max-age=0`,
 shell tokens that disagree or differ from `<meta name="asset-version">`, any script/stylesheet/WebP/MP3/
 font with a wrong status or MIME type, a served `game.js` without the `window.SFX` guard or failing
-`node --check`, `assets/opt/manifest.js` differing from the local one, or a missing/incorrect privacy
-target. Warnings about `immutable` or `Accept-Ranges` are worth fixing but do not block.
+`node --check`, `assets/opt/manifest.js` differing from the local one, a ship-card `?v=` that differs from
+the served manifest version, or a missing/incorrect privacy target. Warnings about `immutable` or
+`Accept-Ranges` are worth fixing but do not block.
 
 ## 6. If the host cache still serves the old shell
 
@@ -119,7 +127,9 @@ omit files over 4 MB, which are the masters already in git and unchanged on the 
    ```
    (`--force` re-uploads size-equal files, which a rollback usually needs.) Alternatively upload the
    backup folder from step 1 with any FTP client.
-3. The previous `.htaccess` copy is in `tools/deploy/backups/htaccess-<ms>.txt`; restore it only if the
-   cache policy itself caused the problem (it should stay, it is what lets a fix reach players).
+3. The previous `.htaccess` is in `tools/deploy/backups/htaccess-<ms>.previous.txt` (the file as downloaded
+   before the merge; `htaccess-<ms>.merged.txt` is what was uploaded, and `backups/<timestamp>/.htaccess` holds
+   the same original when the server lists dotfiles); restore it only if the cache policy itself caused the
+   problem (it should stay, it is what lets a fix reach players).
 4. Purge the host cache (step 6) so the restored shell is what players receive, then run step 5 without
    `--strict` to confirm the site is back.
