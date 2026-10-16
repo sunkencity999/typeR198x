@@ -210,8 +210,9 @@ const LEVEL_THEMES = [
 const THEME_ACCENT = { first: "cyan", sixth: "amber", third: "magenta", fourth: "violet", fifth: "cyan", second: "amber", tenth: "violet" };
 const STORM_SPEED_MUL = 1.25;
 
-// One merged, reusable object per sector: the PARALLAX_THEMES entry (id/bg/fg/bgSpeed/fgSpeed/fgHeight/tileFg,
-// which the renderer reads today) plus art/storm/accent/speedMul for the overhaul.
+// One merged view per sector: the PARALLAX_THEMES entry (id/bg/fg/bgSpeed/fgSpeed/fgHeight/tileFg, which the
+// renderer reads today) plus art/storm/accent/speedMul for the overhaul. The canonical views are frozen;
+// getThemeForLevel hands out a shallow copy so callers may annotate their copy.
 const LEVEL_THEME_VIEWS = LEVEL_THEMES.map((entry) => {
   const base = PARALLAX_THEMES.find((t) => t.id === entry.art) || PARALLAX_THEMES[0];
   return Object.freeze({
@@ -223,7 +224,7 @@ const LEVEL_THEME_VIEWS = LEVEL_THEMES.map((entry) => {
   });
 });
 
-const getThemeForLevel = (index) => LEVEL_THEME_VIEWS[clamp(index | 0, 0, LEVEL_THEME_VIEWS.length - 1)];
+const getThemeForLevel = (index) => ({ ...LEVEL_THEME_VIEWS[clamp(index | 0, 0, LEVEL_THEME_VIEWS.length - 1)] });
 
 // ----------------------------- Content -----------------------------
 // The three tiers stay as named lists (other code still references them); gameplay draws from ALL_WORDS via LEVELS[i].words.
