@@ -45,7 +45,8 @@ const AMBIENT_STEP = 1 / 20;
 class Game {
   constructor() {
     this.canvas = document.getElementById("game");
-    this.ctx = this.canvas.getContext("2d");
+    // Opaque context: the base fill covers the shake margin, so no page background ever shows through (F051).
+    this.ctx = this.canvas.getContext("2d", { alpha: false });
 
     this.w = LOGICAL_W;
     this.h = LOGICAL_H;
@@ -266,6 +267,10 @@ class Game {
     window.addEventListener("focus", () => {
       if (this.mode === "playing") this.focusGameCanvas();
     });
+
+    // HiDPI backing store (A6): logical 1280x720, device pixels = round(1280*renderScale)
+    this.bindResize();
+    this.resizeCanvas();
 
     // main loop
     this.frameCount = 0;
