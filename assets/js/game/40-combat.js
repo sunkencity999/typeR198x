@@ -103,6 +103,21 @@ Object.assign(Game.prototype, {
   },
 
   // ------------------------- Spawning -------------------------
+  // Trailing-window telemetry behind TypeRDebug.stats() (debugStats, 60-hud.js, is a pure reader): the push sites
+  // trim to the 10 s / 60 s windows and a 256 cap so the arrays stay bounded in normal play (review R31).
+  _noteSpawn(n) {
+    const log = this._spawnLog || (this._spawnLog = []);
+    const now = nowMs();
+    log.push({ t: now, n });
+    while (log.length && (now - log[0].t > 10000 || log.length > 256)) log.shift();
+  },
+  _noteLeak() {
+    const log = this._leakLog || (this._leakLog = []);
+    const now = nowMs();
+    log.push(now);
+    while (log.length && (now - log[0] > 60000 || log.length > 256)) log.shift();
+  },
+
   spawnEnemy() {
     const cfg = LEVELS[this.levelIndex];
     if (this.countAliveEnemies() >= waveMaxEnemies(cfg, this.wave, this.phoneProfile())) return null;
@@ -117,7 +132,7 @@ Object.assign(Game.prototype, {
     en.x = this.w + en.plateW / 2 + rand(10, 90);   // plate fully off-screen, targetable ~0.3 s later
     this.enemies.push(en);
     this.lastSpawnLane = lane;
-    this._spawnLog.push({ t: nowMs(), n: len });
+    this._noteSpawn(len);
     return en;
   },
 
@@ -381,7 +396,7 @@ Object.assign(Game.prototype, {
     en.dying = true;
     if (this.lock && this.lock.ref === en) { this.lock = null; this.lockMisses = 0; }
     if (this.bossClear) return;
-    this._leakLog.push(nowMs());
+    this._noteLeak();
     this.sfx.impact();
     // Contact slam (JUICE-06): the plate itself is the hit (danger plate 90 ms, struck through), the ship kicks,
     // a danger ring spreads from the contact point; no explosion sprite.

@@ -272,7 +272,7 @@ Object.assign(Game.prototype, {
     const en = new Enemy({ text, x, y: ys[lane], speed: cfg.speed * MINION_SPEED_MUL, kind: "bossMinion", lane });
     this.enemies.push(en);
     this.lastMinionLane = lane;
-    this._spawnLog.push({ t: nowMs(), n: text.length });
+    this._noteSpawn(text.length);
     return en;
   },
 
