@@ -12,10 +12,19 @@
 #   * cache headers: /index.html (and /) must say no-cache or max-age=0 -> WARN, or FAIL with --strict (G025);
 #     versioned URLs should be immutable / long max-age -> WARN; manifest.js should be no-cache -> WARN;
 #     MP3 should advertise Accept-Ranges -> WARN
-# Local mode (--local): copies index.html/game.js/style.css/native/sync-web.sh into a temp tree, runs the
-#   sync, and asserts the `return path;` patch and the `id="loadingOverlay" class="hidden"` patch landed
-#   (plus amendment B-17: in source the overlay keeps id first and has no class attribute).
-# Exit 1 when any check FAILed, else 0.
+#   * the footer privacy target names the save key (typesmup198x.save.v1) and links back to the game;
+#     privacy.html is a meta-refresh stub
+# Local mode (--local), source checks against --root (default: this repo):
+#   * every <script src> in index.html exists and passes `node --check`
+#   * assets/opt/manifest.js version === assets/opt/manifest.json version (MANIFEST_ONLY=1 tools/build-web-assets.sh)
+#   * tools/check-globals.sh finds no duplicate top-level declarations across the classic scripts
+#   * the footer privacy link resolves to a local file that names the save key and links back to the game;
+#     privacy.html carries a meta refresh; info.html / support.html / privacy-policy.html link back to the game
+#   * tools/unreferenced-assets.sh totals (informational; --unreferenced-out <file> keeps the full listing)
+#   * native sync dry run: copies index.html/game.js/style.css/native/sync-web.sh into a temp tree, runs the
+#     sync, and asserts the `return path;` patch and the `id="loadingOverlay" class="hidden"` patch landed
+#     (plus amendment B-17: in source the overlay keeps id first and has no class attribute).
+# Exit 1 when any check FAILed, else 0. --strict only promotes the cache-header WARNs to FAILs.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -23,12 +32,14 @@ ROOT="$(cd "$HERE/.." && pwd)"
 URL=""
 STRICT=0
 LOCAL=0
+UNREF_OUT=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --strict) STRICT=1; shift ;;
     --local) LOCAL=1; shift ;;
     --root) ROOT="$(cd "$2" && pwd)"; shift 2 ;;
-    -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
+    --unreferenced-out) UNREF_OUT="$2"; shift 2 ;;
+    -h|--help) sed -n '2,32p' "$0"; exit 0 ;;
     --*) echo "unknown option: $1" >&2; exit 2 ;;
     *) URL="${1%/}"; shift ;;
   esac
@@ -39,6 +50,7 @@ PASS=0; WARN=0; FAIL=0
 pass() { PASS=$((PASS+1)); echo "  PASS  $*"; }
 warn() { WARN=$((WARN+1)); echo "  WARN  $*"; }
 fail() { FAIL=$((FAIL+1)); echo "  FAIL  $*"; }
+info() { echo "  INFO  $*"; }
 # strict_or_warn <ok:0|1> <message>
 gate() { if [[ "$1" == "1" ]]; then pass "$2"; elif [[ $STRICT -eq 1 ]]; then fail "$2 (strict)"; else warn "$2"; fi; }
 
@@ -200,12 +212,72 @@ NODE
   [[ "$st" == "200" ]] && pass "privacy-policy.html 200" || fail "privacy-policy.html status $st"
   if [[ -n "$PRIVACY" ]]; then
     st="$(fetch "$(abs "$PRIVACY")" "$TMP/pl.html")"
-    [[ "$st" == "200" ]] && pass "footer privacy link $PRIVACY 200" || fail "footer privacy link $PRIVACY status $st"
-  fi
+    if [[ "$st" == "200" ]]; then
+      pass "footer privacy link $PRIVACY 200"
+      grep -q 'typesmup198x\.save\.v1' "$TMP/pl.html" && pass "privacy target names the save key typesmup198x.save.v1" || fail "privacy target $PRIVACY does not mention typesmup198x.save.v1"
+      grep -qE 'href="(\./)?index\.html"|href="\./?"' "$TMP/pl.html" && pass "privacy target links back to the game" || fail "privacy target $PRIVACY has no back link to index.html"
+    else fail "footer privacy link $PRIVACY status $st"; fi
+  else warn "served index.html has no footer privacy link"; fi
+  st="$(fetch "$URL/privacy.html" "$TMP/pstub.html")"
+  if [[ "$st" == "200" ]]; then
+    grep -qiE '<meta[^>]*http-equiv="refresh"' "$TMP/pstub.html" && pass "privacy.html is a meta-refresh stub" || warn "privacy.html 200 but carries no meta refresh"
+  else warn "privacy.html status $st (old links to it would 404)"; fi
 fi
 
 # ---------------------------------------------------------------- local native-sync mode
 if [[ $LOCAL -eq 1 ]]; then
+  echo "deploy-check: local source checks ($ROOT)"
+  if [[ ! -f "$ROOT/index.html" ]]; then fail "missing $ROOT/index.html"; else
+    # every <script src> in index.html exists and parses
+    nscripts=0; badscripts=0
+    while IFS= read -r s; do
+      [[ -z "$s" ]] && continue
+      case "$s" in http://*|https://*|//*) continue ;; esac
+      nscripts=$((nscripts+1)); f="$ROOT/${s#./}"; f="${f%%\?*}"
+      if [[ ! -f "$f" ]]; then fail "index.html references a missing script: $s"; badscripts=$((badscripts+1)); continue; fi
+      if [[ $HAVE_NODE -eq 1 ]] && ! node --check "$f" 2>"$TMP/chk"; then fail "node --check $s: $(head -c 160 "$TMP/chk" | tr '\n' ' ')"; badscripts=$((badscripts+1)); fi
+    done < <(grep -oE '<script[^>]*src="[^"]+"' "$ROOT/index.html" | sed -E 's/.*src="([^"]+)".*/\1/')
+    if [[ $badscripts -eq 0 ]]; then
+      [[ $HAVE_NODE -eq 1 ]] && pass "all $nscripts <script src> files in index.html exist and pass node --check" || pass "all $nscripts <script src> files in index.html exist (node missing: syntax not checked)"
+    fi
+    # manifest.js and manifest.json carry the same ART version
+    if [[ -f "$ROOT/assets/opt/manifest.js" && -f "$ROOT/assets/opt/manifest.json" ]]; then
+      js_v=$(grep -oE '"version":"[^"]+"' "$ROOT/assets/opt/manifest.js" | head -1 | cut -d'"' -f4)
+      json_v=$(grep -oE '"version": *"[^"]+"' "$ROOT/assets/opt/manifest.json" | head -1 | sed -E 's/.*"([^"]+)"$/\1/')
+      [[ -n "$js_v" && "$js_v" == "$json_v" ]] && pass "assets/opt/manifest.js version $js_v matches manifest.json" || fail "assets/opt/manifest.js version '$js_v' != manifest.json '$json_v' (run MANIFEST_ONLY=1 tools/build-web-assets.sh)"
+    else fail "assets/opt/manifest.js or manifest.json is missing (run tools/build-web-assets.sh)"; fi
+    # duplicate top-level declarations across the classic scripts
+    if [[ -f "$ROOT/tools/check-globals.sh" ]]; then
+      if bash "$ROOT/tools/check-globals.sh" "$ROOT/index.html" > "$TMP/globals" 2>&1; then pass "$(head -1 "$TMP/globals")"; else fail "check-globals: $(grep -v '^duplicate' "$TMP/globals" | tr -s ' \n' ' ' | head -c 200)"; fi
+    else warn "tools/check-globals.sh not found"; fi
+    # footer privacy link -> local file with the save key and a back link; privacy.html stub; back links on the secondary pages
+    src_privacy=$(grep -oE '<a[^>]*href="[^"]*privacy[^"]*"' "$ROOT/index.html" | head -1 | sed -E 's/.*href="([^"]*)".*/\1/')
+    if [[ -z "$src_privacy" ]]; then fail "index.html has no footer privacy link"
+    else
+      pf="$ROOT/${src_privacy#./}"; pf="${pf%%\?*}"; pf="${pf%%#*}"
+      if [[ -f "$pf" ]]; then
+        pass "footer privacy link $src_privacy resolves to a local file"
+        grep -q 'typesmup198x\.save\.v1' "$pf" && pass "$(basename "$pf") names the save key typesmup198x.save.v1" || fail "$(basename "$pf") does not mention typesmup198x.save.v1"
+        grep -qE 'href="(\./)?index\.html"' "$pf" && pass "$(basename "$pf") links back to the game" || fail "$(basename "$pf") has no back link to index.html"
+      else fail "footer privacy link $src_privacy -> $pf does not exist"; fi
+    fi
+    if [[ -f "$ROOT/privacy.html" ]]; then
+      grep -qiE '<meta[^>]*http-equiv="refresh"[^>]*privacy-policy\.html' "$ROOT/privacy.html" && pass "privacy.html is a meta-refresh stub to privacy-policy.html" || fail "privacy.html is not a meta-refresh stub to privacy-policy.html"
+    else warn "privacy.html missing (old links to it would 404)"; fi
+    for page in info.html support.html privacy-policy.html; do
+      [[ -f "$ROOT/$page" ]] || { warn "$page missing"; continue; }
+      grep -qE 'href="(\./)?index\.html"' "$ROOT/$page" && pass "$page links back to the game" || fail "$page has no back link to index.html"
+    done
+  fi
+  # unreferenced assets (report, never a gate)
+  if [[ -f "$ROOT/tools/unreferenced-assets.sh" ]]; then
+    ulist="${UNREF_OUT:-$TMP/unreferenced-assets.txt}"
+    if bash "$ROOT/tools/unreferenced-assets.sh" --root "$ROOT" --out "$ulist" --quiet > /dev/null 2>&1; then
+      info "unreferenced assets: $(awk '/^UNREFERENCED/{u=1} /^BY-NAME/{u=0;b=1} /total:/{ if (u) printf "unreferenced %s; ", substr($0, index($0,"total:")+7); else if (b) printf "by-name-only %s", substr($0, index($0,"total:")+7) }' "$ulist")"
+      [[ -n "$UNREF_OUT" ]] && info "full listing written to $UNREF_OUT" || info "full listing: tools/unreferenced-assets.sh (or --unreferenced-out <file>); native/sync-web.sh rsyncs masters AND assets/opt into both native bundles (amendment E-4b)"
+    else warn "tools/unreferenced-assets.sh failed"; fi
+  fi
+
   echo "deploy-check: local native-sync non-regression ($ROOT)"
   for f in index.html game.js style.css native/sync-web.sh; do
     [[ -f "$ROOT/$f" ]] || { fail "missing $ROOT/$f"; }
