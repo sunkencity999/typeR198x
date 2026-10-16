@@ -128,7 +128,14 @@ Object.assign(Game.prototype, {
     this.ensureFx();
     const m = this.fxMotion();
     const p = this.player;
-    this.fxClock += dt;
+    // The idle clock (bob, plume flicker, shield spin, low-HP pulse) stops on Game Over so the backdrop behind the
+    // panel is a still frame; the decays below keep running so the death impact settles.
+    if (this.mode !== "gameOver") this.fxClock += dt;
+    // a frame that threw inside the L12 additive batch must not leave the next base fill additive
+    if (this._fxAdditive && this.ctx) {
+      this._fxAdditive = false;
+      this.ctx.globalCompositeOperation = "source-over";
+    }
 
     // camera: linear decay; reduced motion keeps trauma at zero
     this.trauma = m.shake > 0 ? Math.max(0, (this.trauma || 0) - dt * fxNum(FXM.traumaDecay, 1.4)) : 0;
@@ -163,7 +170,10 @@ Object.assign(Game.prototype, {
     this.introPulse = Math.max(0, this.introPulse - dt * fxNum(FXM.introPulseDecay, 1.2));
     this.typoEdge = Math.max(0, this.typoEdge - dt);
     p.recoil = Math.max(0, p.recoil - dt * fxNum(FXM.recoilDecay, 6));
-    p.heat = Math.max(0, p.heat - dt * fxNum(FXM.heatDecay, 1.2));
+    // heat cools at 1.2/s of what is left (+.25 per key reaches .96 after six keys in a second, .09 two seconds
+    // later); a linear 1.2/s could never pass .5 at six keys per second
+    p.heat = p.heat * Math.max(0, 1 - dt * fxNum(FXM.heatDecay, 1.2));
+    if (p.heat < 0.002) p.heat = 0;
     p.kick = p.kick * Math.max(0, 1 - dt * fxNum(FXM.kickEase, 8));
     if (p.kick < 0.05) p.kick = 0;
 
@@ -358,6 +368,40 @@ Object.assign(Game.prototype, {
     const ring = fxPush(this.rings, new Ring({ x, y, size: fxNum(size, 20), color, life: fxNum(life, fxNum(FXM.ringLife, 0.28)), expand: m.anim > 0 }), FX_LIST_CAPS.rings);
     fxPush(this.flashDiscs, { x, y, r: fxNum(size, 20) * 0.5, alpha: 0.8 }, FX_LIST_CAPS.flashDiscs);
     return ring;
+  },
+
+  // ------------------------- Exhaust (D4) -------------------------
+  // 90 particles/s x (1 + heat) streaming left from the nozzles the ship pose published this frame; none under
+  // reduced motion (the plume stays, static). Called from tickEffects while playing.
+  emitExhaust(dt) {
+    this.ensureFx();
+    const m = this.fxMotion();
+    if (m.anim <= 0) { this.exhaustAcc = 0; return; }
+    const p = this.player;
+    const pose = this._shipPose;
+    const heat = clamp(p.heat || 0, 0, 1);
+    this.exhaustAcc += fxNum(FXM.exhaustRate, 90) * (1 + heat) * dt;
+    if (this.exhaustAcc < 1) return;
+    const noz = pose && pose.nozzles && pose.nozzles.length ? pose.nozzles : [{ x: p.x - 56, y: p.y }];
+    const dx = pose ? pose.dx : 0;
+    const dy = pose ? pose.bob : 0;
+    let i = this._exhaustIdx | 0;
+    while (this.exhaustAcc >= 1) {
+      this.exhaustAcc -= 1;
+      const n = noz[i % noz.length];
+      this.pushParticle(new Particle({
+        x: n.x + dx - 4,
+        y: n.y + dy + rand(-2, 2),
+        vx: -rand(180, 260) - 60 * heat,
+        vy: rand(-25, 25),
+        life: rand(0.2, 0.4),
+        size: rand(1.5, 3),
+        color: (i & 1) ? "magenta" : "cyan",
+        drag: 1.2
+      }));
+      i++;
+    }
+    this._exhaustIdx = i & 0xffff;
   },
 
   // ------------------------- Ambient -------------------------

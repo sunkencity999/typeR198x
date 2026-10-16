@@ -125,28 +125,32 @@ const kill = await P.g(async () => {
   const en = new Enemy({ text: "ringer", x: KX, y: KY, speed: 0 });
   g.enemies.push(en);
   await new Promise(r => requestAnimationFrame(r));
-  // background luminance around the plate before the kill (ring radius band 30..50 px)
+  // background luminance around the plate before the kill (ring radius band 30..50 px); ONE readback per sample
+  // (per-pixel getImageData calls take longer than the ring lives)
   const probeRing = () => {
+    const R = 52, X0 = Math.round((KX - R) * s), Y0 = Math.round((KY - R) * s), W = Math.round(2 * R * s);
+    const img = ctx.getImageData(X0, Y0, W, W).data;
     const out = [];
     for (let i = 0; i < 16; i++) {
       const a = (i / 16) * Math.PI * 2; let best = 0;
-      for (let r = 30; r <= 50; r += 1) {
-        const d = ctx.getImageData(Math.round((KX + Math.cos(a) * r) * s), Math.round((KY + Math.sin(a) * r) * s), 1, 1).data;
-        best = Math.max(best, 0.2126 * d[0] + 0.7152 * d[1] + 0.0722 * d[2]);
+      for (let r = 30; r <= 50; r += 0.5) {
+        const px = Math.round((KX + Math.cos(a) * r) * s) - X0, py = Math.round((KY + Math.sin(a) * r) * s) - Y0;
+        const k = (py * W + px) * 4;
+        best = Math.max(best, 0.2126 * img[k] + 0.7152 * img[k + 1] + 0.0722 * img[k + 2]);
       }
       out.push(best);
     }
     return out;
   };
+  const bg = probeRing();   // background before the kill (the 1.25x white impact plate would reach into the band)
   g.killEnemy(en);
   const ring0 = g.rings[0] && { life: g.rings[0].life, size: g.rings[0].size, color: g.rings[0].color };
   const debris = g.debris.length;
   const explosionType = g.explosions[0] && g.explosions[0].type;
   // isolate the ring: drop the sprite + particles so the band reads the ring alone
-  g.explosions.length = 0; g.particles.length = 0; g.debris.length = 0;
+  g.explosions.length = 0; g.particles.length = 0; g.debris.length = 0; g.floaters.length = 0;
   await new Promise(r => requestAnimationFrame(r));
-  const bg = probeRing();   // white impact plate frame: ring still tiny; the band reads background (plate is inside r 30)
-  await new Promise(r => setTimeout(r, 105));
+  await new Promise(r => setTimeout(r, 135));   // ring time runs on world dt: the .045 s hit-stop holds it back ~40 ms
   await new Promise(r => requestAnimationFrame(r));
   const ringR = g.rings[0] ? g.rings[0].radius() : null;
   const lit = probeRing();

@@ -30,41 +30,150 @@ const PARTICLE_COLORS = (() => {
 const FXD = (typeof FX_MOTION === "object" && FX_MOTION) || {};
 const FXD_TAU = Math.PI * 2;
 
-const SHIP_DRAW_W = 150;          // 168 in D4
+const SHIP_DRAW_W = 168;          // logical width of the untrimmed master; the trimmed sprite is placed inside it (B-1)
+const SHIP_ANCHOR_X = 0.45;       // VIS-06: hull box drawn at (player.x - dw*.45, player.y - dh/2)
+const SHIP_SHADOW_PAD = 20;       // bake margin for the 12 px blur + 6 px drop
+const SHIP_COCKPIT_DX = 18;       // vector fallback only
+// Nozzle and gun anchors per ship as fractions of the trimmed sprite box, read off the engine side of the four
+// sprites (coconut: two bells top-left; little dark one: twin cylinders; sofrito: single painted flame nozzle;
+// honeybee: two cones). The muzzle sits on the player's centre line at the hull's nose.
+const THRUSTER_OFFSET = Object.freeze({
+  coconut:           { nozzles: [{ fx: 0.07, fy: 0.24 }, { fx: 0.04, fy: 0.41 }], muzzleFx: 0.86 },
+  "little-dark-one": { nozzles: [{ fx: 0.22, fy: 0.34 }, { fx: 0.22, fy: 0.64 }], muzzleFx: 0.95 },
+  sofrito:           { nozzles: [{ fx: 0.23, fy: 0.47 }], muzzleFx: 0.98 },
+  honeybee:          { nozzles: [{ fx: 0.06, fy: 0.32 }, { fx: 0.06, fy: 0.73 }], muzzleFx: 0.92 },
+  default:           { nozzles: [{ fx: 0.04, fy: 0.5 }], muzzleFx: 0.96 }
+});
 
 Object.assign(Game.prototype, {
-  // ------------------------- Ship -------------------------
-  drawShip(ctx) {
-    const x = this.player.x;
-    const y = this.player.y;
-
-    ctx.save();
-    // engine trail
-    ctx.globalAlpha = 0.6;
-    ctx.fillStyle = PALETTE.rgba("magenta", 0.25);
-    ctx.beginPath();
-    ctx.ellipse(x - 30, y, 38, 16, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 0.75;
-    ctx.fillStyle = PALETTE.rgba("cyan", 0.25);
-    ctx.beginPath();
-    ctx.ellipse(x - 24, y, 26, 10, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 1;
-
-    // Trimmed sprite placed where the untrimmed master used to go (B-1): dw wide, offsets from Assets.sprite().
+  // ------------------------- Ship (L11 hull, additive parts in the L12 batch) -------------------------
+  // Where the trimmed sprite sits this frame (B-1 placement inside the 168 px master box).
+  shipGeometry() {
     const shipId = this.currentShipId();
     const key = "ships/" + shipId;
     const sp = Assets.sprite(key, SHIP_DRAW_W);
-    if (sp.img) {
-      const meta = Assets.meta(key);
-      const orig = meta && meta.orig;
-      const dw = SHIP_DRAW_W;
-      const dh = orig && orig.w > 0 ? dw * orig.h / orig.w : sp.h;
-      const ox = x - dw * 0.38;
-      const oy = y - dh / 2;
-      ctx.drawImage(sp.img, ox + sp.x, oy + sp.y, sp.w, sp.h);
+    const meta = Assets.meta(key);
+    const orig = meta && meta.orig;
+    const dw = SHIP_DRAW_W;
+    const dh = orig && orig.w > 0 ? dw * orig.h / orig.w : sp.h;
+    const ox = this.player.x - dw * SHIP_ANCHOR_X;
+    const oy = this.player.y - dh / 2;
+    return { shipId, key, sp, dw, dh, left: ox + sp.x, top: oy + sp.y, w: sp.w, h: sp.h };
+  },
+
+  // One-time bake per ship / spriteEpoch / renderScale / drawable: the hull with its rim shadow (the only
+  // shadowBlur in the game) and a white silhouette for the hit overlay. Never in the per-frame path.
+  getShipSprite(shipId, geo) {
+    const sp = geo.sp;
+    if (!sp.img) return null;
+    const cache = this._shipSprites || (this._shipSprites = {});
+    const rs = this.renderScale || 1;
+    const hit = cache[shipId];
+    if (hit && hit.epoch === this.spriteEpoch && hit.img === sp.img && hit.rs === rs && hit.w === sp.w && hit.h === sp.h) return hit;
+    const pad = SHIP_SHADOW_PAD;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.ceil((sp.w + pad * 2) * rs));
+    canvas.height = Math.max(1, Math.ceil((sp.h + pad * 2) * rs));
+    const g = canvas.getContext("2d");
+    g.setTransform(rs, 0, 0, rs, 0, 0);
+    g.shadowColor = "rgba(0,0,0,0.65)";
+    g.shadowBlur = 12;
+    g.shadowOffsetY = 6;
+    g.drawImage(sp.img, pad, pad, sp.w, sp.h);
+    g.shadowColor = "rgba(0,0,0,0)";
+    g.shadowBlur = 0;
+    g.shadowOffsetY = 0;
+    g.drawImage(sp.img, pad, pad, sp.w, sp.h);
+    const white = document.createElement("canvas");
+    white.width = Math.max(1, Math.ceil(sp.w * rs));
+    white.height = Math.max(1, Math.ceil(sp.h * rs));
+    const wg = white.getContext("2d");
+    wg.setTransform(rs, 0, 0, rs, 0, 0);
+    wg.drawImage(sp.img, 0, 0, sp.w, sp.h);
+    wg.globalCompositeOperation = "source-in";
+    wg.fillStyle = PALETTE.rgba("text", 1);
+    wg.fillRect(0, 0, sp.w, sp.h);
+    const entry = { canvas, white, pad, epoch: this.spriteEpoch, img: sp.img, rs, w: sp.w, h: sp.h };
+    cache[shipId] = entry;
+    return entry;
+  },
+
+  // Soft dark ellipse behind the hull (240x100) so the ship separates from busy parallax art.
+  getLaneScrim() {
+    const rs = this.renderScale || 1;
+    const hit = this._laneScrim;
+    if (hit && hit.epoch === this.spriteEpoch && hit.rs === rs) return hit;
+    const s = rs * 0.5;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(240 * s));
+    canvas.height = Math.max(1, Math.round(100 * s));
+    const g = canvas.getContext("2d");
+    g.setTransform(s, 0, 0, s * (100 / 240), 0, 0);
+    const grad = g.createRadialGradient(120, 120, 0, 120, 120, 120);
+    grad.addColorStop(0, PALETTE.rgba("bg0", 0.45));
+    grad.addColorStop(1, PALETTE.rgba("bg0", 0));
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 240, 240);
+    const entry = { canvas, epoch: this.spriteEpoch, rs };
+    this._laneScrim = entry;
+    return entry;
+  },
+
+  // Thruster plume layers baked once: outer magenta ellipse and a white -> cyan core, both brightest at the
+  // nozzle (right edge) and fading to the left; drawn scaled to the live plume length in the additive batch.
+  getPlumeSprites() {
+    const rs = this.renderScale || 1;
+    const hit = this._plumeSprites;
+    if (hit && hit.epoch === this.spriteEpoch && hit.rs === rs) return hit;
+    const make = (stops) => {
+      const w = 96, h = 40;
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(w * rs));
+      canvas.height = Math.max(1, Math.round(h * rs));
+      const g = canvas.getContext("2d");
+      g.setTransform(rs, 0, 0, rs, 0, 0);
+      const grad = g.createLinearGradient(w, 0, 0, 0);
+      for (const [p, c] of stops) grad.addColorStop(p, c);
+      g.fillStyle = grad;
+      g.beginPath();
+      g.ellipse(w / 2, h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
+      g.fill();
+      return canvas;
+    };
+    const entry = {
+      outer: make([[0, PALETTE.rgba("magenta", 1)], [0.6, PALETTE.rgba("magenta", 0.85)], [1, PALETTE.rgba("magenta", 0)]]),
+      core: make([[0, PALETTE.rgba("text", 1)], [0.35, PALETTE.rgba("cyan", 1)], [1, PALETTE.rgba("cyan", 0)]]),
+      epoch: this.spriteEpoch, rs
+    };
+    this._plumeSprites = entry;
+    return entry;
+  },
+
+  drawShip(ctx) {
+    const m = this.fxMotion();
+    const p = this.player;
+    const geo = this.shipGeometry();
+    const t = this.fxClock || 0;
+    const bobHz = typeof FXD.bobHz === "number" ? FXD.bobHz : 1.6;
+    const bob = m.anim > 0 ? Math.sin(t * bobHz) * (typeof FXD.bobPx === "number" ? FXD.bobPx : 3) : 0;
+    const roll = m.anim > 0 ? Math.sin(t * bobHz + 0.6) * (typeof FXD.rollRad === "number" ? FXD.rollRad : 0.02) : 0;
+    const dx = -(typeof FXD.recoilPx === "number" ? FXD.recoilPx : 10) * (p.recoil || 0) - (p.kick || 0);
+    const cx = p.x + 10;
+    const cy = p.y;
+
+    const scrim = this.getLaneScrim();
+    ctx.drawImage(scrim.canvas, cx - 120 + dx, cy - 50 + bob, 240, 100);
+
+    ctx.save();
+    ctx.translate(cx + dx, cy + bob);
+    if (roll) ctx.rotate(roll);
+    ctx.translate(-cx, -cy);
+    const sprite = this.getShipSprite(geo.shipId, geo);
+    if (sprite) {
+      ctx.drawImage(sprite.canvas, geo.left - sprite.pad, geo.top - sprite.pad, geo.w + sprite.pad * 2, geo.h + sprite.pad * 2);
     } else {
+      // vector fallback while the sprite loads (keeps its cockpit)
+      const x = p.x, y = p.y;
       ctx.lineWidth = 2;
       ctx.strokeStyle = PALETTE.rgba("cyan", 0.92);
       ctx.fillStyle = PALETTE.rgba("bg2", 0.70);
@@ -76,23 +185,123 @@ Object.assign(Game.prototype, {
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
-      // cockpit
       ctx.fillStyle = PALETTE.rgba("magenta", 0.45);
       ctx.beginPath();
-      ctx.ellipse(x + 18, y, 10, 6, 0, 0, Math.PI * 2);
+      ctx.ellipse(x + SHIP_COCKPIT_DX, y, 10, 6, 0, 0, Math.PI * 2);
       ctx.fill();
     }
+    ctx.restore();
 
-    // shield ring (D4 replaces with the hex + timer arc)
-    if (this.player.shield > 0) {
-      const a = this.reduceMotion ? 0.25 : 0.18 + 0.12 * Math.sin(this.starT * 6);
-      ctx.strokeStyle = PALETTE.rgba("violet", clamp(a, 0, 1));
+    // pose for the additive pass (plume, hit overlay, shield, muzzle flash) and the exhaust emitter
+    const off = THRUSTER_OFFSET[geo.shipId] || THRUSTER_OFFSET.default;
+    const nozzles = sprite
+      ? off.nozzles.map((n) => ({ x: geo.left + n.fx * geo.w, y: geo.top + n.fy * geo.h }))
+      : [{ x: p.x - 12, y: p.y }];
+    const muzzleX = sprite ? geo.left + off.muzzleFx * geo.w : p.x + 40;
+    this._shipPose = { cx, cy, dx, bob, roll, geo, sprite, nozzles, muzzle: { x: muzzleX + dx, y: p.y + bob } };
+  },
+
+  shipAdditiveActive() {
+    return !!this._shipPose;
+  },
+
+  // Plume + hit overlay + shield + absorb flash, drawn inside the L12 additive batch so the frame spends no extra
+  // composite assignments on the ship.
+  drawShipAdditive(ctx) {
+    const pose = this._shipPose;
+    if (!pose) return;
+    const m = this.fxMotion();
+    const p = this.player;
+    const t = this.fxClock || 0;
+    const pl = FXD.plume || {};
+    const heat = clamp(p.heat || 0, 0, 1);
+    const recoil = clamp(p.recoil || 0, 0, 1);
+    const base = typeof pl.base === "number" ? pl.base : 26;
+    const live = base + (typeof pl.heat === "number" ? pl.heat : 30) * heat + (typeof pl.flicker === "number" ? pl.flicker : 6) * Math.sin(t * (typeof pl.flickerHz === "number" ? pl.flickerHz : 23));
+    const len = (m.anim > 0 ? live : (typeof pl.staticLen === "number" ? pl.staticLen : 36)) * (1 + (typeof pl.recoil === "number" ? pl.recoil : 0.6) * recoil);
+    const hh = 7 + 3 * heat;
+    const sprites = this.getPlumeSprites();
+
+    ctx.save();
+    ctx.translate(pose.cx + pose.dx, pose.cy + pose.bob);
+    if (pose.roll) ctx.rotate(pose.roll);
+    ctx.translate(-pose.cx, -pose.cy);
+    for (const n of pose.nozzles) {
+      ctx.globalAlpha = 0.35 + 0.35 * heat;
+      ctx.drawImage(sprites.outer, n.x - len + 4, n.y - hh, len, hh * 2);
+      ctx.globalAlpha = 0.9;
+      ctx.drawImage(sprites.core, n.x - len * 0.5 + 3, n.y - hh * 0.55, len * 0.5, hh * 1.1);
+    }
+    if ((p.hitT || 0) > 0 && pose.sprite) {
+      const hitT0 = typeof FXD.hitT === "number" ? FXD.hitT : 0.12;
+      ctx.globalAlpha = clamp(p.hitT / hitT0, 0, 1) * 0.7;
+      ctx.drawImage(pose.sprite.white, pose.geo.left, pose.geo.top, pose.geo.w, pose.geo.h);
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+
+    if ((p.shield || 0) > 0 || (p.shieldFlash || 0) > 0) this.drawShield(ctx, pose);
+  },
+
+  // Flat-top hexagon r 66 (dashed 8/6, 30 deg/s, violet .55 over a .06 fill), a timer arc sweeping shield/cap,
+  // the last 2 s blinking at 3 Hz (dimmed to .35 under reduced motion), white .4 while an absorb flashes.
+  drawShield(ctx, pose) {
+    const p = this.player;
+    const m = this.fxMotion();
+    const sh = FXD.shield || {};
+    const r = typeof sh.r === "number" ? sh.r : 66;
+    const cx = pose.cx + pose.dx;
+    const cy = pose.cy + pose.bob;
+    const t = this.fxClock || 0;
+    const capBase = typeof sh.cap === "number" ? sh.cap : 9;
+    const cap = p.shieldCap || (p.shield > capBase ? (typeof sh.capStacked === "number" ? sh.capStacked : 15) : capBase);
+    const frac = clamp((p.shield || 0) / Math.max(1, cap), 0, 1);
+    let dim = 1;
+    if ((p.shield || 0) > 0 && p.shield < (typeof sh.blinkS === "number" ? sh.blinkS : 2)) {
+      dim = m.anim > 0 ? (Math.sin(t * FXD_TAU * (typeof sh.blinkHz === "number" ? sh.blinkHz : 3)) > 0 ? 1 : 0.35) : 0.35;
+    }
+    const spin = m.anim > 0 ? t * ((typeof sh.spinDegS === "number" ? sh.spinDegS : 30) * Math.PI / 180) : 0;
+    const flash = clamp((p.shieldFlash || 0) / 0.09, 0, 1);
+    const hex = (g, rad) => {
+      g.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const a = i * Math.PI / 3;
+        if (i === 0) g.moveTo(Math.cos(a) * rad, Math.sin(a) * rad);
+        else g.lineTo(Math.cos(a) * rad, Math.sin(a) * rad);
+      }
+      g.closePath();
+    };
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(spin);
+    if ((p.shield || 0) > 0) {
+      hex(ctx, r);
+      ctx.fillStyle = PALETTE.rgba("violet", 0.06);
+      ctx.fill();
+      ctx.setLineDash(sh.dash || [8, 6]);
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = dim;
+      ctx.strokeStyle = PALETTE.rgba("violet", 0.55);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    if (flash > 0) {
+      hex(ctx, r + 2);
+      ctx.globalAlpha = flash * 0.4;
       ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.ellipse(x + 10, y, 52, 28, 0, 0, Math.PI * 2);
+      ctx.strokeStyle = PALETTE.rgba("text", 1);
       ctx.stroke();
     }
     ctx.restore();
+    if ((p.shield || 0) > 0 && frac > 0) {
+      ctx.globalAlpha = dim;
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = PALETTE.rgba("violet", 0.92);
+      ctx.beginPath();
+      ctx.arc(cx, cy, r + 6, -Math.PI / 2, -Math.PI / 2 + FXD_TAU * frac);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
   },
 
   // ------------------------- Beams (L7) -------------------------
@@ -122,6 +331,7 @@ Object.assign(Game.prototype, {
       }
     }
     ctx.globalAlpha = 1;
+    ctx.lineCap = "butt";
     ctx.globalCompositeOperation = "source-over";
   },
 
@@ -304,6 +514,10 @@ Object.assign(Game.prototype, {
     if (this.bolts && this.bolts.length && typeof this.drawBolts === "function") this.drawBolts(ctx);
     if (this.flashDiscs && this.flashDiscs.length) this.drawFlashDiscs(ctx);
     ctx.globalAlpha = 1;
+    ctx.lineCap = "butt";
+    ctx.lineJoin = "miter";
+    ctx.textAlign = "start";
+    ctx.textBaseline = "alphabetic";
     this.closeAdditive(ctx);
   },
 
@@ -542,6 +756,7 @@ Object.assign(Game.prototype, {
       ctx.fillText(g.ch, ref.x, y);
     }
     ctx.globalAlpha = 1;
+    ctx.textAlign = "start";
   },
 
   drawVignette(ctx) {
