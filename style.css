@@ -1553,6 +1553,12 @@ fieldset.shipGrid > legend {
     margin: 0;
     box-shadow: 0 8px 24px rgba(0,0,0,0.45);
   }
+  /* The strip matters on the menu and in play; the pause/results screens already fill the viewport */
+  body[data-mode="paused"] .rotateHint,
+  body[data-mode="levelComplete"] .rotateHint,
+  body[data-mode="gameOver"] .rotateHint,
+  body[data-mode="victory"] .rotateHint { display: none; }
+  #app:has(> .rotateHint:not(.hidden)) .footer { padding-bottom: 72px; }
 }
 
 /* ----- 12. Modals ------------------------------------------------------------------ */
@@ -2137,7 +2143,7 @@ fieldset.shipGrid > legend {
   .resumeCard .btn-arcade { grid-column: 1 / -1; width: 100%; }
   .settingsRow { grid-template-columns: 96px 1fr 48px; }
   .endingActions, .screenActions { flex-direction: column; align-items: stretch; }
-  .screenActions .btn-arcade { max-width: none; }
+  .screenActions .btn-arcade { flex: 0 0 auto; max-width: none; } /* the 200 px basis would become height here */
   .modalOverlay { padding: 12px; }
   .modalInner { padding: 20px 18px; max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); }
   .modalActions { flex-direction: column; }

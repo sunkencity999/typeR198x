@@ -51,6 +51,9 @@ await sleep(60);
 await page.click("#btnConfirmOk");
 await sleep(120);
 P.check("story modal shown after confirming", await g(() => !document.getElementById("storyModal").classList.contains("is-dismissed")));
+await sleep(450); // the 350 ms fade settles before the shot (the harness's 03-story fires mid-fade)
+await P.shot("story-modal");
+P.check("story modal: scroll affordance state written on .modalScroll", await g(() => { const w = document.querySelector("#storyModal .modalScroll"); const b = w.querySelector(".modalBody"); const scrollable = b.scrollHeight > b.clientHeight + 2; return w.classList.contains("is-scrollable") === scrollable && (scrollable ? !w.classList.contains("at-bottom") : w.classList.contains("at-bottom")); }));
 P.check("story modal: #main inert", await g(() => document.getElementById("main").hasAttribute("inert")));
 let inside = true;
 const seen = new Set();
