@@ -1,0 +1,15 @@
+{
+  "description": "Pre-overhaul save of a player who finished the game: run null, lastUnlockedLevel 10, highScore 4200, muted with CRT off. Continue (or the sector 10 card) must start sector 10.",
+  "entry": "continue",
+  "expect": { "levelIndex": 9, "highScore": 4200, "lastUnlockedLevel": 10, "playerName": "LEGEND" },
+  "save": {
+    "playerName": "LEGEND",
+    "selectedShip": "honeybee",
+    "highScore": 4200,
+    "lastUnlockedLevel": 10,
+    "storySeen": true,
+    "keyboardHintSeen": true,
+    "settings": { "muted": true, "crt": false },
+    "run": null
+  }
+}
