@@ -123,24 +123,25 @@ const blink = await P.g(async () => {
   const g = window.game; const ctx = g.ctx; const s = g.renderScale;
   g.player.shield = 1.5; g.tickPowerTimers = () => {};
   const pose = g._shipPose; const cx = pose.cx + pose.dx, cy = pose.cy + pose.bob;
-  // violet energy of the ring band (r 58..76) in the top / bottom quadrants only (the hull's magenta stripes sit
-  // inside r 50 vertically), one readback per sample
+  // count of bright-violet stroke pixels in the ring band above / below the hull (the nebula behind the ship is a
+  // constant dim-violet floor; the dashed stroke at alpha .55 clears the predicate, at .19 it does not), one readback
   const R = 80, X0 = Math.round((cx - R) * s), Y0 = Math.round((cy - R) * s), W = Math.round(2 * R * s);
   const sample = () => {
-    const img = ctx.getImageData(X0, Y0, W, W).data; let v = 0, n = 0;
+    const img = ctx.getImageData(X0, Y0, W, W).data; let n = 0;
     for (let py = 0; py < W; py++) for (let px = 0; px < W; px++) {
       const dx = (px + X0) / s - cx, dy = (py + Y0) / s - cy; const r = Math.hypot(dx, dy);
-      if (r < 55 || r > 78 || Math.abs(dy) < 52) continue;   // hull is +-46 px tall (+bob); the hex edges sit at |dy| 57..66, the arc at 72
-      const k = (py * W + px) * 4; v += Math.max(0, img[k + 2] - img[k + 1]); n++;
+      if (r < 55 || r > 78 || Math.abs(dy) < 52) continue;   // hull is +-46 px tall (+bob); hex edges at |dy| 57..66, arc at 72
+      const k = (py * W + px) * 4;
+      if (img[k + 2] > 150 && img[k] > 110 && img[k + 1] < img[k + 2] - 40 && img[k] < img[k + 2]) n++;
     }
-    return Math.round(v / Math.max(1, n) * 10) / 10;
+    return n;
   };
-  const vals = [];
-  for (let i = 0; i < 14; i++) { await new Promise(r => setTimeout(r, 50)); await new Promise(r => requestAnimationFrame(r)); vals.push(Math.round(sample())); }
+  const vals = [], phase = [];
+  for (let i = 0; i < 14; i++) { await new Promise(r => setTimeout(r, 50)); await new Promise(r => requestAnimationFrame(r)); vals.push(sample()); phase.push(Math.sin(g.fxClock * Math.PI * 2 * 3) > 0 ? 1 : 0); }
   delete g.tickPowerTimers;
-  return { vals, spread: Math.max(...vals) - Math.min(...vals) };
+  return { vals, phase, spread: Math.max(...vals) - Math.min(...vals) };
 });
-P.check("shield 1.5 s: the ring blinks (violet energy of the shield square varies by > 35 % across 700 ms)", blink.spread > 0.35 * Math.max(...blink.vals), blink);
+P.check("shield 1.5 s: the ring blinks at 3 Hz (bright-violet stroke pixel count swings by > 50 % between phases across ~.9 s)", blink.spread > 0.5 * Math.max(...blink.vals) && blink.phase.includes(0) && blink.phase.includes(1), blink);
 await P.g(() => { const g = window.game; g.player.shield = 0; delete g.stepAmbient; delete g.drawStars; delete g.emitExhaust; delete g.spawnEnemy; g.save.settings.crt = true; g.applySettings(); });
 
 // ---- shadowBlur budget: zero per frame over 180 frames, one bake when the ship changes ----
