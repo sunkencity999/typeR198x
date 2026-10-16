@@ -818,9 +818,10 @@ Object.assign(Game.prototype, {
     if (list) {
       list.textContent = "";
       const lines = level && Array.isArray(results.bonusLines) ? results.bonusLines : [];
-      for (const row of lines) {
+      const banked = level && Array.isArray(results.bankedLines) ? results.bankedLines : [];
+      const addRow = (row, mod) => {
         const li = document.createElement("li");
-        li.className = "bonusRow";
+        li.className = mod ? `bonusRow ${mod}` : "bonusRow";
         const label = document.createElement("span");
         label.className = "bonusLabel";
         label.textContent = row.label;
@@ -830,6 +831,15 @@ Object.assign(Game.prototype, {
         else { value.textContent = String(row.value); li.classList.add("bonusRow--penalty"); }
         li.append(label, value);
         list.appendChild(li);
+      };
+      for (const row of lines) addRow(row);
+      // review R2: the rows above add up to the Bonus tile; money banked live during the sector sits under its own caption.
+      if (banked.length) {
+        const cap = document.createElement("li");
+        cap.className = "bonusCaption";
+        cap.textContent = "Banked during the sector";
+        list.appendChild(cap);
+        for (const row of banked) addRow(row, "bonusRow--banked");
       }
     }
 

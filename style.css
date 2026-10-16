@@ -1496,6 +1496,16 @@ fieldset.shipGrid > legend {
 
 .bonusRow .bonusLabel { opacity: 0.8; }
 .bonusRow--penalty .bonusValue { color: var(--c-danger); }
+/* Level Complete: the rows under the Bonus tile add up to it; money banked live sits under this caption (review R2). */
+.bonusCaption {
+  grid-column: 1 / -1;
+  margin-top: var(--sp-2);
+  padding: 4px 0 2px;
+  font-size: var(--fs-xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
 
 .resultsCard.is-revealed { animation: resultsIn 320ms var(--ease-out) both; }
 .screenTitle--long { font-size: var(--fs-2xl); letter-spacing: 0.1em; }

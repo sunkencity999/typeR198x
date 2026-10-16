@@ -429,16 +429,22 @@ Object.assign(Game.prototype, {
     const meta = this.runMeta || {};
     const prevBest = (this.save.sectorBests || {})[String(L)];
     const tally = level ? (this.lastTally || null) : null;
+    // review R2: bonusLines are exactly the components of tally.total (the Bonus tile and the finale banner), so
+    // they add up to it; the Clear row absorbs the per-row rounding under a retry multiplier. Money banked live
+    // during the sector (perfect waves, boss phases, countered surges) is listed apart in bankedLines.
     const bonusLines = [];
+    const bankedLines = [];
     if (tally) {
       const m = tally.retryMul;
-      bonusLines.push({ label: "Clear", value: Math.round(tally.clear * m) });
-      bonusLines.push({ label: "Time", value: Math.round(tally.time * m) });
-      bonusLines.push({ label: "Accuracy", value: Math.round(tally.accuracy * m) });
-      bonusLines.push({ label: "Perfect waves", value: tally.perfectWaves | 0 });
-      bonusLines.push({ label: "Flawless boss", value: Math.round(tally.flawless * m) });
-      bonusLines.push({ label: "Surges countered", value: tally.surges | 0 });
+      const time = Math.round(tally.time * m), accuracy = Math.round(tally.accuracy * m), flawless = Math.round(tally.flawless * m);
+      bonusLines.push({ label: "Clear", value: (tally.total | 0) - time - accuracy - flawless });
+      bonusLines.push({ label: "Time", value: time });
+      bonusLines.push({ label: "Accuracy", value: accuracy });
+      bonusLines.push({ label: "Flawless boss", value: flawless });
       if ((tally.retries | 0) > 0) bonusLines.push({ label: "Retry penalty", value: `x${m}` });
+      bankedLines.push({ label: "Perfect waves", value: tally.perfectWaves | 0 });
+      bankedLines.push({ label: "Boss phases", value: tally.phases | 0 });
+      bankedLines.push({ label: "Surges countered", value: tally.surges | 0 });
     }
     // review R3: the badge means "beat the headline this run started against", not the live save.highScore.
     const baselineHigh = Number.isFinite(meta.baselineHigh) ? meta.baselineHigh : (this.save.highScore | 0);
@@ -450,6 +456,7 @@ Object.assign(Game.prototype, {
       score: st.score | 0,
       levelScore,
       bonusLines,
+      bankedLines,
       wpm,
       acc,
       maxCombo: (level ? ls.maxCombo : st.maxCombo) | 0,
