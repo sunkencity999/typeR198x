@@ -2,9 +2,12 @@
 
 // ----------------------------- Game Entities -----------------------------
 // Plate width before the renderer measures the text: 20 px monospace advances ~12 px per glyph (+28 padding;
-// minions +24). The renderer overwrites textW/plateW with the measured value (see HANDOFF).
+// minions +24; powerup capsules +44 for the 26 px icon cell). The renderer overwrites textW/plateW with the
+// measured value (see HANDOFF).
 const PLATE_PAD = 28;
 const PLATE_PAD_MINION = 24;
+const CAPSULE_PAD = 44;
+const CAPSULE_H = 36;
 const GLYPH_ADVANCE_EST = 12;
 
 class Enemy {
@@ -28,7 +31,8 @@ class Enemy {
     this.typoT = 0;           // plate flinch after a wrong key
     this.flinch = 0;
     this.dying = false;       // auto-detonating (drain timeout / approach / phase clear): not targetable
-    this.age = 0;
+    this.age = 0;             // seconds since spawn (spawn pop / warp streak)
+    this.popScale = 1;        // last drawn spawn-pop width factor (probe / debug)
   }
   remaining() { return this.text.slice(this.progress); }
   nextChar() { return this.text[this.progress] || null; }
@@ -54,11 +58,13 @@ class Powerup {
     this.speed = speed;
     this.alive = true;
     this.locked = false;
+    this.flash = 0;
     this.floatT = rand(0, Math.PI * 2);
-    // B-14 entity fields
+    // B-14 entity fields (capsule geometry: h 36, w = labelW + 44)
     this.labelW = this.label.length * GLYPH_ADVANCE_EST;
-    this.plateW = this.labelW + PLATE_PAD;
-    this.plateH = PLATE_H;
+    this.textW = this.labelW;
+    this.plateW = this.labelW + CAPSULE_PAD;
+    this.plateH = CAPSULE_H;
     this.fromKill = fromKill;
     this.ttl = ttl;
     this.age = 0;
@@ -67,9 +73,11 @@ class Powerup {
   }
   remaining() { return this.label.slice(this.progress); }
   nextChar() { return this.label[this.progress] || null; }
-  update(dt) {
+  // bobAmp: +-px of the idle bob (4 by default, 0 under reduce-motion; the game passes it).
+  update(dt, bobAmp = 4) {
     this.age += dt;
     this.floatT += dt * 2.1;
+    this.flash = Math.max(0, this.flash - dt * 5);
     if (this.homing) {
       const dx = this.homing.tx - this.x;
       const dy = this.homing.ty - this.baseY;
@@ -81,7 +89,7 @@ class Powerup {
     } else {
       this.x -= this.speed * dt;
     }
-    this.y = this.baseY + Math.sin(this.floatT) * 4;   // bob +-4 px
+    this.y = this.baseY + Math.sin(this.floatT) * bobAmp;
     if (this.age >= this.ttl) this.dying = true;
   }
 }
@@ -220,8 +228,9 @@ class Boss {
     this.segments = segments.map(s => s.toLowerCase());
     this.segmentIndex = 0;
     this.progress = 0;
-    this.x = 980;
-    this.y = 250;
+    // x/y are the art's content centre; the renderer (bossPlacement) writes them every frame once the art is known.
+    this.x = 976;
+    this.y = 360;
     this.vy = 0;
     this.phaseT = 0;
     this.flash = 0;
@@ -234,10 +243,11 @@ class Boss {
     this.surgeTimer = 0;      // seconds since the last surge (or the intro)
     this.surgeFlash = 0;      // bolt afterglow after fireSurge
     this.enterT = 0;
-    this.artSize = artSize;   // { w, h } of the untrimmed art, for artRect before D6 recomposes
-    this.contentRect = null;  // set by D6 (opaque box in logical px)
+    this.artSize = artSize;   // { w, h } of the untrimmed art (fallback geometry when the loader has no manifest)
+    this.contentRect = null;  // opaque box in logical px (written by the renderer; bossAimPoint / minion spawns read it)
   }
   get segment() { return this.segments[this.segmentIndex] || null; }
+  get nextSegment() { return this.segments[this.segmentIndex + 1] || null; }
   get remaining() {
     const seg = this.segment;
     return seg ? seg.slice(this.progress) : "";
@@ -252,23 +262,26 @@ class Boss {
     const seg = this.segment;
     return seg ? seg.length - this.progress : 0;
   }
-  // Today's draw box (pre-D6): scale = min(.65*720/h, .7), x = boss.x - .35*artW, y = boss.y - .45*artH.
-  // Without known art it falls back to the console slab so minion spawns still have an anchor.
+  // Trimmed-sprite rect in world space. The renderer's bossArtRect() (VIS-07 composition: art box x 688..w-16,
+  // y hudSafeTop+8..h-24) is the source of truth; without it, a box fitted into the right column.
   get artRect() {
     const g = (typeof window !== "undefined" && window.game) || null;
     if (g && typeof g.bossArtRect === "function") {
       const r = g.bossArtRect(this);
       if (r && r.w > 0 && r.h > 0) return r;
     }
-    const a = this.artSize;
-    if (a && a.w > 0 && a.h > 0) {
-      const scale = Math.min((720 * 0.65) / a.h, 0.7);
-      const w = a.w * scale, h = a.h * scale;
-      return { x: this.x - w * 0.35, y: this.y - h * 0.45, w, h };
-    }
-    return this.slabRect;
+    const a = this.artSize || { w: 2816, h: 1536 };
+    const h = g ? g.h : 720, w = g ? g.w : 1280, top = ((g && g.hudSafeTop) || 112) + 8;
+    const scale = Math.min(576 / a.w, (h - 24 - top) / a.h);
+    const aw = a.w * scale, ah = a.h * scale;
+    return { x: w - 16 - aw, y: top, w: aw, h: ah };
   }
-  get slabRect() { return { x: this.x - 260, y: this.y - 95, w: 520, h: 190 }; }
+  // Console slab (VIS-07): x 32..672, y h-120..h-24.
+  get slabRect() {
+    const g = (typeof window !== "undefined" && window.game) || null;
+    const h = g ? g.h : 720;
+    return { x: 32, y: h - 120, w: 640, h: 96 };
+  }
   phaseFor(segmentIndex) {
     let p = 0;
     for (let i = 0; i < this.phaseStarts.length; i++) if (segmentIndex >= this.phaseStarts[i]) p = i;
@@ -284,11 +297,10 @@ class Boss {
     const total = this.totalChars;
     return total <= 0 ? 0 : 1 - (this.charsDone() / total);
   }
+  // Clocks only: position comes from the renderer's placement (float sin(.8 t) * 12 around the art slot).
   update(dt, h) {
     this.phaseT += dt;
     this.enterT += dt;
-    // Gentle float
-    this.y = 240 + Math.sin(this.phaseT * 0.8) * 60;
     this.flash = Math.max(0, this.flash - dt * 5);
     this.surgeFlash = Math.max(0, this.surgeFlash - dt * 4);
   }

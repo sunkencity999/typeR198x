@@ -127,3 +127,45 @@ function drawTracked(ctx, text, x, y, em = 0.12) {
 function rectsIntersect(a, b) {
   return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 }
+
+// Chamfered hexagon ("cartridge") centred on (cx, cy): w x h with chamfer c at both ends (VIS-05 capsules).
+function capsulePath(ctx, cx, cy, w, h, c = 10) {
+  const hw = w / 2, hh = h / 2;
+  const ch = Math.min(c, hw);
+  ctx.beginPath();
+  ctx.moveTo(cx - hw + ch, cy - hh);
+  ctx.lineTo(cx + hw - ch, cy - hh);
+  ctx.lineTo(cx + hw, cy);
+  ctx.lineTo(cx + hw - ch, cy + hh);
+  ctx.lineTo(cx - hw + ch, cy + hh);
+  ctx.lineTo(cx - hw, cy);
+  ctx.closePath();
+}
+
+// Width of a letter-spaced run (same metric drawTracked uses) and a fitter that shrinks the font until it fits.
+function measureTracked(ctx, text, em = 0.12) {
+  const str = String(text || "");
+  if (!str) return 0;
+  const px = fontPx(ctx.font);
+  let total = 0, n = 0;
+  for (const ch of str) { total += ctx.measureText(ch).width; n++; }
+  return total + px * em * (n - 1);
+}
+
+function fitTracked(ctx, text, maxW, em = 0.12, min = 9, step = 1, makeFont = null) {
+  let px = fontPx(ctx.font);
+  const build = makeFont || ((p) => ctx.font.replace(/(\d+(?:\.\d+)?)px/, `${p}px`));
+  ctx.font = build(px);
+  while (px - step >= min && measureTracked(ctx, text, em) > maxW) {
+    px -= step;
+    ctx.font = build(px);
+  }
+  return px;
+}
+
+// Characters revealed by a typewriter that started at t = 0 and types one every `perChar` seconds.
+function typedCount(text, t, perChar = 0.03) {
+  const len = String(text || "").length;
+  if (t <= 0) return 0;
+  return Math.min(len, Math.floor(t / perChar) + 1);
+}
