@@ -2552,6 +2552,9 @@ fieldset.shipGrid > legend {
   animation: none;
 }
 
+/* review R18: the crit pulse rule (#hud[data-hp="crit"] #hudHPFill, 2,1,0) outranks the list above (1,2,0) */
+:root.reduce-motion #hud[data-hp="crit"] #hudHPFill { animation: none; }
+
 :root.reduce-motion .chip.expiring { opacity: 0.5; }
 :root.reduce-motion .toast { opacity: 1; }
 :root.reduce-motion .toast.is-leaving { opacity: 0; transition: opacity 200ms; }
