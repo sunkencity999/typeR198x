@@ -538,6 +538,42 @@ body[data-mode="playing"] #hud { background: rgba(5,6,11,0.74); }
   animation: chargePulse 600ms ease-in-out infinite alternate;
 }
 
+/* HUD readout refinements (screens track, C3): cockpit dividers, combo-break flash, hull/boss meter depth */
+.hudCell + .hudCell {
+  padding-left: 14px;
+  border-left: 1px solid rgba(255,255,255,0.08);
+}
+
+.hudCell .label { margin-right: 4px; }
+#hudScore { color: var(--c-text); font-weight: 600; }
+#hudCombo { transition: color var(--dur-2); }
+#hudCombo.break {
+  color: var(--c-danger);
+  animation: comboBreak 120ms var(--ease-out);
+}
+
+#hudHPFill { box-shadow: 0 0 8px rgba(57,245,255,0.35); }
+#hud[data-hp="warn"] #hudHPFill { box-shadow: 0 0 8px rgba(255,193,74,0.35); }
+#hud[data-hp="crit"] #hudHPFill { box-shadow: 0 0 10px rgba(255,77,109,0.55); }
+#hud[data-hp="crit"] { box-shadow: var(--glow-soft), inset 0 0 18px rgba(255,77,109,0.12); }
+
+.bossMeter { box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), inset 0 0 12px rgba(0,0,0,0.45); }
+.bossTitle .label { margin-right: 2px; }
+#bossSegment { opacity: 0.85; }
+
+@keyframes comboBreak {
+  0% { transform: translateX(0); }
+  30% { transform: translateX(-3px); }
+  60% { transform: translateX(2px); }
+  100% { transform: translateX(0); }
+}
+
+@media (max-width: 1024px) {
+  .hudCell + .hudCell { padding-left: 0; border-left: 0; }
+}
+
+:root.reduce-motion #hudCombo.break { animation: none; }
+
 /* ----- 5. Screens --------------------------------------------------------------- */
 .screen {
   position: absolute;
