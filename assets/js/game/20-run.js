@@ -420,7 +420,7 @@ Object.assign(Game.prototype, {
     const wpm = this.grossWpm(src.chars | 0, timeMs);
     const acc = level ? this.getLevelAccuracyPct() : ((st.total | 0) > 0 ? Math.round((st.correct / st.total) * 10000) / 100 : 100);
     const hpPts = (ls.damageTaken | 0) === 0 ? 1 : clamp(1 - (ls.damageTaken | 0) / Math.max(1, this.player.maxHp), 0, 1);
-    const rank = rankFor(acc, wpm, hpPts);
+    const rank = rankFor(acc, wpm, hpPts, L);   // level-aware speed window for sectors 1-3 (B10)
     const cpScore = (this.run && this.run.checkpoint) ? (this.run.checkpoint.score | 0) : 0;
     const levelScore = Math.max(0, (st.score | 0) - cpScore);
     const meta = this.runMeta || {};

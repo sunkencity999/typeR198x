@@ -57,7 +57,8 @@ the play-test harness has its own [tools/playtest/README.md](./tools/playtest/RE
 | `Space` or `Backspace` | Release the current lock |
 | Three wrong keys on a locked target | The lock drops on its own ("lock lost") |
 | `Esc` | Pause / resume during play; back out of a modal or screen |
-| `Enter` (or `Space` on result screens) | Advance screens; `Enter` in the pilot-name field starts the run; skips the boss intro when you have already cleared that sector, and the rest of the finale after its first burst |
+| `Enter` (or `Space` on result screens) | Advance screens; `Enter` in the pilot-name field starts the run; skips the boss intro when you have already cleared that sector, and the rest of the finale once its skip window opens (2 s) |
+| Any letter during the sector card | Skips the card once you have already cleared that sector (returning players); keys are never counted there |
 | `?` or `F1` | Open the help manual (title and pause screens) |
 | `Alt`+`Enter`, `Cmd`+`Enter` (Mac) or `F11` | Toggle fullscreen |
 | `M` | Mute / unmute on the title and pause screens |
@@ -101,8 +102,10 @@ row) caps the canvas backing store; see [render scale](#browser-floor-and-render
 
 **Touch play.** Tapping the playfield focuses a hidden text input so the soft keyboard appears; typed
 characters arrive through `beforeinput`/`input` and are routed to the same `handleTyped()` path as key
-presses. Phones get a four-lane landscape profile with its own plate geometry, a rotate hint in portrait and
-an on-canvas pause button in immersive landscape. A hardware keyboard remains the best experience.
+presses. Phones get a four-lane landscape profile with its own plate geometry (plate glyphs are 14 CSS px on an
+iPhone 13 in landscape), a rotate hint in portrait and an on-canvas pause button in immersive landscape. The phone
+profile is landscape-only by design: portrait is the "rotate your phone" state. A hardware keyboard remains the best
+experience.
 
 ## Running locally
 

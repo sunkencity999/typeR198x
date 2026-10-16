@@ -567,7 +567,10 @@ Object.assign(Game.prototype, {
   tickFinale(dt) {
     const info = this.bossClear;
     if (!info) return;
-    info.t += dt;
+    // The finale clock runs on wall time: the boss-kill slow-motion and hit-stop scale the world dt, but the
+    // 5 s outro, its bursts and the 2 s skip window are promises to the player (B8), not to the world.
+    const ts = this.timeScale;
+    info.t += (ts > 0 && ts < 1) ? dt / ts : dt;
     const bursts = this.bossFinaleBursts;
     while (bursts.length && bursts[0].time <= info.t) this.runBossFinaleBurst(bursts.shift());
     const d = this.bossDissolve;
