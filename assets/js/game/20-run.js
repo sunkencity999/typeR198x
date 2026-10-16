@@ -255,6 +255,7 @@ Object.assign(Game.prototype, {
       this.startLevel(this.levelIndex, { fromMenu: true, fresh: true });
       return;
     }
+    if (!Number.isFinite(cp.levelIndex)) cp.levelIndex = clamp(run.levelIndex | 0, 0, 9);   // review R21
     this.run = run;
     this.restoreCheckpoint(cp);
     run.boss = null;
@@ -271,6 +272,7 @@ Object.assign(Game.prototype, {
       this.restartLevel();
       return;
     }
+    if (!Number.isFinite(cp.levelIndex)) cp.levelIndex = clamp(run.levelIndex | 0, 0, 9);   // review R21
     this.run = run;
     this.restoreCheckpoint(cp);
     const phase = cp.bossPhase | 0;
