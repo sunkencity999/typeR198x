@@ -96,30 +96,119 @@ Object.assign(Game.prototype, {
   },
 
   // ------------------------- Beams (L7) -------------------------
-  // Two strokes (wide soft + thin core), no shadow (D2 adds the third pass and the muzzle flash).
+  // Three passes per beam in one additive batch: w*3 at .22, w at .95, 1 px white at .60, round caps. The visible
+  // segment runs from the detached tail to the travelling head (Bullet.tailT / headT). No shadowBlur.
   drawBullets(ctx) {
-    if (!this.bullets.length) return;
-    ctx.save();
+    const list = this.bullets;
+    if (!list.length) return;
+    ctx.globalCompositeOperation = "lighter";
     ctx.lineCap = "round";
-    for (const b of this.bullets) {
-      const a = clamp((1 - (b.t / b.life)) * 1.1, 0, 1);
-      const col = BULLET_COLORS[b.color] || BULLET_COLORS.cyan;
-      ctx.globalAlpha = a * 0.25;
-      ctx.strokeStyle = col.wide;
-      ctx.lineWidth = b.width * 3;
+    for (let pass = 0; pass < 3; pass++) {
+      for (const b of list) {
+        const a = typeof b.alpha === "function" ? b.alpha() : clamp(1 - b.t / b.life, 0, 1);
+        if (a <= 0) continue;
+        const head = typeof b.headT === "function" ? b.headT() : 1;
+        const tail = typeof b.tailT === "function" ? b.tailT() : 0;
+        if (head <= tail) continue;
+        const col = BULLET_COLORS[b.color] || BULLET_COLORS.cyan;
+        ctx.globalAlpha = a;
+        if (pass === 0) { ctx.strokeStyle = col.wide; ctx.lineWidth = b.width * 3; }
+        else if (pass === 1) { ctx.strokeStyle = col.core; ctx.lineWidth = b.width; }
+        else { ctx.strokeStyle = BEAM_WHITE; ctx.lineWidth = 1; }
+        ctx.beginPath();
+        ctx.moveTo(lerp(b.x, b.tx, tail), lerp(b.y, b.ty, tail));
+        ctx.lineTo(lerp(b.x, b.tx, head), lerp(b.y, b.ty, head));
+        ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = "source-over";
+  },
+
+  // Muzzle flash: radial disc r 22 -> 0 with three spikes over .06 s at the ship's gun (pose) or the beam origin.
+  drawMuzzles(ctx) {
+    const pose = this._shipPose;
+    for (const mz of this.muzzles) {
+      const u = clamp(mz.t / mz.life, 0, 1);
+      const r = 22 * (1 - u);
+      if (r < 1) continue;
+      const x = pose && pose.muzzle ? pose.muzzle.x : mz.x;
+      const y = pose && pose.muzzle ? pose.muzzle.y : mz.y;
+      const a = 0.9 * (1 - u);
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+      g.addColorStop(0, PALETTE.rgba("text", a));
+      g.addColorStop(0.35, PALETTE.rgba(mz.color, a * 0.8));
+      g.addColorStop(1, PALETTE.rgba(mz.color, 0));
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = g;
       ctx.beginPath();
-      ctx.moveTo(b.x, b.y);
-      ctx.lineTo(b.tx, b.ty);
-      ctx.stroke();
-      ctx.globalAlpha = a;
-      ctx.strokeStyle = col.core;
-      ctx.lineWidth = b.width;
+      ctx.arc(x, y, r, 0, FXD_TAU);
+      ctx.fill();
+      ctx.strokeStyle = PALETTE.rgba("text", a * 0.8);
+      ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.moveTo(b.x, b.y);
-      ctx.lineTo(b.tx, b.ty);
+      for (let i = 0; i < 3; i++) {
+        const ang = mz.rot + i * (FXD_TAU / 3);
+        const len = 30 * (1 - u * 0.5);
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + Math.cos(ang) * len, y + Math.sin(ang) * len);
+      }
       ctx.stroke();
     }
-    ctx.restore();
+  },
+
+  // Debris shards: sheet frame 16, rotated, fading over the last .2 s (small tinted squares until the sheet is up).
+  drawDebris(ctx) {
+    const sheet = ExplosionSprite.sheet;
+    const ready = ExplosionSprite.isReady(sheet);
+    const frame = (typeof EXPLOSION_FRAMES !== "undefined" && EXPLOSION_FRAMES[16]) || null;
+    const k = ExplosionSprite.sheetScale || 1;
+    for (const d of this.debris) {
+      const a = d.alpha();
+      if (a <= 0) continue;
+      ctx.globalAlpha = a;
+      if (ready && frame) {
+        const dw = frame.w * d.size, dh = frame.h * d.size;
+        ctx.save();
+        ctx.translate(d.x, d.y);
+        ctx.rotate(d.rot);
+        ctx.drawImage(sheet, frame.x * k, frame.y * k, frame.w * k, frame.h * k, -dw / 2, -dh / 2, dw, dh);
+        ctx.restore();
+      } else {
+        ctx.fillStyle = PALETTE.rgba(d.color, 0.9);
+        ctx.fillRect(d.x - 2, d.y - 2, 4, 4);
+      }
+    }
+    ctx.globalAlpha = 1;
+  },
+
+  // Jagged bolts: wide tint pass, core pass, thin white centre; the surge arc (danger) widens 2 -> 4 px.
+  drawBolts(ctx) {
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    for (const b of this.bolts) {
+      const a = b.alpha();
+      if (a <= 0) continue;
+      const w = b.width();
+      const p = b.pts;
+      ctx.beginPath();
+      ctx.moveTo(p[0], p[1]);
+      ctx.lineTo(p[2], p[3]);
+      ctx.lineTo(p[4], p[5]);
+      ctx.lineTo(p[6], p[7]);
+      ctx.globalAlpha = a * 0.35;
+      ctx.strokeStyle = PALETTE.rgba(b.color, 1);
+      ctx.lineWidth = w * 3;
+      ctx.stroke();
+      ctx.globalAlpha = a;
+      ctx.lineWidth = w;
+      ctx.stroke();
+      ctx.globalAlpha = a * 0.7;
+      ctx.strokeStyle = PALETTE.rgba("text", 1);
+      ctx.lineWidth = Math.max(1, w * 0.4);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
   },
 
   // ------------------------- L12: explosions, dying plates, particles, rings, bolts -------------------------
@@ -184,6 +273,7 @@ Object.assign(Game.prototype, {
       this.openAdditive(ctx);
     }
     if (typeof this.drawShipAdditive === "function") this.drawShipAdditive(ctx);
+    if (this.muzzles && this.muzzles.length) this.drawMuzzles(ctx);
     const list = this.particles;
     if (list.length) {
       ctx.lineCap = "round";

@@ -86,20 +86,33 @@ class Powerup {
   }
 }
 
+// Staged laser (D2 / JUICE-03): the head races from the muzzle (x, y) to the target in FX_BULLET.head seconds,
+// the tail detaches after FX_BULLET.tail and the beam is gone at `life`. drawBullets derives the visible segment
+// from tailT()/headT(); the effects clock spawns the impact ring when the head arrives (`arrived`). `impact`
+// false marks decorative side beams (SPREAD) that ring nothing.
+const FX_BULLET = (() => {
+  const m = (typeof FX_MOTION === "object" && FX_MOTION) || {};
+  return { life: typeof m.bulletLife === "number" ? m.bulletLife : 0.15, head: typeof m.bulletHeadS === "number" ? m.bulletHeadS : 0.035, tail: typeof m.bulletTailS === "number" ? m.bulletTailS : 0.07 };
+})();
 class Bullet {
-  constructor({ x, y, tx, ty, life = 0.08, width = 3, color = "cyan" }) {
+  constructor({ x, y, tx, ty, life = FX_BULLET.life, width = 3, color = "cyan", impact = true }) {
     this.kind = "bullet";
     this.x = x; this.y = y;
     this.tx = tx; this.ty = ty;
     this.life = life;
     this.t = 0;
     this.width = width;
-    this.color = color; // PALETTE name: cyan | magenta | lime (BULLET_COLORS in 70-render.js)
+    this.color = color; // PALETTE name (BULLET_COLORS in 75-fx-draw.js)
+    this.impact = impact;
+    this.arrived = false;
   }
   update(dt) {
     this.t += dt;
   }
   alive() { return this.t < this.life; }
+  headT() { return clamp(this.t / FX_BULLET.head, 0, 1); }
+  tailT() { return clamp((this.t - FX_BULLET.tail) / Math.max(0.001, this.life - FX_BULLET.tail), 0, 1); }
+  alpha() { const u = this.t / this.life; return clamp(1 - u * u, 0, 1); }
 }
 
 // Sheet-animated explosion (A7 / JUICE-04). The sheet is owned by the Assets loader and read every frame through
@@ -249,6 +262,78 @@ class Ring {
   }
   alpha() { return clamp(1 - this.t / this.life, 0, 1); }
   width() { return this.size >= 100 ? lerp(4, 2, this.t / this.life) : 2; }
+}
+
+// Jagged additive bolt (D2): three segments between the endpoints with perpendicular jitter, re-rolled at
+// flickerHz while `jitter` is on (static under reduced motion). RAPID chain hits are cyan .12 s; the boss surge
+// arc is danger and widens 2 -> 4 px over its life.
+class Bolt {
+  constructor({ x1, y1, x2, y2, color = "cyan", life = 0.12, width = 2, widthEnd = null, flickerHz = 20, jitter = true }) {
+    this.kind = "bolt";
+    this.x1 = x1; this.y1 = y1;
+    this.x2 = x2; this.y2 = y2;
+    this.color = color;
+    this.life = life;
+    this.t = 0;
+    this.w0 = width;
+    this.w1 = widthEnd == null ? width : widthEnd;
+    this.flickerHz = flickerHz;
+    this.jitter = jitter;
+    this.flickerAcc = 0;
+    this.pts = new Float64Array(8);
+    this.reroll();
+  }
+  reroll() {
+    const dx = this.x2 - this.x1, dy = this.y2 - this.y1;
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len, ny = dx / len;
+    const amp = clamp(len * 0.12, 4, 22);
+    const p = this.pts;
+    p[0] = this.x1; p[1] = this.y1;
+    for (let i = 1; i <= 2; i++) {
+      const u = i / 3 + rand(-0.08, 0.08);
+      const off = (i === 1 ? 1 : -1) * rand(0.35, 1) * amp;
+      p[i * 2] = this.x1 + dx * u + nx * off;
+      p[i * 2 + 1] = this.y1 + dy * u + ny * off;
+    }
+    p[6] = this.x2; p[7] = this.y2;
+  }
+  update(dt) {
+    this.t += dt;
+    if (!this.jitter) return;
+    this.flickerAcc += dt;
+    if (this.flickerAcc >= 1 / this.flickerHz) { this.flickerAcc = 0; this.reroll(); }
+  }
+  alive() { return this.t < this.life; }
+  alpha() { return clamp(1 - this.t / this.life, 0, 1); }
+  width() { return lerp(this.w0, this.w1, clamp(this.t / this.life, 0, 1)); }
+}
+
+// Explosion debris (D2 / JUICE-04): sheet frame 16 pieces thrown off medium / large blasts, gravity 520 px/s^2,
+// spinning, fading over the last .2 s of a .7 s life.
+class Debris {
+  constructor({ x, y, vx, vy, life = 0.7, gravity = 520, frame = 16, size = 0.2 }) {
+    this.kind = "debris";
+    this.x = x; this.y = y;
+    this.vx = vx; this.vy = vy;
+    this.life = life;
+    this.t = 0;
+    this.gravity = gravity;
+    this.frame = frame;
+    this.rot = rand(0, Math.PI * 2);
+    this.vr = rand(-9, 9);
+    this.size = size;            // draw scale of the sheet frame (logical px per sheet px)
+    this.color = choice(["amber", "magenta"]);   // fallback colour while the sheet is not ready
+  }
+  update(dt) {
+    this.t += dt;
+    this.vy += this.gravity * dt;
+    this.x += this.vx * dt;
+    this.y += this.vy * dt;
+    this.rot += this.vr * dt;
+  }
+  alive() { return this.t < this.life; }
+  alpha() { const left = this.life - this.t; return left < 0.2 ? Math.max(0, left / 0.2) : 1; }
 }
 
 class Boss {

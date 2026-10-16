@@ -413,29 +413,68 @@ Object.assign(Game.prototype, {
     }
   },
 
-  // ------------------------- Weapons (D2 restages these) -------------------------
+  // ------------------------- Weapons -------------------------
+  // Staged laser (JUICE-03): a beam from the muzzle (player.x + 22) whose head reaches the target in 35 ms and
+  // whose tail detaches after 70 ms; a muzzle flash at the gun; the impact ring spawns when the head arrives
+  // (tickFxLists). Colour follows the active weapon (POWER_ACCENT): SPREAD magenta, PIERCE violet, RAPID cyan;
+  // MULTI never recolours and lime stays reserved for "type this". SPREAD adds two decorative side beams.
   fireLaserTo(tx, ty, color) {
     this.ensureFx();
-    const shots = [];
+    const tint = this.beamColor(color);
     const baseWidth = 3 + this.levelIndex * 0.7;
-    const spreadWidth = Math.max(2, baseWidth * 0.65);
-    shots.push({ tx, ty, color, width: baseWidth });
-
+    const ox = this.player.x + 22;
+    const oy = this.player.y;
+    this.pushBullet(new Bullet({ x: ox, y: oy, tx, ty, width: baseWidth, color: tint }));
     if (this.power.spread > 0) {
-      shots.push({ tx: tx + rand(-20, 20), ty: ty + rand(-80, -20), color: "magenta", width: spreadWidth });
-      shots.push({ tx: tx + rand(-20, 20), ty: ty + rand(20, 80), color: "magenta", width: spreadWidth });
+      const w = Math.max(2, baseWidth * 0.65);
+      this.pushBullet(new Bullet({ x: ox, y: oy, tx: tx + rand(-20, 20), ty: ty + rand(-80, -20), width: w, color: "magenta", impact: false }));
+      this.pushBullet(new Bullet({ x: ox, y: oy, tx: tx + rand(-20, 20), ty: ty + rand(20, 80), width: w, color: "magenta", impact: false }));
     }
+    this.addMuzzleFlash(ox, oy, tint);
+  },
 
-    for (const s of shots) {
-      this.pushBullet(new Bullet({
-        x: this.player.x + 22,
-        y: this.player.y,
-        tx: s.tx,
-        ty: s.ty,
-        width: s.width,
-        color: s.color
-      }));
+  // Beam tint: explicit hostile / bonus colours pass through; otherwise the active weapon decides.
+  beamColor(requested) {
+    if (requested === "danger" || requested === "amber" || requested === "violet") return requested;
+    const acc = (typeof POWER_ACCENT === "object" && POWER_ACCENT) || {};
+    if (this.power.spread > 0) return acc.SPREAD || "magenta";
+    if (this.power.pierce > 0) return acc.PIERCE || "violet";
+    if (this.power.rapid > 0) return acc.RAPID || "cyan";
+    return "cyan";
+  },
+
+  // Radial disc r 22 + three spikes for .06 s, drawn at the ship's gun (75-fx-draw.js).
+  addMuzzleFlash(x, y, color = "cyan") {
+    this.ensureFx();
+    return fxPush(this.muzzles, { x, y, t: 0, life: fxNum(FXM.muzzleLife, 0.06), color: PALETTE.has(color) ? color : "cyan", rot: rand(0, Math.PI) }, FX_LIST_CAPS.muzzles);
+  },
+
+  // Jagged 3-segment additive bolt: RAPID chain hits (cyan, .12 s) and the boss surge arc (danger, 2 -> 4 px,
+  // 20 Hz flicker, static under reduced motion).
+  addBolt(x1, y1, x2, y2, colorName = "cyan", life) {
+    this.ensureFx();
+    const m = this.fxMotion();
+    const color = PALETTE.has(colorName) ? colorName : "cyan";
+    const surge = color === "danger";
+    return fxPush(this.bolts, new Bolt({ x1, y1, x2, y2, color, life: fxNum(life, fxNum(FXM.boltLife, 0.12)), width: 2, widthEnd: surge ? 4 : 2, flickerHz: 20, jitter: m.anim > 0 }), FX_LIST_CAPS.bolts);
+  },
+
+  // 2-4 sheet-frame-16 shards with gravity 520 for .7 s (halved under reduced motion).
+  addDebris(x, y, n) {
+    this.ensureFx();
+    const m = this.fxMotion();
+    const d = FXM.debris || {};
+    let count = Math.max(0, n | 0);
+    if (m.anim <= 0) count = Math.ceil(count / 2);
+    for (let i = 0; i < count; i++) {
+      fxPush(this.debris, new Debris({
+        x: x + rand(-6, 6), y: y + rand(-6, 6),
+        vx: rand(-220, 220), vy: rand(-260, -80),
+        life: fxNum(d.life, 0.7), gravity: fxNum(d.gravity, 520),
+        size: rand(0.16, 0.28)
+      }), FX_LIST_CAPS.debris);
     }
+    return count;
   },
 
   pushBullet(b) {
@@ -504,7 +543,10 @@ Object.assign(Game.prototype, {
       }
     }
     if (list.length >= caps.explosionsTotal) list.shift();
-    list.push(new ExplosionSprite({ x, y, type }));
+    const ex = new ExplosionSprite({ x, y, type });
+    list.push(ex);
+    if (ex.type !== "small") this.addDebris(x, y, randi(2, 4));   // frame-16 shards on medium / large blasts
+    return ex;
   },
 
   getExplosionTypeForEnemy(en) {
