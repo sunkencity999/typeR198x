@@ -1,7 +1,10 @@
 // Type-R 198X — boss fight logic (intro, finale bursts); boss drawing lives in 70-render.js. Methods are mixed into Game.prototype; load order is defined in index.html.
 Object.assign(Game.prototype, {
-  beginBossFight() {
+  // beginBossFight({ restored }) — restored is run.boss ({ segments, segmentIndex, progress, phase, phaseStarts })
+  // when a saved fight resumes or Retry boss rebuilds it; otherwise a fresh boss is rolled.
+  beginBossFight(opts = {}) {
     const cfg = LEVELS[this.levelIndex];
+    const restored = (opts && opts.restored) || null;
     this.inBoss = true;
     this.lock = null;
     this.bossClear = null;
@@ -11,11 +14,38 @@ Object.assign(Game.prototype, {
 
     this.triggerBossIntro(cfg.boss.name);
 
+    // buildBossSegments returns a plain array today and { segments, phaseStarts } once B7 lands.
+    const built = buildBossSegments(cfg.level);
+    const builtSegments = Array.isArray(built) ? built : (built && built.segments) || ["neon", "boss"];
+    const builtStarts = (!Array.isArray(built) && built && Array.isArray(built.phaseStarts)) ? built.phaseStarts : [0];
+    const segments = (restored && Array.isArray(restored.segments) && restored.segments.length) ? restored.segments : builtSegments;
+    const phaseStarts = (restored && Array.isArray(restored.phaseStarts) && restored.phaseStarts.length) ? restored.phaseStarts : builtStarts;
+
     this.boss = new Boss({
       name: cfg.boss.name,
-      segments: buildBossSegments(cfg.level),
+      segments,
       artLevel: cfg.level
     });
+    this.boss.phaseStarts = [...phaseStarts];
+    this.boss.phase = restored ? (restored.phase | 0) : 0;
+    if (restored) {
+      this.boss.segmentIndex = clamp(restored.segmentIndex | 0, 0, segments.length - 1);
+      this.boss.progress = 0;
+    }
+
+    const run = this.run;
+    if (run) {
+      run.inBoss = true;
+      run.boss = {
+        segments: [...this.boss.segments],
+        segmentIndex: this.boss.segmentIndex,
+        progress: 0,
+        phase: this.boss.phase,
+        phaseStarts: [...phaseStarts]
+      };
+      // Boss checkpoint: fresh for a new fight; a resumed fight keeps the one taken at its phase start.
+      if (!restored || !run.bossCheckpoint) run.bossCheckpoint = this.makeCheckpoint("boss");
+    }
     this.ui.bossBar.classList.remove("hidden");
     this.ui.bossName.textContent = cfg.boss.name;
     this.ui.bossSegment.textContent = "";

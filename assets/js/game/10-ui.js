@@ -57,12 +57,43 @@ Object.assign(Game.prototype, {
     }
   },
 
+  // Game Over gains #btnRetryBoss and #retryNote when index.html lacks them (see HANDOFF.md); the retry
+  // buttons carry the checkpoint copy.
+  ensureGameOverControls() {
+    const over = this.ui.gameOver;
+    if (!over) return;
+    if (this.btnTryAgain) this.btnTryAgain.textContent = "Retry sector";
+    if (this.btnRestart) this.btnRestart.textContent = "Restart sector";
+    if (!this.btnRetryBoss) {
+      const b = document.createElement("button");
+      b.id = "btnRetryBoss";
+      b.type = "button";
+      b.className = "btn-arcade hidden";
+      b.textContent = "Retry boss";
+      if (this.btnTryAgain && this.btnTryAgain.parentElement) this.btnTryAgain.insertAdjacentElement("afterend", b);
+      else over.appendChild(b);
+      this.btnRetryBoss = b;
+    }
+    if (!document.getElementById("retryNote")) {
+      const p = document.createElement("p");
+      p.id = "retryNote";
+      p.className = "small";
+      p.textContent = "Score returns to sector start";
+      const host = (this.btnTryAgain && this.btnTryAgain.parentElement && this.btnTryAgain.parentElement.parentElement) || over;
+      host.appendChild(p);
+    }
+  },
+
   bindUI() {
+    this.ensureGameOverControls();
+
     this.btnStart.addEventListener("click", async () => {
       await this.ensureAudio();
       const name = (this.ui.playerName.value || "").trim();
       if (name) this.save.playerName = name;
+      this.commitHighScore(); // the abandoned run's score counts (F009)
       this.save.run = null;
+      this.run = null;
       this.storeAndRefresh();
       this.handleLaunchRequest();
     });
@@ -79,7 +110,8 @@ Object.assign(Game.prototype, {
       }
       const resumeIndex = getResumeLevelIndex(this.save);
       if (resumeIndex !== null) {
-        this.save.run = buildResumeRun(resumeIndex, this.player.maxHp, this.getSelectedShipId());
+        // HP from the level curve, never the menu-time player object (F004)
+        this.save.run = buildResumeRun(resumeIndex, getHpBonusForLevel(resumeIndex + 1), this.getSelectedShipId());
         storeSave(this.save);
         this.continueRun();
         this.focusGameCanvas();
@@ -90,6 +122,9 @@ Object.assign(Game.prototype, {
 
     this.btnResetSave.addEventListener("click", () => {
       this.save = defaultSave();
+      this.run = null;
+      this.runMeta = null;
+      this._hsCommitted = null;
       storeSave(this.save);
       this.applySettings();
       this.refreshMenu();
@@ -108,6 +143,7 @@ Object.assign(Game.prototype, {
     this.btnBackToMenu2.addEventListener("click", () => this.stopToMenu(true));
     this.btnBackToMenu3.addEventListener("click", () => this.stopToMenu(true));
     this.btnTryAgain.addEventListener("click", () => { this.restartLevel(); this.focusGameCanvas(); });
+    if (this.btnRetryBoss) this.btnRetryBoss.addEventListener("click", () => { this.retryBoss(); this.focusGameCanvas(); });
     this.btnNewRun.addEventListener("click", () => { this.startNewRun(); this.focusGameCanvas(); });
 
     if (this.ui.endingNext) {
@@ -151,6 +187,7 @@ Object.assign(Game.prototype, {
     window.addEventListener("blur", () => {
       if (this.mode === "playing") this.pauseGame("blur");
       this.saveRun(true);
+      this.commitHighScore();
     });
 
     document.addEventListener("visibilitychange", () => {
@@ -160,16 +197,19 @@ Object.assign(Game.prototype, {
 
     window.addEventListener("pagehide", () => {
       this.saveRun(true);
+      this.commitHighScore();
     });
 
     window.addEventListener("beforeunload", () => {
       this.saveRun(true);
+      this.commitHighScore();
     });
   },
 
   onPageHidden() {
     if (this.mode === "playing") this.pauseGame("hidden");
     this.saveRun(true);
+    this.commitHighScore();
     if (this.rafId !== null) {
       cancelAnimationFrame(this.rafId);
       this.rafId = null;
@@ -338,6 +378,8 @@ Object.assign(Game.prototype, {
       // Freeze-frame: the pause screen sits on a still canvas.
       this.trauma = 0;
       this.shake = 0;
+      // Restart is unavailable while a finale is banking the clear (F039).
+      if (this.btnRestart) this.btnRestart.classList.toggle("hidden", !!this.bossClear);
       if (this.ui.pauseReason) {
         const copy = { user: "Paused", blur: "Window lost focus", hidden: "Tab hidden", fullscreen: "Left fullscreen" };
         this.ui.pauseReason.textContent = copy[this.pauseReason] || copy.user;

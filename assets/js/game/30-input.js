@@ -152,23 +152,22 @@ Object.assign(Game.prototype, {
 
           this.endBossFight(true);
 
-          // Level complete / unlock next
+          // Nothing is banked here (F039/F040): commitLevelClear(bossClear) runs once when the finale ends
+          // or earlier on any forced save (pause, blur, Stop, hidden tab).
           const completedLevel = LEVELS[this.levelIndex].level;
-          const nextUnlocked = Math.max(this.save.lastUnlockedLevel || 1, Math.min(10, completedLevel + 1));
-          this.save.lastUnlockedLevel = nextUnlocked;
-
-          // bonus
-          const bonus = 2500 + completedLevel * 450;
-          this.stats.score += bonus;
           const target = (this.levelIndex >= 9) ? "victory" : "level";
+          const finaleS = (typeof BOSS_FINALE_S === "number") ? BOSS_FINALE_S : 6.3;
           this.bossClear = {
             t: 0,
+            duration: finaleS,
             target,
-            bonus,
             level: completedLevel,
-            bossName: LEVELS[this.levelIndex].boss.name,
             levelIndex: this.levelIndex,
-            nextLevelIndex: target === "level" ? Math.min(this.levelIndex + 1, 9) : null
+            elapsed: this.levelT,
+            bossName: LEVELS[this.levelIndex].boss.name,
+            nextLevelIndex: target === "level" ? Math.min(this.levelIndex + 1, 9) : null,
+            tally: null,
+            committed: false
           };
           this.startBossFinale(centerX, centerY);
         }

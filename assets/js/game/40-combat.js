@@ -199,8 +199,8 @@ Object.assign(Game.prototype, {
     // Lock validity
     if (this.lock?.ref && !this.lock.ref.alive) this.lock = null;
 
-    // autosave
-    this.saveRun(false);
+    // autosave (never during the finale: the clear is committed once, by the finale itself)
+    if (!this.bossClear) this.saveRun(false);
 
     // HUD
     this.updateHUD();
@@ -211,13 +211,14 @@ Object.assign(Game.prototype, {
         const burst = this.bossFinaleBursts.shift();
         this.runBossFinaleBurst(burst);
       }
-      if (this.bossClear.t >= 6.3) {
+      if (this.bossClear.t >= (this.bossClear.duration || 6.3)) {
         const info = this.bossClear;
+        this.commitLevelClear(info);
         this.bossClear = null;
         this.bossFinaleBursts.length = 0;
         this.bossFinaleOrigin = null;
         if (info.target === "victory") this.onVictory();
-        else this.onLevelComplete(info.bonus);
+        else this.onLevelComplete(info);
       }
     }
 

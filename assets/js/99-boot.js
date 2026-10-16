@@ -3,6 +3,7 @@
 // ----------------------------- Boot -----------------------------
 const game = new Game();
 window.game = game;
+if (SAVE_STATE.unavailable) game.onPersistUnavailable();
 
 // Ensure menu visible on load
 game.setMode("menu");
