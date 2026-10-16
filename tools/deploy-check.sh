@@ -23,9 +23,10 @@
 #   * the footer privacy link resolves to a local file that names the save key and links back to the game;
 #     privacy.html carries a meta refresh; info.html / support.html / privacy-policy.html link back to the game
 #   * tools/unreferenced-assets.sh totals (informational; --unreferenced-out <file> keeps the full listing)
-#   * native sync dry run: copies index.html/game.js/style.css/native/sync-web.sh into a temp tree, runs the
-#     sync, and asserts the `return path;` patch and the `id="loadingOverlay" class="hidden"` patch landed
-#     (plus amendment B-17: in source the overlay keeps id first and has no class attribute).
+#   * native sync dry run: copies index.html/game.js/style.css, the secondary pages and native/sync-web.sh into a
+#     temp tree, runs the sync, and asserts the `return path;` patch and the `id="loadingOverlay" class="hidden"`
+#     patch landed (plus amendment B-17: in source the overlay keeps id first and has no class attribute) and that
+#     both footer targets (privacy-policy.html, support.html) exist in each synced www tree (review R43)
 # Exit 1 when any check FAILed, else 0. --strict only promotes the cache-header WARNs to FAILs.
 set -uo pipefail
 
@@ -315,6 +316,7 @@ if [[ $LOCAL -eq 1 ]]; then
   if [[ -f "$ROOT/native/sync-web.sh" ]]; then
     L="$TMP/local"; mkdir -p "$L/native" "$L/assets/ui" "$L/assets/opt"
     cp "$ROOT/index.html" "$ROOT/game.js" "$ROOT/style.css" "$L/"
+    for page in privacy-policy.html support.html privacy.html info.html; do [[ -f "$ROOT/$page" ]] && cp "$ROOT/$page" "$L/"; done
     cp "$ROOT/native/sync-web.sh" "$L/native/"
     [[ -f "$ROOT/assets/ui/logo.svg" ]] && cp "$ROOT/assets/ui/logo.svg" "$L/assets/ui/"
     [[ -f "$ROOT/assets/opt/manifest.js" ]] && cp "$ROOT/assets/opt/manifest.js" "$L/assets/opt/"
@@ -330,6 +332,12 @@ if [[ $LOCAL -eq 1 ]]; then
         tag=$(grep -oE '<div[^>]*id="loadingOverlay"[^>]*>' "$h" | head -1)
         nclass=$(grep -o 'class=' <<< "$tag" | wc -l | tr -d ' ')
         [[ "$n" == "1" && "$nclass" == "1" ]] && pass "$target/index.html: loading overlay patched with a single class=\"hidden\"" || fail "$target/index.html: overlay patch wrong (matches=$n, class attrs=$nclass): $tag"
+        # the footer links must resolve inside the bundle (review R43)
+        while IFS= read -r t; do
+          [[ -z "$t" ]] && continue
+          tf="${t#./}"; tf="${tf%%\?*}"; tf="${tf%%#*}"
+          [[ -f "$L/native/$target/$tf" ]] && pass "$target: footer target $t is in the synced bundle" || fail "$target: footer target $t missing from the synced bundle (native/sync-web.sh must copy it)"
+        done < <(sed -n '/<footer/,/<\/footer>/p' "$h" | grep -oE 'href="[^"]+"' | sed -E 's/^href="([^"]+)"$/\1/' | grep -vE '^(https?:)?//' | sort -u)
       else fail "$target/index.html not produced"; fi
     done
   fi

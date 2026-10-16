@@ -392,7 +392,8 @@ tools/deploy-check.sh https://typer198x.com --strict            # 5. go/no-go
 
 ## Native wrappers
 
-`native/sync-web.sh` still works with this build. It copies `index.html`, `game.js` and `style.css` and
+`native/sync-web.sh` still works with this build. It copies `index.html`, `game.js`, `style.css`, the footer's
+`privacy-policy.html` and `support.html` (plus `privacy.html` and `info.html`) and
 `rsync -a --delete`s the whole `assets/` tree into `native/ios/TypeR198XIOS/www` and
 `native/macos/typer198xMac/www`, then patches each copy: `class="hidden"` is inserted after
 `id="loadingOverlay"` (so that element keeps `id` as its first attribute and carries no `class` in source)
