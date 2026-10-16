@@ -52,7 +52,7 @@ class Bullet {
     this.life = life;
     this.t = 0;
     this.width = width;
-    this.color = color; // cyan | magenta | lime
+    this.color = color; // PALETTE name: cyan | magenta | lime (BULLET_COLORS in 70-render.js)
   }
   update(dt) {
     this.t += dt;
@@ -60,23 +60,54 @@ class Bullet {
   alive() { return this.t < this.life; }
 }
 
+// Sheet-animated explosion (A7 / JUICE-04). The sheet is owned by the Assets loader and read every frame through
+// ExplosionSprite.getSheet() (never cached across frames: a re-prepare closes the previous ImageBitmap).
+// ExplosionSprite.sheetScale multiplies the EXPLOSION_FRAMES source rects (1 for the full sheet, 0.5 for the x1
+// half sheet). Flash frames composite additively, the fireball/smoke frames source-over; the last two frames fade
+// out and grow a little so a blast dissipates instead of ending on a dot.
 class ExplosionSprite {
-  constructor({ x, y, type = "small", sheet }) {
+  constructor({ x, y, type = "small", sheet = null }) {
     this.x = x;
     this.y = y;
-    this.sheet = sheet;
-    const cfg = EXPLOSION_SETS[type] || EXPLOSION_SETS.small;
+    this.type = EXPLOSION_SETS[type] ? type : "small";
+    this.sheet = sheet; // explicit drawable (tests); null -> ExplosionSprite.getSheet()
+    const cfg = EXPLOSION_SETS[this.type];
     this.frames = cfg.frames;
+    this.flashFrames = cfg.flashFrames || [];
     this.frameIndex = 0;
     this.scale = cfg.scale ?? 1;
     this.frameTime = 0;
     this.perFrame = cfg.frameTime ?? 0.06;
     this.done = false;
   }
+  static get sheet() {
+    if (typeof ExplosionSprite.getSheet === "function") {
+      try { return ExplosionSprite.getSheet() || null; } catch (e) { return null; }
+    }
+    return null;
+  }
+  static isReady(sheet) {
+    if (!sheet) return false;
+    if (typeof HTMLImageElement !== "undefined" && sheet instanceof HTMLImageElement) return sheet.complete && sheet.naturalWidth > 0;
+    return (sheet.width | 0) > 0;
+  }
+  currentSheet() {
+    return this.sheet || ExplosionSprite.sheet;
+  }
+  blendFor(frameIdx) {
+    return this.flashFrames.includes(frameIdx) ? "lighter" : "source-over";
+  }
+  // Fade over the last two frames (1 -> 0 across their combined duration).
+  alphaFor(frameIndex) {
+    const n = this.frames.length;
+    if (n < 2 || frameIndex < n - 2) return 1;
+    const within = (frameIndex - (n - 2)) * this.perFrame + Math.min(this.frameTime, this.perFrame);
+    const span = 2 * this.perFrame;
+    return Math.max(0, 1 - within / span);
+  }
   update(dt) {
     if (this.done) return;
-    const ready = this.sheet && this.sheet.complete && this.sheet.naturalWidth > 0;
-    if (!ready) return;
+    if (!ExplosionSprite.isReady(this.currentSheet())) return;
     this.frameTime += dt;
     while (this.frameTime >= this.perFrame) {
       this.frameTime -= this.perFrame;
@@ -88,31 +119,46 @@ class ExplosionSprite {
     }
   }
   draw(ctx) {
-    if (this.done || !this.sheet) return;
-    const ready = this.sheet.complete && this.sheet.naturalWidth > 0;
-    if (!ready) return;
+    if (this.done) return;
+    const sheet = this.currentSheet();
+    if (!ExplosionSprite.isReady(sheet)) return;
 
-    const frameIdx = this.frames[Math.min(this.frameIndex, this.frames.length - 1)];
+    const fi = Math.min(this.frameIndex, this.frames.length - 1);
+    const frameIdx = this.frames[fi];
     const frame = EXPLOSION_FRAMES[frameIdx];
     if (!frame) return;
-    const { x, y, w, h } = frame;
-    const dw = w * this.scale;
-    const dh = h * this.scale;
-    ctx.save();
-    ctx.globalCompositeOperation = "lighter";
-    ctx.drawImage(this.sheet, x, y, w, h, this.x - dw / 2, this.y - dh / 2, dw, dh);
-    ctx.restore();
+    const k = ExplosionSprite.sheetScale || 1;
+    const alpha = this.alphaFor(fi);
+    if (alpha <= 0) return;
+    const grow = alpha < 1 ? 1 + 0.15 * (1 - alpha) : 1;
+    const dw = frame.w * this.scale * grow;
+    const dh = frame.h * this.scale * grow;
+    const prevAlpha = ctx.globalAlpha;
+    const prevComp = ctx.globalCompositeOperation;
+    const blend = this.blendFor(frameIdx);
+    if (blend !== prevComp) ctx.globalCompositeOperation = blend;
+    ctx.globalAlpha = prevAlpha * alpha;
+    ctx.drawImage(sheet, frame.x * k, frame.y * k, frame.w * k, frame.h * k, this.x - dw / 2, this.y - dh / 2, dw, dh);
+    ctx.globalAlpha = prevAlpha;
+    if (blend !== prevComp) ctx.globalCompositeOperation = prevComp;
   }
 }
+ExplosionSprite.sheetScale = 1;
+// Set by the boot code to () => Assets.get("fx/explosions"); a default that reads the loader when present.
+ExplosionSprite.getSheet = () => (typeof Assets !== "undefined" && Assets && typeof Assets.get === "function" ? Assets.get("fx/explosions") : null);
 
+// Particle colours are PALETTE names; `hue` is kept for callers that still pass one (185 cyan, 310 magenta,
+// 95 lime, 40 amber). Draw code looks the colour string up in a prebuilt table (PARTICLE_COLORS, 70-render.js).
+const PARTICLE_HUE_NAMES = { 185: "cyan", 310: "magenta", 95: "lime", 40: "amber" };
 class Particle {
-  constructor({ x, y, vx, vy, life, size, hue }) {
+  constructor({ x, y, vx, vy, life, size, hue, color }) {
     this.x = x; this.y = y;
     this.vx = vx; this.vy = vy;
     this.life = life;
     this.t = 0;
     this.size = size;
     this.hue = hue;
+    this.color = color || PARTICLE_HUE_NAMES[hue] || "cyan";
   }
   update(dt) {
     this.t += dt;

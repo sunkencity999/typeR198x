@@ -16,40 +16,6 @@ Object.assign(Game.prototype, {
     return this.player.shipId || this.getSelectedShipId();
   },
 
-  prepareShipSprite(img) {
-    if (SKIP_CORS_IMAGES) return img;
-    const canvas = document.createElement("canvas");
-    const w = img.naturalWidth || img.width;
-    const h = img.naturalHeight || img.height;
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(img, 0, 0);
-    try {
-      const data = ctx.getImageData(0, 0, w, h);
-      const pixels = data.data;
-      // sample corners to determine background color
-      const sample = (x, y) => {
-        const idx = (y * w + x) * 4;
-        return [pixels[idx], pixels[idx + 1], pixels[idx + 2]];
-      };
-      const base = sample(0, 0);
-      const tol = 12;
-      for (let i = 0; i < pixels.length; i += 4) {
-        const r = pixels[i];
-        const g = pixels[i + 1];
-        const b = pixels[i + 2];
-        if (Math.abs(r - base[0]) <= tol && Math.abs(g - base[1]) <= tol && Math.abs(b - base[2]) <= tol) {
-          pixels[i + 3] = 0;
-        }
-      }
-      ctx.putImageData(data, 0, 0);
-    } catch {
-      // ignore security errors, fallback to original image
-      return img;
-    }
-    return canvas;
-  },
   focusGameCanvas() {
     if (!this.canvas) return;
     if (document.activeElement !== this.canvas) {
@@ -250,8 +216,7 @@ Object.assign(Game.prototype, {
   },
 
   // ------------------------- Toasts (primitive; C8 adds the tutorial kinds) -------------------------
-  // #toastStack lives in #main (created here when index.html lacks it); the CSS below is the fallback
-  // until style.css carries .toastStack/.toast (see HANDOFF.md).
+  // #toastStack lives in #main (created here when index.html lacks it); style.css carries .toastStack/.toast.
   ensureToastStack() {
     if (this.toastStack && this.toastStack.isConnected) return this.toastStack;
     let el = document.getElementById("toastStack");
@@ -261,22 +226,6 @@ Object.assign(Game.prototype, {
       el.className = "toastStack";
       el.setAttribute("aria-hidden", "true");
       (document.getElementById("main") || document.body).appendChild(el);
-    }
-    if (!document.getElementById("toastStyles")) {
-      const style = document.createElement("style");
-      style.id = "toastStyles";
-      style.textContent = [
-        ".toastStack{position:absolute;left:50%;bottom:19%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:8px;z-index:15;pointer-events:none;max-width:92%}",
-        ".toast{font-family:var(--font-mono);font-size:13px;letter-spacing:.12em;text-transform:uppercase;padding:8px 14px;border-radius:999px;background:var(--glass1);border:1px solid var(--border);color:rgba(255,255,255,.92);white-space:nowrap;opacity:0;transform:translateY(12px);transition:opacity 160ms ease,transform 160ms ease}",
-        ".toast.is-in{opacity:1;transform:none}",
-        ".toast.is-out{opacity:0;transition:opacity 200ms ease}",
-        ".toast--tip{border-color:var(--neon-amber);border-color:color-mix(in srgb,var(--neon-amber) 60%,transparent)}",
-        ".toast--warn{border-color:var(--danger);border-color:color-mix(in srgb,var(--danger) 70%,transparent)}",
-        ".toast--success{border-color:var(--neon-lime);border-color:color-mix(in srgb,var(--neon-lime) 60%,transparent)}",
-        ":root.reduce-motion .toast{transform:none;transition:opacity 120ms ease}",
-        "@media (max-width:640px){.toast{font-size:12px;white-space:normal;text-align:center}}"
-      ].join("\n");
-      document.head.appendChild(style);
     }
     this.toastStack = el;
     this.toasts = this.toasts || [];
@@ -507,24 +456,5 @@ Object.assign(Game.prototype, {
   storeAndRefresh() {
     storeSave(this.save);
     this.refreshMenu();
-  },
-
-  registerAsset(img, onLoad) {
-    this.pendingAssets = (this.pendingAssets ?? 0) + 1;
-    const finalize = () => {
-      if (onLoad) onLoad();
-      this.pendingAssets = Math.max(0, this.pendingAssets - 1);
-      this.checkLoadingOverlay();
-    };
-    img.addEventListener("load", finalize, { once: true });
-    img.addEventListener("error", finalize, { once: true });
-  },
-
-  checkLoadingOverlay() {
-    if (!this.loadingOverlay) return;
-    if (this.pendingAssets > 0) return;
-    if (this.assetsReady) return;
-    this.assetsReady = true;
-    requestAnimationFrame(() => this.loadingOverlay.classList.add("hidden"));
   },
 });

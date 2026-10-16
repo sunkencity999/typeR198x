@@ -1,4 +1,51 @@
-// Type-R 198X — canvas rendering: render(dt) and every draw* method, plus makeStars (background setup). Methods are mixed into Game.prototype; load order is defined in index.html.
+// Type-R 198X — canvas rendering: resizeCanvas, render(dt) in the CONTRACT section 8 layer order, every draw*
+// method, the glow-sprite cache and the starfield. Methods are mixed into Game.prototype; load order is defined
+// in index.html.
+//
+// Performance rules (CONTRACT section 3 / PLAN A11): no shadowBlur or filter in the per-frame path (glows are
+// baked once into sprites by makeGlowSprite/getPlateSprite), no translucent full-frame fill above alpha .12,
+// parallax from the loader's pre-scaled bitmaps drawn 1:1 at integer device x, stars batched by alpha bucket,
+// the vignette cached per resize. Drawables are read through Assets.get()/Assets.sprite() every frame.
+
+// Prebuilt colour strings (A11): bullets by PALETTE name, particles by name and alpha bucket, stars by bucket.
+const BULLET_COLORS = (() => {
+  const out = {};
+  for (const name of ["cyan", "magenta", "lime", "amber", "violet", "danger", "text"]) {
+    out[name] = { core: PALETTE.rgba(name, 0.92), glow: PALETTE.rgba(name, 0.25) };
+  }
+  return out;
+})();
+const PARTICLE_ALPHA_STEPS = 10;
+const PARTICLE_COLORS = (() => {
+  const out = {};
+  for (const name of ["cyan", "magenta", "lime", "amber", "violet", "danger", "text"]) {
+    const row = [];
+    for (let i = 0; i <= PARTICLE_ALPHA_STEPS; i++) row.push(PALETTE.rgba(name, i / PARTICLE_ALPHA_STEPS));
+    out[name] = row;
+  }
+  return out;
+})();
+const STAR_ALPHAS = [0.9, 0.68, 0.46, 0.25];
+const STAR_COLORS = STAR_ALPHAS.map((a) => PALETTE.rgba("text", a));
+
+// Plate signature per state (VIS-04 colours; D3 refines the geometry). Glow is baked into the cached sprite.
+const PLATE_STYLES = {
+  idle:   { stroke: "cyan",    strokeA: 0.92, lw: 2.5, glowA: 0.45, blur: 14, fill: "bg0", fillA: 0.92 },
+  locked: { stroke: "lime",    strokeA: 1.0,  lw: 3,   glowA: 0.70, blur: 14, fill: "bg0", fillA: 0.92 },
+  danger: { stroke: "danger",  strokeA: 0.92, lw: 2.5, glowA: 0.70, blur: 14, fill: "bg0", fillA: 0.92 },
+  minion: { stroke: "magenta", strokeA: 0.92, lw: 2.5, glowA: 0.45, blur: 14, fill: "bg0", fillA: 0.92 },
+  power:  { stroke: "violet",  strokeA: 0.92, lw: 2.5, glowA: 0.45, blur: 14, fill: "bg0", fillA: 0.92 },
+  boss:   { stroke: "magenta", strokeA: 0.55, lw: 3,   glowA: 0.20, blur: 26, fill: "bg1", fillA: 0.92 }
+};
+const PLATE_CACHE_MAX = 96;
+const PLATE_BUCKET = 8;
+const PLATE_PAD = 16;
+const SLAB_PAD = 32;
+const SLAB_W = 520;
+const SLAB_H = 190;
+const SHIP_DRAW_W = 150;          // 168 in D4
+const VISTA_DRIFT_PX = 20;        // tenth-sector foreground drift amplitude
+
 Object.assign(Game.prototype, {
   // ------------------------- Canvas sizing (PERF-07 / VIS-02 / VIS-07) -------------------------
   // The backing store follows the element's CSS size x device pixel ratio (capped by settings.renderScaleCap);
@@ -19,6 +66,9 @@ Object.assign(Game.prototype, {
       this.canvas.width = wantW;   // resets the context state
       this.canvas.height = wantH;
       this.spriteEpoch++;
+      if (this.plateCache) this.plateCache.clear();
+      this.vignetteSprite = null;
+      this.dangerVignette = null;
       if (typeof Assets !== "undefined" && Assets && typeof Assets.setRenderScale === "function") Assets.setRenderScale(s);
     }
     this.ctx.imageSmoothingEnabled = true;
@@ -73,182 +123,414 @@ Object.assign(Game.prototype, {
     watchDpr();
   },
 
-  // ------------------------- Rendering -------------------------
+  // ------------------------- Glow sprites (PERF-08 / VIS-04) -------------------------
+  // Renders drawFn(ctx, w, h) once into an offscreen canvas at the current renderScale with `pad` logical px of
+  // margin on every side (room for the blur). Draw it with drawGlowSprite() or ctx.drawImage at (x - pad, y - pad).
+  makeGlowSprite(drawFn, w, h, pad = PLATE_PAD) {
+    const s = this.renderScale || 1;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round((w + 2 * pad) * s));
+    canvas.height = Math.max(1, Math.round((h + 2 * pad) * s));
+    const g = canvas.getContext("2d");
+    g.setTransform(s, 0, 0, s, 0, 0);
+    g.translate(pad, pad);
+    g.imageSmoothingEnabled = true;
+    g.imageSmoothingQuality = "high";
+    drawFn(g, w, h);
+    return { canvas, w, h, pad, scale: s, epoch: this.spriteEpoch };
+  },
+
+  drawGlowSprite(ctx, sprite, cx, cy) {
+    const full = sprite.w + 2 * sprite.pad;
+    const fullH = sprite.h + 2 * sprite.pad;
+    ctx.drawImage(sprite.canvas, cx - full / 2, cy - fullH / 2, full, fullH);
+  },
+
+  // LRU (cap 96) of plate sprites keyed by shape, width bucket (8 px), height, state and spriteEpoch.
+  getPlateSprite(shape, wBucket, h, state) {
+    const key = `${shape}:${wBucket}:${h}:${state}:${this.spriteEpoch}`;
+    const cache = this.plateCache || (this.plateCache = new Map());
+    let sprite = cache.get(key);
+    if (sprite) {
+      cache.delete(key);
+      cache.set(key, sprite);
+      return sprite;
+    }
+    const style = PLATE_STYLES[state] || PLATE_STYLES.idle;
+    const pad = shape === "slab" ? SLAB_PAD : PLATE_PAD;
+    const r = shape === "slab" ? 24 : shape === "chip" ? 10 : 12;
+    sprite = this.makeGlowSprite((g, w, hh) => {
+      g.shadowBlur = style.blur;
+      g.shadowColor = PALETTE.rgba(style.stroke, style.glowA);
+      g.fillStyle = PALETTE.rgba(style.fill, style.fillA);
+      g.strokeStyle = PALETTE.rgba(style.stroke, style.strokeA);
+      g.lineWidth = style.lw;
+      roundRect(g, 0, 0, w, hh, r);
+      g.fill();
+      g.stroke();
+      g.shadowBlur = 0;
+      // inner top highlight
+      g.strokeStyle = PALETTE.rgba("text", 0.12);
+      g.lineWidth = 1;
+      g.beginPath();
+      g.moveTo(r, 1.5);
+      g.lineTo(w - r, 1.5);
+      g.stroke();
+      if (shape === "slab") {
+        // chrome divider under the boss name
+        g.globalAlpha = 0.35;
+        g.strokeStyle = PALETTE.rgba("cyan", 0.35);
+        g.beginPath();
+        g.moveTo(20, 56);
+        g.lineTo(w - 20, 56);
+        g.stroke();
+        g.globalAlpha = 1;
+      }
+    }, wBucket, h, pad);
+    cache.set(key, sprite);
+    while (cache.size > PLATE_CACHE_MAX) cache.delete(cache.keys().next().value);
+    return sprite;
+  },
+
+  // Plate = cached glow sprite + dynamic parts (danger pulse, hit flash, lock brackets); no shadows per frame.
+  drawGlyphPlate(ctx, x, y, w, h, state, flash, opts = {}) {
+    const shape = opts.shape || (w <= h + 1 ? "chip" : "pill");
+    const wBucket = Math.ceil(w / PLATE_BUCKET) * PLATE_BUCKET;
+    if (state === "danger") {
+      this.drawGlowSprite(ctx, this.getPlateSprite(shape, wBucket, h, "idle"), x, y);
+      const pulse = this.reduceMotion ? 0.70 : 0.45 + 0.45 * Math.sin(this.starT * Math.PI * 6);
+      const prev = ctx.globalAlpha;
+      ctx.globalAlpha = prev * clamp(pulse, 0, 1);
+      this.drawGlowSprite(ctx, this.getPlateSprite(shape, wBucket, h, "danger"), x, y);
+      ctx.globalAlpha = prev;
+    } else {
+      this.drawGlowSprite(ctx, this.getPlateSprite(shape, wBucket, h, state), x, y);
+    }
+    const pw = wBucket;
+    const r = shape === "chip" ? 10 : 12;
+    if (flash > 0) {
+      const prev = ctx.globalAlpha;
+      ctx.globalAlpha = prev * clamp(flash * 2, 0, 0.45);
+      ctx.fillStyle = PALETTE.rgba("text", 0.45);
+      roundRect(ctx, x - pw / 2, y - h / 2, pw, h, r);
+      ctx.fill();
+      ctx.globalAlpha = prev;
+    }
+    if (state === "locked") {
+      ctx.strokeStyle = PALETTE.rgba("lime", 0.92);
+      ctx.lineWidth = 2;
+      bracketRect(ctx, x - pw / 2 - 6, y - h / 2 - 6, pw + 12, h + 12, 10);
+    }
+  },
+
+  // Bakes every plate sprite a sector can need (word lengths, powerup labels, minion chip, boss slab) in idle
+  // slices while the sector art loads, so the per-frame path never sets shadowBlur during a wave (A11).
+  warmPlateCache(levelIndex) {
+    const cfg = LEVELS[levelIndex];
+    if (!cfg) return;
+    const ctx = this.ctx;
+    const epoch = this.spriteEpoch;
+    const plateH = typeof PLATE_H === "number" ? PLATE_H : 40;
+    const minionH = typeof PLATE_H_MINION === "number" ? PLATE_H_MINION : 36;
+    const bucket = (w) => Math.ceil(w / PLATE_BUCKET) * PLATE_BUCKET;
+    const jobs = [];
+    const seen = new Set();
+    const add = (shape, wb, h, state) => {
+      const k = `${shape}:${wb}:${h}:${state}`;
+      if (seen.has(k)) return;
+      seen.add(k);
+      jobs.push([shape, wb, h, state]);
+    };
+    const fontPx = this.plateFontPx();
+    const font = FONT.target(fontPx, 600);
+    const h = Math.round(plateH * (fontPx / 22));
+    ctx.font = font;
+    const maxLen = clamp((cfg.wordMax || 8) + 3, 4, 14);
+    for (let len = 1; len <= maxLen; len++) {
+      const tw = ctx.measureText("m".repeat(len)).width;
+      const w = len === 1 ? h : Math.ceil(tw + 28);
+      for (const state of ["idle", "locked", "danger"]) add(len === 1 ? "chip" : "pill", bucket(w), h, state);
+    }
+    ctx.font = FONT.target(18, 600);
+    for (const label of ["spread", "pierce", "rapid", "shield", "multi", "heal"]) {
+      const w = Math.max(Math.ceil(ctx.measureText(label).width + 28), plateH);
+      add("pill", bucket(w), plateH, "power");
+      add("pill", bucket(w), plateH, "locked");
+    }
+    const mh = Math.round(minionH * (20 / 22));
+    add("chip", bucket(mh), mh, "minion");
+    add("chip", bucket(mh), mh, "locked");
+    add("slab", SLAB_W, SLAB_H, "boss");
+
+    const slice = (fn) => {
+      if (typeof requestIdleCallback === "function") requestIdleCallback(fn, { timeout: 200 });
+      else setTimeout(fn, 0);
+    };
+    const run = () => {
+      if (this.spriteEpoch !== epoch) return; // resized meanwhile: the next sector warms again
+      let n = 0;
+      while (jobs.length && n < 12) {
+        const [shape, wb, hh, state] = jobs.shift();
+        this.getPlateSprite(shape, wb, hh, state);
+        n++;
+      }
+      if (jobs.length) slice(run);
+    };
+    slice(run);
+  },
+
+  // Plate font in logical px: 22 at desktop scales, larger on small playfields (CONTRACT section 7).
+  plateFontPx() {
+    // 22 px on desktop scales; grows up to 28 px when the playfield is small (14 CSS px minimum on screen).
+    return clamp(Math.ceil(14 / (this.cssScale || 1)), 22, 28);
+  },
+
+  // Text metrics cached on the entity (keyed by font + string + spriteEpoch); publishes textW / plateW / plateH.
+  measurePlateText(ctx, en, text, font, h) {
+    if (en._textWEpoch !== this.spriteEpoch || en._textWFont !== font || en._textWStr !== text) {
+      ctx.font = font;
+      en._textW = ctx.measureText(text).width;
+      en._textWEpoch = this.spriteEpoch;
+      en._textWFont = font;
+      en._textWStr = text;
+    }
+    en.textW = en._textW;
+    const chip = text.length === 1;
+    en.plateW = chip ? h : Math.ceil(en._textW + 28);
+    en.plateH = h;
+    return en._textW;
+  },
+
+  // Game-side wrapper over the module helper (same signature; static caret under reduce-motion).
+  drawSplitText(ctx, done, remaining, cx, y, opts = {}) {
+    return drawSplitText(ctx, done, remaining, cx, y, opts);
+  },
+
+  caretAlpha() {
+    return this.reduceMotion ? 1 : 0.6 + 0.4 * Math.sin(this.starT * Math.PI * 2 * 1.2);
+  },
+
+  // ------------------------- Starfield (PERF-06 / VIS-09) -------------------------
   makeStars(n) {
     const stars = [];
-    for (let i=0;i<n;i++) {
+    for (let i = 0; i < n; i++) {
+      const z = Math.random();
       stars.push({
         x: Math.random() * this.w,
         y: Math.random() * this.h,
-        z: Math.random(), // parallax depth
-        s: rand(0.8, 2.2)
+        z,                               // parallax depth: 0 near (bright, fast) .. 1 far
+        s: rand(0.8, 2.2),
+        bucket: clamp(Math.floor(z * 4), 0, 3)
       });
     }
     return stars;
   },
 
-  drawBackground(ctx) {
-    ctx.save();
-    ctx.fillStyle = "#05060B";
-    ctx.fillRect(0, 0, this.w, this.h);
-
-    const theme = this.currentTheme;
-    const assets = theme ? this.themeImages[theme.id] : null;
-    const bgImg = assets?.bg;
-    if (bgImg && bgImg.complete && bgImg.naturalWidth > 0) {
-      const scale = this.h / bgImg.naturalHeight;
-      this.drawTiledImage(ctx, bgImg, scale, 0, this.parallax.bgOffset);
-    } else {
-      const g1 = ctx.createRadialGradient(this.w*0.25, this.h*0.2, 60, this.w*0.25, this.h*0.2, 520);
-      g1.addColorStop(0, "rgba(255,57,209,0.18)");
-      g1.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = g1;
-      ctx.fillRect(0,0,this.w,this.h);
-
-      const g2 = ctx.createRadialGradient(this.w*0.75, this.h*0.62, 90, this.w*0.75, this.h*0.62, 640);
-      g2.addColorStop(0, "rgba(57,245,255,0.14)");
-      g2.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = g2;
-      ctx.fillRect(0,0,this.w,this.h);
-    }
-
+  // dt-driven drift; called from stepAmbient (playing + ambient screens).
+  updateStars(dt) {
+    const w = this.w, h = this.h;
     for (const s of this.stars) {
-      const alpha = lerp(0.25, 0.9, 1 - s.z);
-      ctx.fillStyle = `rgba(255,255,255,${alpha})`;
-      ctx.fillRect(s.x, s.y, s.s, s.s);
+      const spd = lerp(30, 140, 1 - s.z);
+      s.x -= spd * dt;
+      if (s.x < -5) {
+        s.x = w + rand(0, 80);
+        s.y = rand(0, h);
+        s.z = Math.random();
+        s.bucket = clamp(Math.floor(s.z * 4), 0, 3);
+      }
     }
-
-    ctx.restore();
   },
 
-  drawTiledImage(ctx, img, scale, y = 0, offset = 0) {
-    if (!img || !img.naturalWidth) return;
-    const tileW = img.naturalWidth * scale;
-    const tileH = img.naturalHeight * scale;
-    if (!tileW || !tileH) return;
-    const startX = -((offset % tileW) + tileW) % tileW;
-    for (let x = startX; x < this.w + tileW; x += tileW) {
-      ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, x, y, tileW, tileH);
+  // Four fillStyle sets per frame; integer coordinates keep the dots crisp at every renderScale.
+  drawStars(ctx) {
+    const stars = this.stars;
+    for (let b = 0; b < 4; b++) {
+      ctx.fillStyle = STAR_COLORS[b];
+      for (let i = 0; i < stars.length; i++) {
+        const s = stars[i];
+        if (s.bucket !== b) continue;
+        const sz = s.s >= 1.5 ? 2 : 1;
+        ctx.fillRect(Math.round(s.x), Math.round(s.y), sz, sz);
+      }
     }
+  },
+
+  // ------------------------- Parallax (A7 / A11) -------------------------
+  // Tiles `img` (a prepared bitmap or the raw image) across the shaken field: tile edges snapped to device
+  // pixels, no tile that is fully outside [-SHAKE_PAD, w + SHAKE_PAD], one extra tile on the left so a negative
+  // shake never shows the base fill. Returns the number of drawImage calls.
+  drawTiledImage(ctx, img, tileW, tileH, y, offset) {
+    if (!img || !(tileW > 0) || !(tileH > 0)) return 0;
+    const s = this.renderScale || 1;
+    const pad = SHAKE_PAD;
+    let startX = -(((offset % tileW) + tileW) % tileW);
+    if (startX > -pad) startX -= tileW;
+    let count = 0;
+    for (let x = startX; x < this.w + pad; x += tileW) {
+      const x0 = Math.round(x * s) / s;
+      const x1 = Math.round((x + tileW) * s) / s;
+      ctx.drawImage(img, x0, y, x1 - x0, tileH);
+      count++;
+    }
+    return count;
+  },
+
+  themeArt(theme) {
+    return theme ? (theme.art || theme.id) : null;
+  },
+
+  drawBackground(ctx) {
+    const theme = this.currentTheme;
+    const art = this.themeArt(theme);
+    const bg = art ? Assets.get("bg/" + art) : null;
+    this.debug.tileDraws = 0;
+    if (bg) {
+      const tileH = this.h + 2 * SHAKE_PAD;
+      const tileW = tileH * (bg.width / bg.height);
+      this.debug.tileDraws += this.drawTiledImage(ctx, bg, tileW, tileH, -SHAKE_PAD, this.parallax.bgOffset);
+    } else {
+      // procedural nebula while the sector art is still arriving
+      const g1 = ctx.createRadialGradient(this.w * 0.25, this.h * 0.2, 60, this.w * 0.25, this.h * 0.2, 520);
+      g1.addColorStop(0, PALETTE.rgba("magenta", 0.12));
+      g1.addColorStop(1, PALETTE.rgba("magenta", 0));
+      ctx.fillStyle = g1;
+      ctx.fillRect(0, 0, this.w, this.h);
+      const g2 = ctx.createRadialGradient(this.w * 0.75, this.h * 0.62, 90, this.w * 0.75, this.h * 0.62, 640);
+      g2.addColorStop(0, PALETTE.rgba("cyan", 0.12));
+      g2.addColorStop(1, PALETTE.rgba("cyan", 0));
+      ctx.fillStyle = g2;
+      ctx.fillRect(0, 0, this.w, this.h);
+    }
+  },
+
+  // The tenth foreground cannot tile: drawn cover-width (plus drift + shake margin), anchored to the bottom.
+  vistaBox(theme) {
+    const art = this.themeArt(theme);
+    const meta = art ? Assets.meta("fg/" + art) : null;
+    const orig = (meta && meta.orig) || { w: 2816, h: 1504 };
+    const w = this.w + 2 * (VISTA_DRIFT_PX + SHAKE_PAD);
+    return { w, h: w * orig.h / orig.w };
   },
 
   drawForegroundParallax(ctx) {
     const theme = this.currentTheme;
-    const assets = theme ? this.themeImages[theme.id] : null;
-    const fgImg = assets?.fg;
-
-    ctx.save();
-    if (fgImg && fgImg.complete && fgImg.naturalWidth > 0) {
-      const targetHeight = this.h * (theme?.fgHeight || 0.6);
-      const scale = targetHeight / fgImg.naturalHeight;
-      const y = this.h - targetHeight;
-      ctx.globalAlpha = 0.95;
-      if (theme?.tileFg === false) {
-        const width = fgImg.naturalWidth * scale;
-        const x = (this.w - width) / 2;
-        ctx.drawImage(fgImg, 0, 0, fgImg.naturalWidth, fgImg.naturalHeight, x, y, width, targetHeight);
+    const art = this.themeArt(theme);
+    const fg = art ? Assets.get("fg/" + art) : null;
+    if (fg) {
+      const fgHeight = (theme && theme.fgHeight) || 0.6;
+      if (theme && theme.tileFg === false) {
+        if (art === "tenth") {
+          const v = this.vistaBox(theme);
+          const drift = this.reduceMotion ? 0 : VISTA_DRIFT_PX * Math.sin(this.starT * Math.PI * 2 * 0.05);
+          const s = this.renderScale || 1;
+          const x = Math.round((-(VISTA_DRIFT_PX + SHAKE_PAD) + drift) * s) / s;
+          ctx.drawImage(fg, x, this.h - v.h, v.w, v.h);
+        } else {
+          const targetH = this.h * fgHeight;
+          const width = targetH * (fg.width / fg.height);
+          ctx.drawImage(fg, Math.round((this.w - width) / 2), this.h - targetH, width, targetH);
+        }
+        this.debug.tileDraws += 1;
       } else {
-        this.drawTiledImage(ctx, fgImg, scale, y, this.parallax.fgOffset);
+        const tileH = Math.round(this.h * fgHeight);
+        const tileW = tileH * (fg.width / fg.height);
+        this.debug.tileDraws += this.drawTiledImage(ctx, fg, tileW, tileH, this.h - tileH, this.parallax.fgOffset);
       }
-    } else {
-      // fallback to neon highway
-      const trackY = this.h * 0.72;
-      const trackH = this.h * 0.28;
+      return;
+    }
 
-      const grad = ctx.createLinearGradient(0, trackY, 0, trackY + trackH);
-      grad.addColorStop(0, "rgba(10,16,32,0.20)");
-      grad.addColorStop(1, "rgba(0,0,0,0.65)");
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, trackY, this.w, trackH);
+    // fallback: neon highway
+    ctx.save();
+    const trackY = this.h * 0.72;
+    const trackH = this.h * 0.28;
+    const grad = ctx.createLinearGradient(0, trackY, 0, trackY + trackH);
+    grad.addColorStop(0, PALETTE.rgba("bg2", 0.25));
+    grad.addColorStop(1, PALETTE.rgba("bg0", 0.70));
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, trackY, this.w, trackH);
 
-      ctx.globalAlpha = 0.22;
-      ctx.strokeStyle = "rgba(57,245,255,0.35)";
-      ctx.lineWidth = 1;
+    ctx.globalAlpha = 0.22;
+    ctx.strokeStyle = PALETTE.rgba("cyan", 0.45);
+    ctx.lineWidth = 1;
+    const t = this.starT * 160;
+    ctx.beginPath();
+    for (let i = 0; i < 22; i++) {
+      const y = trackY + i * (trackH / 22);
+      ctx.moveTo(0, y);
+      ctx.lineTo(this.w, y);
+    }
+    ctx.stroke();
 
-      const t = this.starT * 160;
-      for (let i=0;i<22;i++) {
-        const y = trackY + i * (trackH/22);
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(this.w, y);
-        ctx.stroke();
-      }
+    ctx.globalAlpha = 0.16;
+    ctx.beginPath();
+    for (let i = 0; i < 26; i++) {
+      const x = ((i * 90) - (t % 90));
+      ctx.moveTo(x, trackY);
+      ctx.lineTo(x + 220, trackY + trackH);
+    }
+    ctx.stroke();
 
-      ctx.globalAlpha = 0.16;
-      for (let i=0;i<26;i++) {
-        const x = ((i * 90) - (t % 90));
-        ctx.beginPath();
-        ctx.moveTo(x, trackY);
-        ctx.lineTo(x + 220, trackY + trackH);
-        ctx.stroke();
-      }
+    ctx.globalAlpha = 0.88;
+    ctx.strokeStyle = PALETTE.rgba("cyan", 0.70);
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(0, trackY + 6);
+    ctx.lineTo(this.w, trackY + 6);
+    ctx.stroke();
 
-      ctx.globalAlpha = 0.88;
-      ctx.strokeStyle = "rgba(57,245,255,0.75)";
-      ctx.lineWidth = 3;
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = PALETTE.rgba("magenta", 0.45);
+    const cW = 34;
+    for (let x = 0; x < this.w + cW; x += 140) {
+      const xx = x - (t % 140);
       ctx.beginPath();
-      ctx.moveTo(0, trackY+6);
-      ctx.lineTo(this.w, trackY+6);
-      ctx.stroke();
-
-      ctx.globalAlpha = 0.35;
-      ctx.fillStyle = "rgba(255,57,209,0.55)";
-      const cW = 34;
-      for (let x=0; x<this.w + cW; x += 140) {
-        const xx = x - (t % 140);
-        ctx.beginPath();
-        ctx.moveTo(xx, trackY+18);
-        ctx.lineTo(xx+14, trackY+10);
-        ctx.lineTo(xx+28, trackY+18);
-        ctx.lineTo(xx+20, trackY+20);
-        ctx.lineTo(xx+14, trackY+16);
-        ctx.lineTo(xx+8, trackY+20);
-        ctx.closePath();
-        ctx.fill();
-      }
+      ctx.moveTo(xx, trackY + 18);
+      ctx.lineTo(xx + 14, trackY + 10);
+      ctx.lineTo(xx + 28, trackY + 18);
+      ctx.lineTo(xx + 20, trackY + 20);
+      ctx.lineTo(xx + 14, trackY + 16);
+      ctx.lineTo(xx + 8, trackY + 20);
+      ctx.closePath();
+      ctx.fill();
     }
     ctx.restore();
   },
 
+  // ------------------------- Ship -------------------------
   drawShip(ctx) {
     const x = this.player.x;
     const y = this.player.y;
 
-    // engine trail
     ctx.save();
+    // engine trail
     ctx.globalAlpha = 0.6;
-    ctx.fillStyle = "rgba(255,57,209,0.20)";
+    ctx.fillStyle = PALETTE.rgba("magenta", 0.25);
     ctx.beginPath();
-    ctx.ellipse(x - 30, y, 38, 16, 0, 0, Math.PI*2);
+    ctx.ellipse(x - 30, y, 38, 16, 0, 0, Math.PI * 2);
     ctx.fill();
-
     ctx.globalAlpha = 0.75;
-    ctx.fillStyle = "rgba(57,245,255,0.22)";
+    ctx.fillStyle = PALETTE.rgba("cyan", 0.25);
     ctx.beginPath();
-    ctx.ellipse(x - 24, y, 26, 10, 0, 0, Math.PI*2);
+    ctx.ellipse(x - 24, y, 26, 10, 0, 0, Math.PI * 2);
     ctx.fill();
+    ctx.globalAlpha = 1;
 
+    // Trimmed sprite placed where the untrimmed master used to go (B-1): dw wide, offsets from Assets.sprite().
     const shipId = this.currentShipId();
-    const resource = this.shipImages[shipId];
-    const isCanvas = resource instanceof HTMLCanvasElement;
-    const ready = resource && (isCanvas || (resource.complete && resource.naturalWidth > 0));
-
-    if (ready) {
-      const img = resource;
-      const natW = isCanvas ? img.width : img.naturalWidth;
-      const natH = isCanvas ? img.height : img.naturalHeight;
-      const dw = 150;
-      const scale = dw / natW;
-      const dh = natH * scale;
-      ctx.save();
-      ctx.globalAlpha = 0.95;
-      ctx.drawImage(img, x - dw * 0.38, y - dh / 2, dw, dh);
-      ctx.restore();
+    const key = "ships/" + shipId;
+    const sp = Assets.sprite(key, SHIP_DRAW_W);
+    if (sp.img) {
+      const meta = Assets.meta(key);
+      const orig = meta && meta.orig;
+      const dw = SHIP_DRAW_W;
+      const dh = orig && orig.w > 0 ? dw * orig.h / orig.w : sp.h;
+      const ox = x - dw * 0.38;
+      const oy = y - dh / 2;
+      ctx.drawImage(sp.img, ox + sp.x, oy + sp.y, sp.w, sp.h);
     } else {
-      ctx.globalAlpha = 1;
       ctx.lineWidth = 2;
-      ctx.strokeStyle = "rgba(57,245,255,0.85)";
-      ctx.fillStyle = "rgba(10,16,32,0.75)";
+      ctx.strokeStyle = PALETTE.rgba("cyan", 0.92);
+      ctx.fillStyle = PALETTE.rgba("bg2", 0.70);
       ctx.beginPath();
       ctx.moveTo(x - 10, y);
       ctx.lineTo(x + 22, y - 18);
@@ -257,272 +539,288 @@ Object.assign(Game.prototype, {
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
-    }
-
-    // cockpit
-    ctx.fillStyle = "rgba(255,57,209,0.35)";
-    ctx.beginPath();
-    ctx.ellipse(x + 18, y, 10, 6, 0, 0, Math.PI*2);
-    ctx.fill();
-
-    // shield ring
-    if (this.player.shield > 0) {
-      const a = 0.18 + 0.12 * Math.sin(this.starT * 6);
-      ctx.strokeStyle = `rgba(168,255,58,${a})`;
-      ctx.lineWidth = 3;
+      // cockpit
+      ctx.fillStyle = PALETTE.rgba("magenta", 0.45);
       ctx.beginPath();
-      ctx.ellipse(x + 10, y, 52, 28, 0, 0, Math.PI*2);
-      ctx.stroke();
-    }
-
-    ctx.restore();
-  },
-
-  drawGlyphPlate(ctx, x, y, w, h, locked, flash, tint) {
-    ctx.save();
-    // glow outer
-    const glowA = locked ? 0.26 : 0.14;
-    const glowB = locked ? 0.18 : 0.10;
-    ctx.shadowBlur = locked ? 18 : 10;
-    ctx.shadowColor = tint === "magenta" ? `rgba(255,57,209,${glowA})` : `rgba(57,245,255,${glowA})`;
-
-    // plate
-    ctx.fillStyle = "rgba(10,16,32,0.70)";
-    ctx.strokeStyle = tint === "magenta" ? "rgba(255,57,209,0.55)" : "rgba(57,245,255,0.50)";
-    ctx.lineWidth = 2;
-
-    const r = 12;
-    roundRect(ctx, x - w/2, y - h/2, w, h, r);
-    ctx.fill();
-    ctx.stroke();
-
-    // inner sheen
-    ctx.shadowBlur = 0;
-    ctx.globalAlpha = 0.65;
-    ctx.fillStyle = "rgba(255,255,255,0.06)";
-    roundRect(ctx, x - w/2 + 3, y - h/2 + 3, w - 6, (h - 6) * 0.45, 10);
-    ctx.fill();
-
-    // flash overlay
-    if (flash > 0) {
-      ctx.globalAlpha = clamp(flash * 2, 0, 0.55);
-      ctx.fillStyle = "rgba(255,255,255,0.35)";
-      roundRect(ctx, x - w/2, y - h/2, w, h, r);
+      ctx.ellipse(x + 18, y, 10, 6, 0, 0, Math.PI * 2);
       ctx.fill();
     }
 
-    // lock brackets
-    if (locked) {
-      ctx.globalAlpha = 0.9;
-      ctx.strokeStyle = "rgba(168,255,58,0.75)";
-      ctx.lineWidth = 2;
-      const bx = x - w/2 - 6, by = y - h/2 - 6, bw = w + 12, bh = h + 12;
-      bracketRect(ctx, bx, by, bw, bh, 10);
+    // shield ring (D4 replaces with the hex + timer arc)
+    if (this.player.shield > 0) {
+      const a = this.reduceMotion ? 0.25 : 0.18 + 0.12 * Math.sin(this.starT * 6);
+      ctx.strokeStyle = PALETTE.rgba("violet", clamp(a, 0, 1));
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.ellipse(x + 10, y, 52, 28, 0, 0, Math.PI * 2);
+      ctx.stroke();
     }
-
     ctx.restore();
+  },
+
+  // ------------------------- Plates -------------------------
+  enemyState(en) {
+    if (en.locked) return "locked";
+    if (en.kind === "bossMinion") return "minion";
+    const dangerX = (typeof DANGER_X === "number" ? DANGER_X : 0.35) * this.w;
+    return en.x < dangerX ? "danger" : "idle";
   },
 
   drawEnemy(ctx, en) {
-    const remaining = en.text.slice(en.progress);
+    const minion = en.kind === "bossMinion";
+    const fontPx = minion ? 20 : this.plateFontPx();
+    const font = FONT.target(fontPx, 600);
+    const baseH = minion ? (typeof PLATE_H_MINION === "number" ? PLATE_H_MINION : 36) : (typeof PLATE_H === "number" ? PLATE_H : 40);
+    const h = Math.round(baseH * (fontPx / 22));
+    this.measurePlateText(ctx, en, en.text, font, h);
+    const state = this.enemyState(en);
+    const w = en.plateW;
+
+    this.drawGlyphPlate(ctx, en.x, en.y, w, h, state, en.flash, { shape: en.text.length === 1 ? "chip" : "pill" });
+
     const done = en.text.slice(0, en.progress);
-
-    const w = 64 + en.text.length * 10;
-    const h = 44;
-    const tint = en.locked ? "magenta" : "cyan";
-    this.drawGlyphPlate(ctx, en.x, en.y, w, h, en.locked, en.flash, tint);
-
-    // text
-    ctx.save();
-    ctx.font = "20px ui-monospace, Menlo, Monaco, Consolas, monospace";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-
-    // Completed portion dim
-    if (done.length) {
-      ctx.fillStyle = "rgba(255,255,255,0.32)";
-      ctx.fillText(done, en.x - (remaining.length * 6), en.y);
-    }
-
-    // Remaining portion bright
-    ctx.fillStyle = en.locked ? "rgba(168,255,58,0.90)" : "rgba(255,255,255,0.88)";
-    ctx.fillText(remaining, en.x + (done.length * 6), en.y);
-
-    ctx.restore();
+    const remaining = en.text.slice(en.progress);
+    const locked = state === "locked";
+    this.drawSplitText(ctx, done, remaining, en.x, en.y, {
+      font,
+      doneColor: PALETTE.rgba("text", 0.45),
+      remColor: locked ? PALETTE.rgba("lime", 0.92) : PALETTE.rgba("text", 0.92),
+      leadColor: locked ? null : PALETTE.rgba("lime", 1),
+      caret: locked,
+      caretAlpha: this.caretAlpha()
+    });
+    this.lastPlateDrawn = en;
   },
 
   drawPowerup(ctx, p) {
-    const w = 70 + p.label.length * 10;
-    const h = 42;
-    this.drawGlyphPlate(ctx, p.x, p.y, w, h, p.locked, 0, "magenta");
+    const font = FONT.target(18, 600);
+    const h = typeof PLATE_H === "number" ? PLATE_H : 40;
+    this.measurePlateText(ctx, p, p.label, font, h);
+    p.labelW = p.textW;
+    const w = Math.max(p.plateW, h);
+    this.drawGlyphPlate(ctx, p.x, p.y, w, h, p.locked ? "locked" : "power", 0, { shape: "pill" });
+    const done = p.label.slice(0, p.progress);
+    const remaining = p.label.slice(p.progress);
+    this.drawSplitText(ctx, done, remaining, p.x, p.y, {
+      font,
+      doneColor: PALETTE.rgba("text", 0.45),
+      remColor: p.locked ? PALETTE.rgba("lime", 0.92) : PALETTE.rgba("violet", 0.92),
+      leadColor: p.locked ? null : PALETTE.rgba("lime", 1),
+      caret: !!p.locked,
+      caretAlpha: this.caretAlpha()
+    });
+  },
 
-    ctx.save();
-    ctx.font = "18px ui-monospace, Menlo, Monaco, Consolas, monospace";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = "rgba(168,255,58,0.95)";
-    ctx.fillText(p.label.slice(p.progress), p.x, p.y);
-    ctx.restore();
+  // ------------------------- Boss -------------------------
+  // Pre-D6 art box: scale = min(.65h / orig.h, .7); the art's top-left sits at (boss.x - .35 artW, boss.y - .45 artH).
+  bossArtBox(level) {
+    const key = "bosses/" + level;
+    const meta = Assets.meta(key);
+    const orig = (meta && meta.orig) || { w: 2816, h: 1536 };
+    const scale = Math.min((this.h * 0.65) / orig.h, 0.7);
+    return { key, scale, artW: orig.w * scale, artH: orig.h * scale };
+  },
+
+  // The trimmed sprite's rect in world space (Boss.artRect reads this until D6 recomposes the boss).
+  bossArtRect(boss) {
+    if (!boss) return null;
+    const box = this.bossArtBox(boss.artLevel);
+    const sp = Assets.sprite(box.key, box.artW);
+    const ox = boss.x - box.artW * 0.35;
+    const oy = boss.y - box.artH * 0.45;
+    return { x: ox + sp.x, y: oy + sp.y, w: sp.w, h: sp.h };
+  },
+
+  getBossArtForLevel(level) {
+    if (!level) return null;
+    return Assets.get("bosses/" + level);
+  },
+
+  // L6: boss art under the plates so minions never vanish behind it.
+  drawBossArt(ctx, boss) {
+    const box = this.bossArtBox(boss.artLevel);
+    const sp = Assets.sprite(box.key, box.artW);
+    if (!sp.img) return;
+    const ox = boss.x - box.artW * 0.35;
+    const oy = boss.y - box.artH * 0.45;
+    ctx.drawImage(sp.img, ox + sp.x, oy + sp.y, sp.w, sp.h);
+  },
+
+  // L10: console slab (cached glow), name, segment text, segment dots.
+  drawBossSlab(ctx, boss) {
+    const x = boss.x;
+    const y = boss.y;
+    const w = SLAB_W;
+    const h = SLAB_H;
+    this.drawGlowSprite(ctx, this.getPlateSprite("slab", w, h, "boss"), x, y);
+    if (boss.flash > 0) {
+      ctx.strokeStyle = PALETTE.rgba("text", 0.70);
+      ctx.lineWidth = 3;
+      roundRect(ctx, x - w / 2, y - h / 2, w, h, 24);
+      ctx.stroke();
+    }
+
+    // name
+    ctx.font = FONT.display(14, 600);
+    ctx.fillStyle = PALETTE.rgba("cyan", 0.92);
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    drawTracked(ctx, boss.name, x - w / 2 + 22, y - h / 2 + 16, 0.12);
+
+    // segment prompt
+    const seg = boss.segment || "";
+    const done = seg.slice(0, boss.progress);
+    const rem = seg.slice(boss.progress);
+    this.drawSplitText(ctx, done, rem, x, y + 18, {
+      font: FONT.target(40, 700),
+      doneColor: PALETTE.rgba("text", 0.45),
+      remColor: PALETTE.rgba("lime", 0.92),
+      caret: true,
+      caretAlpha: this.caretAlpha()
+    });
+
+    // segment dots (B7 / C3 replace with the scalable meter)
+    const n = boss.segments.length;
+    const step = Math.min(18, (w - 52) / Math.max(1, n - 1));
+    for (let i = 0; i < n; i++) {
+      const cx = x - w / 2 + 26 + i * step;
+      const cy = y + h / 2 - 22;
+      ctx.fillStyle = i < boss.segmentIndex ? PALETTE.rgba("lime", 0.92) : PALETTE.rgba("text", 0.12);
+      ctx.beginPath();
+      ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.textBaseline = "alphabetic";
   },
 
   drawBoss(ctx, boss) {
-    // boss "word slab"
-    const x = boss.x;
-    const y = boss.y;
-    const w = 520;
-    const h = 190;
-
-    ctx.save();
-
-    const art = this.getBossArtForLevel(boss.artLevel);
-    if (art && art.complete && art.naturalWidth > 0) {
-      const maxH = this.h * 0.65;
-      const scale = Math.min(maxH / art.naturalHeight, 0.7);
-      const artH = art.naturalHeight * scale;
-      const artW = art.naturalWidth * scale;
-      const drawX = x - artW * 0.35;
-      const drawY = y - artH * 0.45;
-      ctx.drawImage(art, drawX, drawY, artW, artH);
-    }
-
-    ctx.shadowBlur = 26;
-    ctx.shadowColor = "rgba(255,57,209,0.20)";
-    ctx.fillStyle = "rgba(10,16,32,0.78)";
-    ctx.strokeStyle = boss.flash > 0 ? "rgba(255,255,255,0.65)" : "rgba(255,57,209,0.55)";
-    ctx.lineWidth = 3;
-    roundRect(ctx, x - w/2, y - h/2, w, h, 24);
-    ctx.fill();
-    ctx.stroke();
-
-    // inner chrome lines
-    ctx.shadowBlur = 0;
-    ctx.globalAlpha = 0.35;
-    ctx.strokeStyle = "rgba(57,245,255,0.35)";
-    ctx.beginPath();
-    ctx.moveTo(x - w/2 + 20, y - h/2 + 56);
-    ctx.lineTo(x + w/2 - 20, y - h/2 + 56);
-    ctx.stroke();
-
-    ctx.globalAlpha = 1;
-
-    // name
-    ctx.font = "18px ui-monospace, Menlo, Monaco, Consolas, monospace";
-    ctx.fillStyle = "rgba(57,245,255,0.85)";
-    ctx.textAlign = "left";
-    ctx.textBaseline = "top";
-    ctx.fillText(boss.name, x - w/2 + 22, y - h/2 + 14);
-
-    // segment prompt
-    const seg = boss.segment;
-    const done = seg.slice(0, boss.progress);
-    const rem = seg.slice(boss.progress);
-
-    ctx.font = "44px ui-monospace, Menlo, Monaco, Consolas, monospace";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-
-    ctx.fillStyle = "rgba(255,255,255,0.28)";
-    ctx.fillText(done, x - (rem.length * 13), y + 18);
-
-    ctx.fillStyle = "rgba(168,255,58,0.92)";
-    ctx.fillText(rem, x + (done.length * 13), y + 18);
-
-    // segment dots
-    ctx.globalAlpha = 0.9;
-    for (let i=0;i<boss.segments.length;i++) {
-      const cx = x - w/2 + 26 + i * 18;
-      const cy = y + h/2 - 22;
-      ctx.fillStyle = i < boss.segmentIndex ? "rgba(168,255,58,0.85)" : "rgba(255,255,255,0.15)";
-      ctx.beginPath();
-      ctx.arc(cx, cy, 5, 0, Math.PI*2);
-      ctx.fill();
-    }
-
-    ctx.restore();
+    this.drawBossArt(ctx, boss);
+    this.drawBossSlab(ctx, boss);
   },
 
+  // ------------------------- Beams, particles, explosions -------------------------
+  // Two strokes (wide soft + thin core), no shadow (D2 adds the third pass and the muzzle flash).
   drawBullets(ctx) {
+    if (!this.bullets.length) return;
+    ctx.save();
+    ctx.lineCap = "round";
     for (const b of this.bullets) {
-      const a = 1 - (b.t / b.life);
-      ctx.save();
-      ctx.globalAlpha = clamp(a * 1.1, 0, 1);
-      let col = "rgba(57,245,255,0.9)";
-      if (b.color === "magenta") col = "rgba(255,57,209,0.9)";
-      if (b.color === "lime") col = "rgba(168,255,58,0.9)";
-      ctx.strokeStyle = col;
-      ctx.lineWidth = b.width;
-      ctx.shadowBlur = 18;
-      ctx.shadowColor = col.replace("0.9", "0.35");
-
+      const a = clamp((1 - (b.t / b.life)) * 1.1, 0, 1);
+      const col = BULLET_COLORS[b.color] || BULLET_COLORS.cyan;
+      ctx.globalAlpha = a * 0.25;
+      ctx.strokeStyle = col.glow;
+      ctx.lineWidth = b.width * 3;
       ctx.beginPath();
       ctx.moveTo(b.x, b.y);
       ctx.lineTo(b.tx, b.ty);
       ctx.stroke();
-
-      ctx.restore();
+      ctx.globalAlpha = a;
+      ctx.strokeStyle = col.core;
+      ctx.lineWidth = b.width;
+      ctx.beginPath();
+      ctx.moveTo(b.x, b.y);
+      ctx.lineTo(b.tx, b.ty);
+      ctx.stroke();
     }
+    ctx.restore();
   },
 
   drawParticles(ctx) {
+    if (!this.particles.length) return;
     for (const p of this.particles) {
       const a = p.alpha();
-      ctx.save();
-      ctx.globalAlpha = a;
-      ctx.fillStyle = `hsla(${p.hue}, 95%, 65%, ${a})`;
+      if (a <= 0) continue;
+      const row = PARTICLE_COLORS[p.color] || PARTICLE_COLORS.cyan;
+      ctx.fillStyle = row[Math.round(clamp(a, 0, 1) * PARTICLE_ALPHA_STEPS)];
       ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
       ctx.fill();
-      ctx.restore();
     }
   },
 
   drawExplosionSprites(ctx) {
-    for (const ex of this.explosions) {
-      ex.draw(ctx);
-    }
+    for (const ex of this.explosions) ex.draw(ctx);
   },
 
-  drawHUDOverlays(ctx) {
-    // subtle flash on wrong key
+  // ------------------------- World overlays (L14) and vignette (L17) -------------------------
+  // Edge-only danger vignette cached per resize at half device resolution (a drawImage, not a full-frame fill).
+  getDangerVignette() {
+    if (this.dangerVignette && this.dangerVignette.epoch === this.spriteEpoch) return this.dangerVignette;
+    const s = (this.renderScale || 1) * 0.5;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(this.w * s));
+    canvas.height = Math.max(1, Math.round(this.h * s));
+    const g = canvas.getContext("2d");
+    g.setTransform(s, 0, 0, s, 0, 0);
+    const grad = g.createRadialGradient(this.w / 2, this.h / 2, this.h * 0.28, this.w / 2, this.h / 2, this.h * 0.78);
+    grad.addColorStop(0, PALETTE.rgba("danger", 0));
+    grad.addColorStop(1, PALETTE.rgba("danger", 0.70));
+    g.fillStyle = grad;
+    g.fillRect(0, 0, this.w, this.h);
+    this.dangerVignette = { canvas, epoch: this.spriteEpoch };
+    return this.dangerVignette;
+  },
+
+  getVignetteSprite() {
+    if (this.vignetteSprite && this.vignetteSprite.epoch === this.spriteEpoch) return this.vignetteSprite;
+    const s = (this.renderScale || 1) * 0.5;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(this.w * s));
+    canvas.height = Math.max(1, Math.round(this.h * s));
+    const g = canvas.getContext("2d");
+    g.setTransform(s, 0, 0, s, 0, 0);
+    const grad = g.createRadialGradient(this.w / 2, this.h / 2, this.h * 0.2, this.w / 2, this.h / 2, this.h * 0.7);
+    grad.addColorStop(0, "rgba(0,0,0,0)");
+    grad.addColorStop(1, "rgba(0,0,0,0.35)");
+    g.fillStyle = grad;
+    g.fillRect(0, 0, this.w, this.h);
+    this.vignetteSprite = { canvas, epoch: this.spriteEpoch };
+    return this.vignetteSprite;
+  },
+
+  drawWorldOverlays(ctx) {
+    // typo / intro flash: full-frame wash capped at .12 (D1 moves this to flash channels)
     if (this.flash > 0) {
-      const a = clamp(this.flash * 3, 0, 0.18);
-      ctx.save();
-      ctx.fillStyle = `rgba(255,77,109,${a})`;
+      const cap = this.reduceMotion ? 0.08 : 0.12;
+      const a = clamp(this.flash * 3, 0, cap);
+      ctx.fillStyle = PALETTE.rgba("danger", a);
       ctx.fillRect(0, 0, this.w, this.h);
-      ctx.restore();
     }
-
+    // damage: edge vignette only, never a full-frame wash
     if (this.damagePulse > 0) {
-      const a = clamp(this.damagePulse * 0.4, 0, 0.35);
-      ctx.save();
-      ctx.fillStyle = `rgba(255,0,34,${a})`;
-      ctx.fillRect(0, 0, this.w, this.h);
-      ctx.restore();
+      const v = this.getDangerVignette();
+      const prev = ctx.globalAlpha;
+      ctx.globalAlpha = prev * clamp(this.damagePulse * 0.8, 0, 0.8);
+      ctx.drawImage(v.canvas, 0, 0, this.w, this.h);
+      ctx.globalAlpha = prev;
     }
-
-    // vignette via canvas (extra)
-    ctx.save();
-    const g = ctx.createRadialGradient(this.w/2, this.h/2, this.h*0.2, this.w/2, this.h/2, this.h*0.7);
-    g.addColorStop(0, "rgba(0,0,0,0)");
-    g.addColorStop(1, "rgba(0,0,0,0.35)");
-    ctx.fillStyle = g;
-    ctx.fillRect(0,0,this.w,this.h);
-    ctx.restore();
   },
 
+  drawVignette(ctx) {
+    const v = this.getVignetteSprite();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(v.canvas, 0, 0, this.canvas.width, this.canvas.height);
+    const s = this.renderScale || 1;
+    ctx.setTransform(s, 0, 0, s, 0, 0);
+  },
+
+  // ------------------------- Finale / intro text (B3, B8, D5 route these through showBanner) -------------------------
   drawBossClearBackdrop(ctx) {
     ctx.save();
     const t = this.bossClear?.t || 0;
     const alpha = clamp(0.35 + t * 0.25, 0, 0.85);
-    ctx.fillStyle = `rgba(9,12,24,${alpha * 0.5})`;
+    ctx.fillStyle = PALETTE.rgba("bg2", alpha * 0.5);
     ctx.fillRect(0, this.h * 0.35, this.w, this.h * 0.3);
 
-    const art = this.getBossArtForLevel(this.bossClear?.level);
-    if (art && art.complete && art.naturalWidth > 0) {
+    const level = this.bossClear?.level;
+    if (level) {
+      const key = "bosses/" + level;
+      const meta = Assets.meta(key);
+      const orig = (meta && meta.orig) || { w: 2816, h: 1536 };
       const targetH = this.h * 0.5;
-      const scale = targetH / art.naturalHeight;
-      const targetW = art.naturalWidth * scale;
-      ctx.drawImage(art, (this.w - targetW) / 2, this.h * 0.25, targetW, targetH);
+      const targetW = orig.w * (targetH / orig.h);
+      const sp = Assets.sprite(key, targetW);
+      if (sp.img) ctx.drawImage(sp.img, (this.w - targetW) / 2 + sp.x, this.h * 0.25 + sp.y, sp.w, sp.h);
     }
     ctx.restore();
   },
@@ -531,7 +829,7 @@ Object.assign(Game.prototype, {
     ctx.save();
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.font = "bold 64px 'Orbitron', 'Segoe UI', sans-serif";
+    ctx.font = FONT.display(64, 800);
     ctx.fillStyle = "rgba(255, 247, 216, 0.95)";
     ctx.strokeStyle = "rgba(255,120,80,0.85)";
     ctx.lineWidth = 3;
@@ -540,55 +838,10 @@ Object.assign(Game.prototype, {
     ctx.strokeText("BOSS DEFEATED", cx, cy);
     ctx.fillText("BOSS DEFEATED", cx, cy);
 
-    ctx.font = "24px 'Segoe UI', sans-serif";
+    ctx.font = FONT.target(24, 600);
     ctx.fillStyle = "rgba(168,255,120,0.92)";
     const sub = this.bossClear?.target === "victory" ? "Congratulations!" : `${this.bossClear?.bossName || ""} neutralized.`;
     ctx.fillText(sub, cx, cy + 60);
-    ctx.restore();
-  },
-
-  getBossArtForLevel(level) {
-    if (!level) return null;
-    return this.bossArtImages?.[level] || null;
-  },
-
-  render(dt) {
-    const ctx = this.ctx;
-    const s = this.renderScale || 1;
-    // Shake transform: integer random offset with amplitude from trauma (D1 replaces this with smooth noise).
-    const amp = 18 * this.trauma * this.trauma;
-    const sx = amp >= 0.5 ? Math.round(rand(-amp, amp)) : 0;
-    const sy = amp >= 0.5 ? Math.round(rand(-amp, amp)) : 0;
-
-    // L0: opaque base fill under identity over the whole backing store (covers the shake margin), then
-    // the logical-space transform. No clearRect: the context is opaque.
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = (typeof PALETTE !== "undefined" && PALETTE && PALETTE.bg0) || "#05060B";
-    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-    ctx.setTransform(s, 0, 0, s, 0, 0);
-    ctx.save();
-    ctx.translate(sx, sy);
-
-    this.drawBackground(ctx);
-    this.drawForegroundParallax(ctx);
-
-    // Entities
-    this.drawBullets(ctx);
-
-    for (const p of this.powerups) this.drawPowerup(ctx, p);
-    for (const e of this.enemies) this.drawEnemy(ctx, e);
-
-    if (this.inBoss && this.boss) this.drawBoss(ctx, this.boss);
-
-    this.drawShip(ctx);
-    if (this.bossClear) this.drawBossClearBackdrop(ctx);
-    this.drawExplosionSprites(ctx);
-    this.drawParticles(ctx);
-
-    this.drawHUDOverlays(ctx);
-    if (this.bossClear) this.drawBossClearText(ctx);
-    if (this.bossIntro) this.drawBossIntro(ctx);
-
     ctx.restore();
   },
 
@@ -602,10 +855,101 @@ Object.assign(Game.prototype, {
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillStyle = `rgba(255,255,255,${alpha})`;
-    ctx.font = "48px 'Orbitron', sans-serif";
+    ctx.font = FONT.display(48, 800);
     ctx.fillText("INCOMING BOSS", this.w / 2, this.h * 0.42);
-    ctx.font = "32px 'Segoe UI', sans-serif";
+    ctx.font = FONT.target(32, 600);
     ctx.fillText(info.name ?? "UNKNOWN", this.w / 2, this.h * 0.52);
     ctx.restore();
   },
+
+  // Minimal sector card while the level gate is closed (D7 brings the warp-in ceremony).
+  drawLevelIntro(ctx) {
+    const cfg = LEVELS[this.levelIndex];
+    if (!cfg) return;
+    ctx.save();
+    ctx.fillStyle = PALETTE.rgba("bg0", 0.45);
+    ctx.fillRect(0, this.h * 0.38, this.w, this.h * 0.24);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = PALETTE.rgba("accent", 0.92);
+    ctx.font = FONT.display(52, 800);
+    drawTracked(ctx, `SECTOR ${String(cfg.level).padStart(2, "0")}`, this.w / 2, this.h * 0.47, 0.12);
+    ctx.fillStyle = PALETTE.rgba("text", 0.70);
+    ctx.font = FONT.target(18, 600);
+    drawTracked(ctx, this.levelReady ? "WARP-IN" : "SPOOLING SECTOR ART…", this.w / 2, this.h * 0.56, 0.2);
+    ctx.restore();
+  },
+
+  // ------------------------- Frame -------------------------
+  render(dt) {
+    const ctx = this.ctx;
+    const s = this.renderScale || 1;
+    // Shake transform: integer random offset with amplitude from trauma (D1 replaces this with smooth noise).
+    const amp = 18 * this.trauma * this.trauma;
+    const sx = amp >= 0.5 ? Math.round(rand(-amp, amp)) : 0;
+    const sy = amp >= 0.5 ? Math.round(rand(-amp, amp)) : 0;
+
+    // L0: opaque base fill under identity over the whole backing store (covers the shake margin), then the
+    // logical-space transform. No clearRect: the context is opaque.
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = PALETTE.bg0;
+    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    ctx.setTransform(s, 0, 0, s, 0, 0);
+    ctx.save();
+    ctx.translate(sx, sy);
+
+    this.drawBackground(ctx);                                  // L1
+    this.drawStars(ctx);                                       // L2
+    this.drawForegroundParallax(ctx);                          // L3
+    if (typeof this.drawThemeFx === "function") this.drawThemeFx(ctx);   // L4 (D7)
+    if (typeof this.drawLaneRails === "function") this.drawLaneRails(ctx); // L5 (D3)
+    const boss = (this.inBoss && this.boss) ? this.boss : null;
+    if (boss) this.drawBossArt(ctx, boss);                     // L6
+    this.drawBullets(ctx);                                     // L7
+    for (const p of this.powerups) this.drawPowerup(ctx, p);   // L8
+    this.drawEnemies(ctx);                                     // L9 (far to near, locked last)
+    if (boss) this.drawBossSlab(ctx, boss);                    // L10
+    this.drawShip(ctx);                                        // L11
+    if (this.bossClear) this.drawBossClearBackdrop(ctx);
+    this.drawExplosionSprites(ctx);                            // L12
+    this.drawParticles(ctx);
+    if (typeof this.drawFloaters === "function") this.drawFloaters(ctx); // L13 (D5)
+    this.drawWorldOverlays(ctx);                               // L14
+    ctx.restore();
+
+    // L15: banners / cards, unshaken
+    if (this.bossClear) this.drawBossClearText(ctx);
+    if (this.bossIntro) this.drawBossIntro(ctx);
+    if (typeof this.drawBanner === "function") this.drawBanner(ctx);
+    if (this.mode === "playing" && !this.isLevelGateOpen()) this.drawLevelIntro(ctx);
+
+    this.drawVignette(ctx);                                    // L17
+  },
+
+  drawEnemies(ctx) {
+    const list = this.enemies;
+    if (!list.length) return;
+    const sorted = list.slice().sort((a, b) => b.x - a.x);
+    let lockedEn = null;
+    for (const en of sorted) {
+      if (en.locked && !lockedEn) { lockedEn = en; continue; }
+      this.drawEnemy(ctx, en);
+    }
+    if (lockedEn) this.drawEnemy(ctx, lockedEn);
+  },
 });
+
+// Boss.artRect (B-14): the pre-D6 art box, so minions can spawn at artRect.x - 40 before D6 recomposes the boss.
+// Defined here (the render track owns the geometry) unless the Boss class already carries one.
+if (typeof Boss === "function" && !Object.getOwnPropertyDescriptor(Boss.prototype, "artRect")) {
+  Object.defineProperty(Boss.prototype, "artRect", {
+    configurable: true,
+    get() {
+      const g = (typeof game !== "undefined" && game) || (typeof window !== "undefined" && window.game) || null;
+      if (g && typeof g.bossArtRect === "function") return g.bossArtRect(this);
+      const scale = Math.min(720 * 0.65 / 1536, 0.7);
+      const artW = 2816 * scale, artH = 1536 * scale;
+      return { x: this.x - artW * 0.35, y: this.y - artH * 0.45, w: artW, h: artH };
+    }
+  });
+}
