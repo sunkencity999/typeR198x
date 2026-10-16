@@ -211,7 +211,8 @@ Object.assign(Game.prototype, {
     this.prefetchMenuSector();
   },
 
-  // .is-dismissed fades the overlay (450 ms); .hidden lands on transitionend so the native sed/harness state stays valid.
+  // .is-dismissed fades the overlay (450 ms); .hidden lands on the overlay's own opacity transitionend (or the timeout
+  // fallback) so the native sed/harness state stays valid.
   finishLoading(reason = "ready") {
     if (this.loadingDismissed) return;
     this.loadingDismissed = true;
@@ -223,8 +224,11 @@ Object.assign(Game.prototype, {
     if (!overlay) return;
     overlay.setAttribute("aria-busy", "false");
     let done = false;
-    const hide = () => {
+    const hide = (e) => {
       if (done) return;
+      // review R27: only the overlay's own opacity fade ends the dismissal; the bubbled .loadingBarFill width
+      // transition (180 ms, written by the final progress update) used to cut the 450 ms fade short.
+      if (e && (e.target !== overlay || e.propertyName !== "opacity")) return;
       done = true;
       overlay.classList.add("hidden");
       overlay.removeEventListener("transitionend", hide);
