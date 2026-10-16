@@ -6,12 +6,15 @@
 //
 //   assets/audio/sfx.js              window.SFX
 //   assets/js/core/00-util.js        clamp/lerp/rand/... helpers, normalizeKey/foldLatin, environment flags
+//   assets/js/core/10-tokens.js      PALETTE / FONT / MOTION / easings / SHAKE_PAD (CSS tokens mirrored into JS)
 //   assets/js/core/20-constants.js   balance constants, getHpBonusForLevel, buildBossSegments, LEVELS
 //   assets/js/core/30-content.js     word pools, boss tables, ship/boss/theme art, explosion sheet, victory script
 //   assets/js/core/40-save.js        LS_KEY, defaultSave/loadSave/storeSave/migrateSave, checkpoint + resume helpers
+//   assets/js/core/50-assets.js      Assets IIFE: manifest-driven image loader (window.TypeRAssets)
 //   assets/js/core/60-entities.js    Enemy, Powerup, Bullet, ExplosionSprite, Particle, Boss
-//   assets/js/core/70-canvas.js      roundRect, bracketRect
+//   assets/js/core/70-canvas.js      roundRect, bracketRect, drawSplitText, fitText, drawTracked
 //   game.js (this file)              ASSET_VERSION/withAssetVersion + class Game { constructor, loop }
+//   assets/js/game/05-boot.js        Game.prototype: boot sequence, loading overlay, per-sector asset gate, prefetch
 //   assets/js/game/10-ui.js          Game.prototype: bindUI, menus, modals, settings, toasts, ending dialogue
 //   assets/js/game/20-run.js         Game.prototype: run/level lifecycle, checkpoints, end screens, saveRun
 //   assets/js/game/30-input.js       Game.prototype: keydown routing, handleTyped, onCorrectKey/onWrongKey
@@ -125,43 +128,20 @@ class Game {
     this.storyLaunchBtn = this.ui.storyLaunch;
     this.keyboardHintModal = this.ui.keyboardHint;
     this.keyboardHintBtn = this.ui.keyboardHintDismiss;
-    this.pendingAssets = 0;
-    this.assetsReady = false;
     this.endingScript = getVictoryScript();
     this.endingIndex = 0;
 
-    this.shipImages = {};
-    Object.entries(SHIP_CONFIGS).forEach(([id, cfg]) => {
-      const img = new Image();
-      if (!SKIP_CORS_IMAGES) img.crossOrigin = "anonymous";
-      this.registerAsset(img, () => {
-        this.shipImages[id] = this.prepareShipSprite(img);
-      });
-      img.src = withAssetVersion(cfg.src);
-      this.shipImages[id] = img;
-    });
-
-    this.themeImages = {};
-    PARALLAX_THEMES.forEach((theme) => {
-      const bg = new Image();
-      if (!SKIP_CORS_IMAGES) bg.crossOrigin = "anonymous";
-       this.registerAsset(bg);
-      bg.src = withAssetVersion(theme.bg);
-      const fg = new Image();
-      if (!SKIP_CORS_IMAGES) fg.crossOrigin = "anonymous";
-       this.registerAsset(fg);
-      fg.src = withAssetVersion(theme.fg);
-      this.themeImages[theme.id] = { bg, fg };
-    });
-
-    this.bossArtImages = {};
-    BOSS_ARTS.forEach((art) => {
-      const img = new Image();
-      if (!SKIP_CORS_IMAGES) img.crossOrigin = "anonymous";
-      this.registerAsset(img);
-      img.src = withAssetVersion(art.src);
-      this.bossArtImages[art.level] = img;
-    });
+    // Art is owned by the Assets loader (50-assets.js): the boot sequence in 05-boot.js loads the critical set,
+    // startLevel loads each sector's bg/fg/boss on demand and the renderer reads drawables through Assets.get()
+    // / Assets.sprite() every frame. Fields below are filled by initBoot().
+    this.assetsReady = false;
+    this.degradedAssets = false;
+    this.levelReady = false;
+    this.levelWait = 0;
+    this.bootPromise = null;
+    this.fontsReady = null;
+    this.plateCache = new Map();
+    this.debug = { railsDrawn: false, tileDraws: 0 };
 
     // Save
     this.save = loadSave();
@@ -236,11 +216,6 @@ class Game {
     this.currentTheme = getThemeForLevel(0);
     this.parallax = { bgOffset: 0, fgOffset: 0 };
 
-    this.explosionSheet = new Image();
-    if (!SKIP_CORS_IMAGES) this.explosionSheet.crossOrigin = "anonymous";
-    this.registerAsset(this.explosionSheet);
-    this.explosionSheet.src = withAssetVersion(EXPLOSION_SHEET.src);
-
     // spawn timers
     this.spawnAcc = 0;
     this.powerAcc = 0;
@@ -256,7 +231,6 @@ class Game {
 
     this.bindUI();
     this.refreshMenu();
-    this.checkLoadingOverlay();
     this.maybeShowKeyboardHint();
 
     // focus
@@ -271,6 +245,10 @@ class Game {
     // HiDPI backing store (A6): logical 1280x720, device pixels = round(1280*renderScale)
     this.bindResize();
     this.resizeCanvas();
+
+    // Boot (A8): Assets.init at the computed renderScale, critical set + display font behind the loading
+    // overlay, watchdogs, error UI, ship-card hydration. Everything after this line must not block on art.
+    this.initBoot();
 
     // main loop
     this.frameCount = 0;
@@ -293,6 +271,8 @@ class Game {
     try {
       this.tickEffects(raw);
       if (this.mode === "playing") {
+        // Per-sector asset gate + next-sector prefetch (05-boot.js); cheap and idempotent per frame.
+        this.tickBoot(raw);
         this.update(raw * this.timeScale);
         this.drawFrame(raw);
       } else if (this.mode === "menu") {
@@ -307,6 +287,8 @@ class Game {
           this.ambientAcc = 0;
           // Game Over holds a still frame once the death impact has settled.
           if (this.mode !== "gameOver") this.stepAmbient(step);
+          // Level Complete pre-uploads the next sector's bitmaps (05-boot.js) so its first frame does not hitch.
+          if (this.mode === "levelComplete") this.warmNextSector();
           this.drawFrame(step);
         }
       }
