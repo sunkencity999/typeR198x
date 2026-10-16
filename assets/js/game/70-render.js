@@ -1305,6 +1305,7 @@ Object.assign(Game.prototype, {
     this.drawBullets(ctx);                                     // L7
     for (const p of this.powerups) this.drawPowerup(ctx, p);   // L8
     this.drawEnemies(ctx);                                     // L9 (far to near, locked last)
+    if (this.mode === "menu" && typeof this.drawAttract === "function") this.drawAttract(ctx);   // D8 ghosts (L9, shaken)
     if (boss) this.drawBossSlab(ctx, boss);                    // L10
     if (boss && typeof this.drawBossHazardMeter === "function") this.drawBossHazardMeter(ctx, this.bossHazardRect()); // L10 surge cell
     this.drawShip(ctx);                                        // L11

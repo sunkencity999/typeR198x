@@ -53,6 +53,7 @@ Object.assign(Game.prototype, {
 
   // ------------------------- Run/Level control -------------------------
   startNewRun() {
+    if (typeof this.stopAttract === "function") this.stopAttract();   // D8: ghosts / beams / particles never enter a run
     this.beginRunAt(0);
   },
 
@@ -61,6 +62,7 @@ Object.assign(Game.prototype, {
   // top-10 table. This is the direct entry (the harness jumps to sector 10 with it); the unlock check and the
   // confirm for a saved run live in the sector-tile path (enterSectorFromMenu, 15-screens.js).
   startSector(levelIndex) {
+    if (typeof this.stopAttract === "function") this.stopAttract();   // D8
     const i = clamp(levelIndex | 0, 0, 9);
     this.beginRunAt(i);
     return true;
@@ -87,6 +89,7 @@ Object.assign(Game.prototype, {
   },
 
   continueRun() {
+    if (typeof this.stopAttract === "function") this.stopAttract();   // D8
     const r = this.save.run;
     if (!r) return this.startNewRun();
     this.run = r;

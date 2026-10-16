@@ -2603,3 +2603,9 @@ fieldset.shipGrid > legend {
   transition: transform var(--dur-3, 320ms) var(--ease-out, ease-out), opacity var(--dur-3, 320ms) linear;
 }
 :root.reduce-motion .flyLabel { display: none; }
+
+/* Title cabinet: lighter frost so the attract mode (D8) reads through the glass; the scrim is unchanged. */
+.screen--menu {
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}

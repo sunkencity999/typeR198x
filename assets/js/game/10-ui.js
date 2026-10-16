@@ -836,6 +836,7 @@ Object.assign(Game.prototype, {
 
   setMode(m) {
     const prev = this.mode;
+    if (prev === "menu" && m !== "menu" && typeof this.stopAttract === "function") this.stopAttract();   // D8
     this.mode = m;
     document.body.dataset.mode = m;
     const screens = this.screens();
@@ -876,6 +877,7 @@ Object.assign(Game.prototype, {
     this.announceMode(m, prev);
     this.focusPrimary(m);
     this.requestFrame();
+    if (m === "menu" && typeof this.startAttract === "function") this.startAttract();   // D8 (idempotent; waits for the menu bitmaps)
   },
 
   // Game Over: the CRT power-off line (once, full motion only) and a desaturated frozen canvas 600 ms after the hit lands.
