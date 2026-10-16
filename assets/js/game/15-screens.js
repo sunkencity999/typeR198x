@@ -599,6 +599,176 @@ Object.assign(Game.prototype, {
   },
 });
 
+// ------------------------- Onboarding (C8 / UX-11) -------------------------
+// Tutorial tips are driven from tickTutorial(dt) by polling game state (no hooks in other tracks' files): first
+// enemy on screen (t >= 1 s), first lock, first powerup on screen, boss intro end, first lock loss, the accuracy tip
+// after a sector-1 death below 70 %. Flags live in save.tutorialSeen; everything is suppressed for returning players
+// (lastUnlockedLevel > 1), deferred during the sector card / boss intro / finale and cleared outside play.
+const TUTORIAL_TIPS = {
+  lock: { text: "TYPE THE FIRST LETTER OF A TARGET TO LOCK ON", ms: 4000 },
+  finish: { text: "KEEP TYPING TO FINISH IT", ms: 2600 },
+  powerup: { text: (label) => `TYPE ${String(label || "").toUpperCase()} TO GRAB IT`, ms: 3500 },
+  boss: { text: "BOSS: TYPE THE HIGHLIGHTED WORD — MINIONS COUNT TOO", ms: 4000 },
+  release: { text: "LOCK LOST — SPACE RELEASES, 3 MISSES DROP IT", ms: 3000 },
+  accuracy: { text: "TIP: ACCURACY BEATS SPEED — EVERY TYPO BREAKS THE COMBO", ms: 4500 }
+};
+const TUTORIAL_KEY = "tut";
+
+Object.assign(Game.prototype, {
+  initOnboarding() {
+    this._tut = { shown: {}, prevLock: null, prevCorrect: null, prevMisses: null, prevKills: null, prevMode: null, watchPowerup: null };
+    // '?' / F1 open the manual from the title and pause screens (fallback until the shell routes it in onKeyDown).
+    window.addEventListener("keydown", (e) => {
+      if ((e.key !== "?" && e.key !== "F1") || e.repeat) return;
+      if (this.mode !== "menu" && this.mode !== "paused") return;
+      if (Array.isArray(this.modalStack) && this.modalStack.length) return;
+      const t = e.target;
+      const tag = (t && t.tagName) ? t.tagName.toLowerCase() : "";
+      if (tag === "input" || tag === "textarea" || tag === "select" || (t && t.isContentEditable)) return;
+      e.preventDefault();
+      this.openHelp();
+    });
+  },
+
+  tutorialEnabled() {
+    return !!this.save && ((this.save.lastUnlockedLevel | 0) || 1) <= 1;
+  },
+
+  markTutorial(kind) {
+    if (!this.save.tutorialSeen || typeof this.save.tutorialSeen !== "object") this.save.tutorialSeen = {};
+    if (this.save.tutorialSeen[kind]) return;
+    this.save.tutorialSeen[kind] = true;
+    storeSave(this.save);
+  },
+
+  tutorialToast(kind, text, ms) {
+    if (!this._tut) return;
+    this._tut.shown[kind] = true;
+    if (typeof this.showToast === "function") this.showToast(text, { kind: "tip", key: TUTORIAL_KEY, ms });
+  },
+
+  hasEnemyOnScreen() {
+    for (const en of this.enemies) {
+      if (!en.alive || en.dying) continue;
+      if (typeof this.isEntityVisible === "function" ? this.isEntityVisible(en) : en.x < this.w + 40) return true;
+    }
+    return false;
+  },
+
+  firstPowerupOnScreen() {
+    for (const p of this.powerups) {
+      if (!p.alive || p.dying) continue;
+      if (typeof this.isEntityVisible === "function" ? this.isEntityVisible(p) : p.x < this.w + 40) return p;
+    }
+    return null;
+  },
+
+  tickTutorial(dt) {
+    const T = this._tut;
+    if (!T) return;
+    const mode = this.mode;
+    if (mode !== "playing") {
+      if (T.prevMode === "playing" && typeof this.dismissToast === "function") this.dismissToast(TUTORIAL_KEY);
+      T.prevMode = mode;
+      T.prevLock = null;
+      T.prevCorrect = null;
+      T.prevMisses = null;
+      T.prevKills = null;
+      return;
+    }
+    T.prevMode = mode;
+    const seen = (this.save && this.save.tutorialSeen) || {};
+    const lock = this.lock;
+    const st = this.stats || {};
+    const correct = st.correct | 0, misses = st.misses | 0, kills = st.kills | 0;
+    if (T.prevCorrect === null) { T.prevCorrect = correct; T.prevMisses = misses; T.prevKills = kills; }
+    // Keystrokes land between frames, so the counters carry the events: the first correct key in wave play IS a lock
+    // (single-letter targets lock and die inside one keystroke), a kill is a finished target, and a miss that leaves
+    // the previous target alive at progress 0 is a lost lock.
+    const firstCorrect = correct > T.prevCorrect && !this.inBoss;
+    const killed = kills > T.prevKills;
+    const prevRef = T.prevLock && T.prevLock.ref;
+    const lost = !!(T.prevLock && !lock && misses > T.prevMisses && prevRef && prevRef.alive && !prevRef.dying && (prevRef.progress | 0) === 0);
+
+    // Progress flags are tracked whether or not a tip is on screen.
+    if (firstCorrect && !seen.lock) this.markTutorial("lock");
+    if (killed && !seen.finish && !this.inBoss) this.markTutorial("finish");
+    if (T.watchPowerup && T.watchPowerup.alive === false) {
+      if ((T.watchPowerup.progress | 0) >= (T.watchPowerup.label || "").length && !seen.powerup) this.markTutorial("powerup");
+      T.watchPowerup = null;
+    }
+
+    const gated = !!this.levelIntro || !!(this.bossIntro && this.bossIntro.locked) || !!this.bossClear;
+    if (this.tutorialEnabled() && !gated) {
+      const levelT = this.levelT || 0;
+      if (!seen.lock && !T.shown.lock && !lock && this.levelIndex === 0 && levelT >= 1 && this.hasEnemyOnScreen()) {
+        this.tutorialToast("lock", TUTORIAL_TIPS.lock.text, TUTORIAL_TIPS.lock.ms);
+      }
+      // The lock landed on a word (still alive): teach the finish; a letter target already taught it by dying.
+      if (!seen.finish && !T.shown.finish && firstCorrect && lock && lock.kind === "enemy") {
+        this.tutorialToast("finish", TUTORIAL_TIPS.finish.text, TUTORIAL_TIPS.finish.ms);
+      }
+      if (!seen.powerup && !T.shown.powerup && !T.watchPowerup) {
+        const p = this.firstPowerupOnScreen();
+        if (p) {
+          this.tutorialToast("powerup", TUTORIAL_TIPS.powerup.text(p.label), TUTORIAL_TIPS.powerup.ms);
+          T.watchPowerup = p;
+        }
+      }
+      if (!seen.boss && !T.shown.boss && this.inBoss && this.boss) {
+        this.tutorialToast("boss", TUTORIAL_TIPS.boss.text, TUTORIAL_TIPS.boss.ms);
+        this.markTutorial("boss");
+      }
+      if (!seen.release && !T.shown.release && lost) {
+        this.tutorialToast("release", TUTORIAL_TIPS.release.text, TUTORIAL_TIPS.release.ms);
+        this.markTutorial("release");
+      }
+      if (this._accuracyTipPending && !seen.accuracy && !T.shown.accuracy && levelT >= 0.5) {
+        this._accuracyTipPending = false;
+        this.tutorialToast("accuracy", TUTORIAL_TIPS.accuracy.text, TUTORIAL_TIPS.accuracy.ms);
+        this.markTutorial("accuracy");
+      }
+    }
+    T.prevLock = lock;
+    T.prevCorrect = correct;
+    T.prevMisses = misses;
+    T.prevKills = kills;
+  },
+
+  // ------------------------- Help (pilot manual) -------------------------
+  openHelp() {
+    const E = this.screenEls || {};
+    const modal = E.helpModal;
+    if (!modal) return;
+    if (modal._screensOpen || (Array.isArray(this.modalStack) && this.modalStack.includes(modal))) return;
+    if (this.mode === "playing" && typeof this.togglePause === "function") this.togglePause();
+    const opener = document.activeElement && document.activeElement !== document.body ? document.activeElement : (this.mode === "paused" ? E.btnPauseHelp : E.btnHelp);
+    this.screensOpenModal(modal, { returnFocusTo: opener, initialFocus: "#btnHelpClose" });
+    if (typeof this.openModal !== "function") this.screensScrollAffordance(modal);
+  },
+
+  closeHelp() {
+    const E = this.screenEls || {};
+    this.screensCloseModal(E.helpModal);
+  },
+
+  // .modalScroll.is-scrollable / .at-bottom drive the fade + "scroll" hint (ui-HANDOFF section 1) in the fallback path.
+  screensScrollAffordance(modal) {
+    const scroll = modal.querySelector(".modalScroll");
+    const body = modal.querySelector(".modalBody");
+    if (!scroll || !body) return;
+    const update = () => {
+      scroll.classList.toggle("is-scrollable", body.scrollHeight > body.clientHeight + 2);
+      scroll.classList.toggle("at-bottom", body.scrollTop + body.clientHeight >= body.scrollHeight - 2);
+    };
+    if (!body._screensScrollBound) {
+      body._screensScrollBound = true;
+      body.addEventListener("scroll", update, { passive: true });
+    }
+    requestAnimationFrame(update);
+  },
+});
+
 // ------------------------- Results cards (C4 / UX-08 / SYS-11) -------------------------
 // renderResultsCard(cardEl, results, {animate}) fills the CONTRACT 2.1 markup from buildResults() output:
 // six tiles count up over 600 ms (easeOutCubic, 80 ms stagger, a tallyTick per visible step), the rank badge
