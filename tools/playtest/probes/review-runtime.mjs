@@ -110,14 +110,25 @@ await page.waitForFunction(() => { const gm = window.game; return gm.mode === "p
 await sleep(1200);   // let the sector's idle warm settle
 
 // ---- R30: a mid-sector resize re-warms the plate cache in idle slices; typing afterwards bakes nothing per frame.
-const cacheBefore = await g(() => window.game.plateCache.size);
+// Event-driven, not a fixed sleep: warmPlateCache chains requestIdleCallback slices (timeout 200 ms, so a loaded
+// machine can stretch the re-warm past any sleep), and the counters bucket an idle slice's shadowBlur sets into the
+// enclosing rAF frame, so mark() must come after the chain has drained and that frame has been flushed.
+const r30 = await g(() => {
+  const W = window.__idle = { pending: 0, scheduled: 0 };
+  const orig = window.requestIdleCallback;
+  window.requestIdleCallback = function (fn, opts) { W.pending++; W.scheduled++; return orig.call(window, (dl) => { try { return fn(dl); } finally { W.pending--; } }, opts); };
+  return { cache: window.game.plateCache.size, epoch: window.game.spriteEpoch };
+});
 await page.setViewportSize({ width: 1100, height: 700 });
-await sleep(900);   // 120 ms debounce + the idle slices
-const cacheAfter = await g(() => ({ size: window.game.plateCache.size, scale: window.game.renderScale }));
+const resized = await page.waitForFunction((e) => window.game.spriteEpoch > e, r30.epoch, { timeout: 3000 }).then(() => true).catch(() => false);   // 120 ms debounce
+const warmTarget = Math.min(30, r30.cache);
+const drained = await page.waitForFunction((n) => window.__idle.pending === 0 && window.game.plateCache.size >= n, warmTarget, { timeout: 5000 }).then(() => true).catch(() => false);
+await g(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));   // the last slice's frame bucket lands before mark()
+const cacheAfter = await g(() => ({ size: window.game.plateCache.size, scale: window.game.renderScale, idle: window.__idle }));
 await g(() => window.__e2Probe.mark());
 await P.autoType(3, { accuracy: 0.97 });
 const steady = await g(() => window.__e2Probe.snapshot());
-P.check("R30 after a mid-sector resize the plate cache is re-warmed and 3 s of typing sets shadowBlur in no frame", cacheAfter.size >= Math.min(30, cacheBefore) && steady.shadowBlurSetsPerFrame === 0, { cacheBefore, cacheAfter, steady });
+P.check("R30 after a mid-sector resize the plate cache is re-warmed (idle chain drained) and 3 s of typing sets shadowBlur in no frame", resized && drained && cacheAfter.size >= warmTarget && steady.shadowBlurSetsPerFrame === 0, { cacheBefore: r30.cache, resized, drained, cacheAfter, steady });
 
 // ---- R13: kill / slam plates draw under source-over (before the L12 additive batch opens).
 await g(() => {
