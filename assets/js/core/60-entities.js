@@ -160,28 +160,37 @@ class ExplosionSprite {
       }
     }
   }
-  draw(ctx) {
+  // Sheet frame currently shown and whether it is one of the additive flash frames.
+  frameIdx() { return this.frames[Math.min(this.frameIndex, this.frames.length - 1)]; }
+  isFlash() { return this.flashFrames.includes(this.frameIdx()); }
+  // Draws the current frame under whatever composite mode the caller has set. 75-fx-draw.js draws smoke frames
+  // source-over first and the flash frames inside the one additive batch, so a frame never flips the blend mode
+  // per sprite (CONTRACT: <= 6 globalCompositeOperation sets per frame).
+  drawFrame(ctx) {
     if (this.done) return;
     const sheet = this.currentSheet();
     if (!ExplosionSprite.isReady(sheet)) return;
-
     const fi = Math.min(this.frameIndex, this.frames.length - 1);
-    const frameIdx = this.frames[fi];
-    const frame = EXPLOSION_FRAMES[frameIdx];
+    const frame = EXPLOSION_FRAMES[this.frames[fi]];
     if (!frame) return;
     const k = ExplosionSprite.sheetScale || 1;
     const alpha = this.alphaFor(fi);
     if (alpha <= 0) return;
-    const grow = alpha < 1 ? 1 + 0.15 * (1 - alpha) : 1;
+    const grow = alpha < 1 ? 1 + 0.15 * (1 - alpha) : 1;   // last two frames: fade 1 -> 0, scale 1 -> 1.15
     const dw = frame.w * this.scale * grow;
     const dh = frame.h * this.scale * grow;
     const prevAlpha = ctx.globalAlpha;
-    const prevComp = ctx.globalCompositeOperation;
-    const blend = this.blendFor(frameIdx);
-    if (blend !== prevComp) ctx.globalCompositeOperation = blend;
     ctx.globalAlpha = prevAlpha * alpha;
     ctx.drawImage(sheet, frame.x * k, frame.y * k, frame.w * k, frame.h * k, this.x - dw / 2, this.y - dh / 2, dw, dh);
     ctx.globalAlpha = prevAlpha;
+  }
+  // Single-sprite path (sets its own blend); the renderer batches through drawFrame instead.
+  draw(ctx) {
+    if (this.done) return;
+    const prevComp = ctx.globalCompositeOperation;
+    const blend = this.blendFor(this.frameIdx());
+    if (blend !== prevComp) ctx.globalCompositeOperation = blend;
+    this.drawFrame(ctx);
     if (blend !== prevComp) ctx.globalCompositeOperation = prevComp;
   }
 }
@@ -193,7 +202,7 @@ ExplosionSprite.getSheet = () => (typeof Assets !== "undefined" && Assets && typ
 // 95 lime, 40 amber). Draw code looks the colour string up in a prebuilt table (PARTICLE_COLORS, 70-render.js).
 const PARTICLE_HUE_NAMES = { 185: "cyan", 310: "magenta", 95: "lime", 40: "amber" };
 class Particle {
-  constructor({ x, y, vx, vy, life, size, hue, color }) {
+  constructor({ x, y, vx, vy, life, size, hue, color, drag = 2.2 }) {
     this.x = x; this.y = y;
     this.vx = vx; this.vy = vy;
     this.life = life;
@@ -201,16 +210,45 @@ class Particle {
     this.size = size;
     this.hue = hue;
     this.color = color || PARTICLE_HUE_NAMES[hue] || "cyan";
+    this.drag = drag;
   }
   update(dt) {
     this.t += dt;
     this.x += this.vx * dt;
     this.y += this.vy * dt;
-    this.vx *= (1 - dt * 2.2);
-    this.vy *= (1 - dt * 2.2);
+    const k = Math.max(0, 1 - dt * this.drag);
+    this.vx *= k;
+    this.vy *= k;
   }
   alive() { return this.t < this.life; }
   alpha() { return 1 - (this.t / this.life); }
+  // Radius shrinks with (1 - t/life)^2 (never below .6 px); fast particles draw as streaks (75-fx-draw.js).
+  radius() { const u = 1 - this.t / this.life; return Math.max(0.6, this.size * u * u); }
+  speed() { return Math.hypot(this.vx, this.vy); }
+}
+
+// Shockwave ring (D1/D2, VIS-15): expands from size*.3 to size*2.2 over `life` with an ease-out, stroke alpha
+// 1 -> 0. Under reduced motion (`expand` false) it holds a mid radius and only fades.
+class Ring {
+  constructor({ x, y, size, color = "cyan", life = 0.28, expand = true }) {
+    this.kind = "ring";
+    this.x = x; this.y = y;
+    this.size = size;
+    this.r0 = size * 0.3;
+    this.r1 = size * 2.2;
+    this.color = color;
+    this.life = life;
+    this.t = 0;
+    this.expand = expand;
+  }
+  update(dt) { this.t += dt; }
+  alive() { return this.t < this.life; }
+  radius() {
+    if (!this.expand) return lerp(this.r0, this.r1, 0.6);
+    return lerp(this.r0, this.r1, easeOutCubic(this.t / this.life));
+  }
+  alpha() { return clamp(1 - this.t / this.life, 0, 1); }
+  width() { return this.size >= 100 ? lerp(4, 2, this.t / this.life) : 2; }
 }
 
 class Boss {

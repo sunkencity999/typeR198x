@@ -1,17 +1,23 @@
-// Type-R 198X — effects-side drawing: ship, beams, particles, explosion sprites, world overlays (L14) and the
-// vignette (L17). Split out of 70-render.js so the camera/weapons/ship track (D1, D2, D4) owns these paths while
-// 70-render.js keeps the frame, parallax, plates, boss and sector card. Methods are mixed into Game.prototype and
-// called by render() in 70-render.js; load order is defined in index.html (after 70-render.js, before 80-fx.js).
+// Type-R 198X — effects-side drawing: ship (L11), beams (L7), explosion sprites / dying plates / particles /
+// debris / rings / bolts (L12, one additive batch), world overlays (L14), active-target redraw (L16) and the
+// vignette (L17). Split out of 70-render.js so the camera / weapons / ship track (D1, D2, D4) owns these paths
+// while 70-render.js keeps the frame, parallax, plates, boss and sector card. Methods are mixed into
+// Game.prototype and called by render(); load order is defined in index.html (after 70-render.js, before 80-fx.js).
+//
+// Budget: no shadowBlur in any per-frame path (the ship shadow is a one-time bake), globalCompositeOperation is
+// assigned at most four times per frame (beam batch open/close, L12 batch open/close), no full-frame fill above
+// alpha .12.
 
-// Prebuilt colour strings (A11): bullets by PALETTE name, particles by name and alpha bucket, stars by bucket.
+// Prebuilt colour strings (A11): beams by PALETTE name (three passes), particles by name and alpha bucket.
 const BULLET_COLORS = (() => {
   const out = {};
   for (const name of ["cyan", "magenta", "lime", "amber", "violet", "danger", "text"]) {
-    out[name] = { core: PALETTE.rgba(name, 0.92), glow: PALETTE.rgba(name, 0.25) };
+    out[name] = { wide: PALETTE.rgba(name, 0.22), core: PALETTE.rgba(name, 0.95) };
   }
   return out;
 })();
-const PARTICLE_ALPHA_STEPS = 10;
+const BEAM_WHITE = PALETTE.rgba("text", 0.60);
+const PARTICLE_ALPHA_STEPS = 8;
 const PARTICLE_COLORS = (() => {
   const out = {};
   for (const name of ["cyan", "magenta", "lime", "amber", "violet", "danger", "text"]) {
@@ -21,6 +27,8 @@ const PARTICLE_COLORS = (() => {
   }
   return out;
 })();
+const FXD = (typeof FX_MOTION === "object" && FX_MOTION) || {};
+const FXD_TAU = Math.PI * 2;
 
 const SHIP_DRAW_W = 150;          // 168 in D4
 
@@ -87,7 +95,7 @@ Object.assign(Game.prototype, {
     ctx.restore();
   },
 
-  // ------------------------- Beams, particles, explosions -------------------------
+  // ------------------------- Beams (L7) -------------------------
   // Two strokes (wide soft + thin core), no shadow (D2 adds the third pass and the muzzle flash).
   drawBullets(ctx) {
     if (!this.bullets.length) return;
@@ -97,7 +105,7 @@ Object.assign(Game.prototype, {
       const a = clamp((1 - (b.t / b.life)) * 1.1, 0, 1);
       const col = BULLET_COLORS[b.color] || BULLET_COLORS.cyan;
       ctx.globalAlpha = a * 0.25;
-      ctx.strokeStyle = col.glow;
+      ctx.strokeStyle = col.wide;
       ctx.lineWidth = b.width * 3;
       ctx.beginPath();
       ctx.moveTo(b.x, b.y);
@@ -114,40 +122,174 @@ Object.assign(Game.prototype, {
     ctx.restore();
   },
 
-  drawParticles(ctx) {
-    if (!this.particles.length) return;
-    for (const p of this.particles) {
-      const a = p.alpha();
-      if (a <= 0) continue;
-      const row = PARTICLE_COLORS[p.color] || PARTICLE_COLORS.cyan;
-      ctx.fillStyle = row[Math.round(clamp(a, 0, 1) * PARTICLE_ALPHA_STEPS)];
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-      ctx.fill();
-    }
+  // ------------------------- L12: explosions, dying plates, particles, rings, bolts -------------------------
+  // The additive batch opens at the end of drawExplosionSprites (after the source-over smoke frames and the white
+  // impact plates) and closes at the end of drawParticles: two composite assignments for the whole layer.
+  openAdditive(ctx) {
+    if (this._fxAdditive) return;
+    ctx.globalCompositeOperation = "lighter";
+    this._fxAdditive = true;
+  },
+  closeAdditive(ctx) {
+    if (!this._fxAdditive) return;
+    ctx.globalCompositeOperation = "source-over";
+    this._fxAdditive = false;
   },
 
   drawExplosionSprites(ctx) {
-    for (const ex of this.explosions) ex.draw(ctx);
+    const list = this.explosions;
+    let flashes = 0;
+    for (const ex of list) {
+      if (ex.done) continue;
+      if (ex.isFlash()) { flashes++; continue; }
+      ex.drawFrame(ctx);
+    }
+    if (this.dyingPlates && this.dyingPlates.length) this.drawDyingPlates(ctx);
+    if (!this.needsAdditiveBatch(flashes)) return;
+    this.openAdditive(ctx);
+    if (flashes) for (const ex of list) if (!ex.done && ex.isFlash()) ex.drawFrame(ctx);
+  },
+
+  // Anything the additive batch would draw this frame? (Keeps idle frames at zero composite assignments.)
+  needsAdditiveBatch(flashes) {
+    if (flashes) return true;
+    if (this.particles.length) return true;
+    for (const name of ["rings", "bolts", "debris", "glyphParticles", "flashDiscs", "muzzles"]) {
+      const l = this[name];
+      if (l && l.length) return true;
+    }
+    return typeof this.shipAdditiveActive === "function" && this.shipAdditiveActive();
+  },
+
+  // Impact frame (JUICE-02): the destroyed plate pops solid white, 1.25 -> 1.0 over 90 ms, no text.
+  drawDyingPlates(ctx) {
+    const rr = typeof roundRect === "function" ? roundRect : null;
+    for (const d of this.dyingPlates) {
+      const u = clamp(d.t / d.life, 0, 1);
+      const s = lerp(1.25, 1, easeOutCubic(u));
+      const w = d.w * s, h = d.h * s;
+      ctx.fillStyle = PALETTE.rgba("text", 0.95 - 0.3 * u);
+      if (rr) {
+        rr(ctx, d.x - w / 2, d.y - h / 2, w, h, d.chip ? 10 : h / 2);
+        ctx.fill();
+      } else {
+        ctx.fillRect(d.x - w / 2, d.y - h / 2, w, h);
+      }
+    }
+  },
+
+  drawParticles(ctx) {
+    if (!this._fxAdditive) {
+      if (!this.needsAdditiveBatch(0)) return;
+      this.openAdditive(ctx);
+    }
+    if (typeof this.drawShipAdditive === "function") this.drawShipAdditive(ctx);
+    const list = this.particles;
+    if (list.length) {
+      ctx.lineCap = "round";
+      for (const p of list) {
+        const a = p.alpha();
+        if (a <= 0) continue;
+        const row = PARTICLE_COLORS[p.color] || PARTICLE_COLORS.cyan;
+        const col = row[Math.max(1, Math.round(clamp(a, 0, 1) * PARTICLE_ALPHA_STEPS))];
+        const r = p.radius();
+        if (p.speed() > 200) {
+          ctx.strokeStyle = col;
+          ctx.lineWidth = Math.max(0.8, r * 2);
+          ctx.beginPath();
+          ctx.moveTo(p.x, p.y);
+          ctx.lineTo(p.x - p.vx * 0.03, p.y - p.vy * 0.03);
+          ctx.stroke();
+        } else {
+          ctx.fillStyle = col;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, r, 0, FXD_TAU);
+          ctx.fill();
+        }
+      }
+    }
+    if (this.debris && this.debris.length && typeof this.drawDebris === "function") this.drawDebris(ctx);
+    if (this.glyphParticles && this.glyphParticles.length) this.drawGlyphParticles(ctx);
+    if (this.rings && this.rings.length) this.drawRings(ctx);
+    if (this.bolts && this.bolts.length && typeof this.drawBolts === "function") this.drawBolts(ctx);
+    if (this.flashDiscs && this.flashDiscs.length) this.drawFlashDiscs(ctx);
+    ctx.globalAlpha = 1;
+    this.closeAdditive(ctx);
+  },
+
+  // Spent letters popping off the plate (onKeyFx).
+  drawGlyphParticles(ctx) {
+    ctx.font = FONT.target(18, 700);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    for (const g of this.glyphParticles) {
+      const u = clamp(g.t / g.life, 0, 1);
+      ctx.globalAlpha = (1 - u) * 0.92;
+      ctx.fillStyle = PALETTE.rgba(g.color || "text", 1);
+      ctx.fillText(g.ch, g.x, g.y);
+    }
+    ctx.globalAlpha = 1;
+    ctx.textBaseline = "alphabetic";
+  },
+
+  drawRings(ctx) {
+    for (const r of this.rings) {
+      const a = r.alpha();
+      if (a <= 0) continue;
+      ctx.globalAlpha = a;
+      ctx.strokeStyle = PALETTE.rgba(r.color, 0.92);
+      ctx.lineWidth = r.width();
+      ctx.beginPath();
+      ctx.arc(r.x, r.y, r.radius(), 0, FXD_TAU);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  },
+
+  // One-frame white discs (impact / kill flash). Drawn once, then dropped.
+  drawFlashDiscs(ctx) {
+    for (const d of this.flashDiscs) {
+      ctx.globalAlpha = d.alpha;
+      ctx.fillStyle = PALETTE.rgba("text", 1);
+      ctx.beginPath();
+      ctx.arc(d.x, d.y, d.r, 0, FXD_TAU);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    this.flashDiscs.length = 0;
   },
 
   // ------------------------- World overlays (L14) and vignette (L17) -------------------------
-  // Edge-only danger vignette cached per resize at half device resolution (a drawImage, not a full-frame fill).
-  getDangerVignette() {
-    if (this.dangerVignette && this.dangerVignette.epoch === this.spriteEpoch) return this.dangerVignette;
+  // Edge vignettes are cached per colour at half device resolution (a drawImage, never a full-frame fill).
+  getEdgeVignette(name) {
+    const cache = this._edgeVignettes || (this._edgeVignettes = {});
+    const hit = cache[name];
+    if (hit && hit.epoch === this.spriteEpoch) return hit;
     const s = (this.renderScale || 1) * 0.5;
     const canvas = document.createElement("canvas");
     canvas.width = Math.max(1, Math.round(this.w * s));
     canvas.height = Math.max(1, Math.round(this.h * s));
     const g = canvas.getContext("2d");
     g.setTransform(s, 0, 0, s, 0, 0);
-    const grad = g.createRadialGradient(this.w / 2, this.h / 2, this.h * 0.28, this.w / 2, this.h / 2, this.h * 0.78);
-    grad.addColorStop(0, PALETTE.rgba("danger", 0));
-    grad.addColorStop(1, PALETTE.rgba("danger", 0.70));
+    const grad = g.createRadialGradient(this.w / 2, this.h / 2, this.h * 0.5, this.w / 2, this.h / 2, this.w * 0.56);
+    grad.addColorStop(0, PALETTE.rgba(name, 0));
+    grad.addColorStop(0.55, PALETTE.rgba(name, 0.45));
+    grad.addColorStop(1, PALETTE.rgba(name, 1));
     g.fillStyle = grad;
     g.fillRect(0, 0, this.w, this.h);
-    this.dangerVignette = { canvas, epoch: this.spriteEpoch };
-    return this.dangerVignette;
+    const entry = { canvas, epoch: this.spriteEpoch, name };
+    cache[name] = entry;
+    if (name === "danger") this.dangerVignette = entry;
+    return entry;
+  },
+  getDangerVignette() { return this.getEdgeVignette("danger"); },
+
+  drawEdgeVignette(ctx, name, alpha) {
+    const v = this.getEdgeVignette(name);
+    const pad = typeof SHAKE_PAD === "number" ? SHAKE_PAD : 20;
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(v.canvas, -pad, -pad, this.w + 2 * pad, this.h + 2 * pad);
+    ctx.globalAlpha = 1;
   },
 
   getVignetteSprite() {
@@ -167,22 +309,149 @@ Object.assign(Game.prototype, {
     return this.vignetteSprite;
   },
 
-  drawWorldOverlays(ctx) {
-    // typo / intro flash: full-frame wash capped at .12 (D1 moves this to flash channels)
-    if (this.flash > 0) {
-      const cap = this.reduceMotion ? 0.08 : 0.12;
-      const a = clamp(this.flash * 3, 0, cap);
+  // Flash channels (JUICE-07 / VIS-15): damage and low-HP as a danger edge vignette, the boss intro as a violet
+  // edge, whiteFlash as the only full-frame fill (<= .12, .08 under reduced motion), a typo with nothing locked
+  // as a 2 px flicker along the top of the playfield. Never a red wash over the typing target.
+  drawFlashChannels(ctx) {
+    const m = this.fxMotion();
+    const p = this.player;
+    const maxV = typeof FXD.vignetteMax === "number" ? FXD.vignetteMax : 0.35;
+    let danger = clamp((this.damageFlash || 0) * maxV * m.flash, 0, maxV);
+    if (this.mode !== "menu" && p.maxHp > 0 && p.hp > 0 && p.hp / p.maxHp < 0.25) {
+      const low = FXD.lowHp || {};
+      const base = typeof low.base === "number" ? low.base : 0.10;
+      const amp = typeof low.amp === "number" ? low.amp : 0.08;
+      const hz = typeof low.hz === "number" ? low.hz : 1.2;
+      danger += m.anim > 0 ? base + amp * Math.sin(FXD_TAU * hz * (this.fxClock || 0)) : (typeof low.reduced === "number" ? low.reduced : 0.12);
+    }
+    danger = Math.min(maxV, danger);
+    if (danger > 0.004) this.drawEdgeVignette(ctx, "danger", danger);
+
+    const introMax = typeof FXD.introPulseMax === "number" ? FXD.introPulseMax : 0.25;
+    const intro = clamp((this.introPulse || 0) * introMax * m.flash, 0, introMax);
+    if (intro > 0.004) this.drawEdgeVignette(ctx, "violet", intro);
+
+    const wf = this.whiteFlash || 0;
+    if (wf > 0.004) {
+      const cap = m.anim > 0 ? (typeof FXD.whiteFlashMax === "number" ? FXD.whiteFlashMax : 0.12) : (typeof FXD.whiteFlashMaxReduced === "number" ? FXD.whiteFlashMaxReduced : 0.08);
+      const a = Math.min(cap, wf * 0.24 * m.flash);
+      if (a > 0.004) {
+        ctx.fillStyle = PALETTE.rgba("text", a);
+        ctx.fillRect(0, 0, this.w, this.h);
+      }
+    }
+
+    if ((this.typoEdge || 0) > 0) {
+      const top = this.hudSafeTop || 0;
+      const a = m.anim > 0 ? ((this.frameCount & 1) ? 0.9 : 0.35) : 0.7;
       ctx.fillStyle = PALETTE.rgba("danger", a);
-      ctx.fillRect(0, 0, this.w, this.h);
+      ctx.fillRect(0, top, this.w, 2);
     }
-    // damage: edge vignette only, never a full-frame wash
-    if (this.damagePulse > 0) {
-      const v = this.getDangerVignette();
-      const prev = ctx.globalAlpha;
-      ctx.globalAlpha = prev * clamp(this.damagePulse * 0.8, 0, 0.8);
-      ctx.drawImage(v.canvas, 0, 0, this.w, this.h);
-      ctx.globalAlpha = prev;
+  },
+
+  drawWorldOverlays(ctx) {
+    this.drawFlashChannels(ctx);
+  },
+
+  // ------------------------- L16: active target over banners -------------------------
+  // The locked plate (or the boss slab) is redrawn above a centre banner that covers it, re-applying the frame's
+  // shake transform; a typo'd plate ghosts +-3 px for its 120 ms; the expected char rises above the plate.
+  activePlate() {
+    const lock = this.lock && this.lock.ref;
+    if (lock && lock.alive && lock.kind !== "boss") return lock;
+    const last = this.lastPlateDrawn;
+    if (last && last.alive && last.locked) return last;
+    return null;
+  },
+
+  activeBannerRects(ctx) {
+    const out = [];
+    const presets = typeof BANNER_PRESETS === "object" && BANNER_PRESETS ? BANNER_PRESETS : null;
+    if (!presets) return out;
+    for (const b of [this.banner, this.callout]) {
+      if (!b) continue;
+      const preset = presets[b.kind] || presets.callout || {};
+      if (preset.align && preset.align !== "center") continue;
+      const size = preset.size || 24;
+      let y = b.y != null ? b.y : (typeof preset.y === "function" ? preset.y(this) : this.h * 0.46);
+      if (b.kind === "callout" && this.banner && this.banner !== b && this.banner.kind === "wave") y += 44;
+      ctx.font = FONT.display(size, 800);
+      const tw = b.title ? ctx.measureText(String(b.title)).width : 0;
+      const halfW = Math.max(tw, this.w * 0.25) / 2 + 24;
+      const top = y - size * 1.2;
+      const bottom = y + size * (b.sub ? 1.6 : 1.0);
+      out.push({ x: this.w / 2 - halfW, y: top, w: halfW * 2, h: bottom - top });
+      if (preset.letterbox) out.push({ x: 0, y: y - size * 1.1, w: this.w, h: size * 2.6 });
     }
+    return out;
+  },
+
+  redrawActiveTarget(ctx) {
+    const m = this.fxMotion();
+    const glyphs = this.typoGlyphs && this.typoGlyphs.length ? this.typoGlyphs : null;
+    const plate = this.activePlate();
+    const boss = this.inBoss && this.boss ? this.boss : null;
+    const hit = typeof rectsIntersect === "function" ? rectsIntersect : (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+    const banners = (this.banner || this.callout) ? this.activeBannerRects(ctx) : [];
+    let needPlate = false;
+    let jitter = false;
+    if (plate) {
+      jitter = (plate.typoT || 0) > 0 && m.anim > 0;
+      if (jitter) needPlate = true;
+      else if (banners.length) {
+        const w = plate.plateW || 64, h = plate.plateH || 40;
+        const r = { x: plate.x - w / 2, y: plate.y - h / 2, w, h };
+        needPlate = banners.some((b) => hit(b, r));
+      }
+    }
+    let needSlab = false;
+    if (boss && banners.length && typeof this.drawBossSlab === "function" && !(this.bossIntro && this.bossIntro.locked)) {
+      const sr = boss.slabRect;
+      needSlab = !!sr && banners.some((b) => hit(b, sr));
+    }
+    if (!needPlate && !needSlab && !glyphs) return;
+
+    const sh = this.shakeNow || { x: 0, y: 0, rot: 0 };
+    ctx.save();
+    ctx.translate(sh.x, sh.y);
+    if (sh.rot) { ctx.translate(this.w / 2, this.h / 2); ctx.rotate(sh.rot); ctx.translate(-this.w / 2, -this.h / 2); }
+    if (needSlab) this.drawBossSlab(ctx, boss);
+    if (needPlate) {
+      ctx.save();
+      if (jitter) ctx.translate(randi(-3, 3), randi(-3, 3));
+      if (plate.kind === "powerup") { if (typeof this.drawPowerup === "function") this.drawPowerup(ctx, plate); }
+      else if (typeof this.drawEnemy === "function") this.drawEnemy(ctx, plate);
+      ctx.restore();
+    }
+    if (glyphs) this.drawTypoGlyphs(ctx);
+    ctx.restore();
+  },
+
+  drawTypoGlyphs(ctx) {
+    ctx.font = FONT.target(14, 700);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
+    ctx.lineJoin = "round";
+    for (const g of this.typoGlyphs) {
+      const ref = g.ref;
+      if (!ref) continue;
+      const u = clamp(g.t / g.life, 0, 1);
+      let top;
+      if (ref.kind === "boss") {
+        const sr = ref.slabRect;
+        top = sr ? sr.y : ref.y - 95;
+      } else {
+        top = ref.y - (ref.plateH || 40) / 2;
+      }
+      const y = top - 8 - g.rise * easeOutCubic(u);
+      ctx.globalAlpha = u < 0.7 ? 1 : (1 - u) / 0.3;
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = PALETTE.rgba("bg0", 0.85);
+      ctx.strokeText(g.ch, ref.x, y);
+      ctx.fillStyle = PALETTE.rgba("danger", 1);
+      ctx.fillText(g.ch, ref.x, y);
+    }
+    ctx.globalAlpha = 1;
   },
 
   drawVignette(ctx) {
