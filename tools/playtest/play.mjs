@@ -5,7 +5,7 @@
 //                 [--dpr 1|2] [--wpm 80] [--accuracy 0.93] [--reduced-motion] [--mobile]
 //                 [--ua native|"<string>"] [--cpu 4] [--fixture <name>] [--entry auto|start|continue]
 //                 [--fail-webp] [--delay-opt <ms>] [--expect-resource-errors] [--ignore-errors <regex>]
-//                 [--file] [--headed]
+//                 [--no-music] [--file] [--headed]
 //
 // Produces <out>/report.json plus numbered PNG screenshots (fixed numbering, see SHOT_INDEX).
 // Exit code 1 when page errors or non-resource console errors occurred (or the harness itself failed);
@@ -18,7 +18,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const BOOL_FLAGS = new Set(["mobile", "headed", "reduced-motion", "fail-webp", "expect-resource-errors", "file", "help"]);
+const BOOL_FLAGS = new Set(["mobile", "headed", "reduced-motion", "fail-webp", "expect-resource-errors", "file", "no-music", "help"]);
 
 const args = Object.fromEntries(process.argv.slice(2).reduce((acc, a, i, arr) => {
   if (a.startsWith("--")) {
@@ -54,6 +54,7 @@ const DELAY_OPT = Number(args["delay-opt"] || 0);
 const EXPECT_RESOURCE_ERRORS = args["expect-resource-errors"] === "true";
 const IGNORE_ERRORS = args["ignore-errors"] ? new RegExp(args["ignore-errors"]) : null;
 const FILE_MODE = args.file === "true";
+const NO_MUSIC = args["no-music"] === "true";
 const LS_KEY = "typesmup198x.save.v1";
 
 fs.mkdirSync(OUT, { recursive: true });
@@ -287,13 +288,36 @@ function installProbe() {
   P.total = () => ({ ...summarize(P.all), wrapped: P.wrapped, longTasks: { ...P.longTasks, maxMs: Math.round(P.longTasks.maxMs), totalMs: Math.round(P.longTasks.totalMs) } });
 }
 
+// ----------------------------- --no-music -----------------------------
+// Perf-only runs: stub the music transport on the SFX class the moment sfx.js publishes it (window.SFX
+// setter trap), so no media element ever streams. Cues, the bus and every other method are untouched;
+// the stub records what the game asked for in sfx.noMusicCalls so a probe can still assert the wiring.
+function installNoMusic() {
+  let real;
+  Object.defineProperty(window, "SFX", {
+    configurable: true, enumerable: true,
+    get() { return real; },
+    set(v) {
+      real = v;
+      try {
+        const P = v && v.prototype;
+        if (!P) return;
+        P.playMusic = function (track) { (this.noMusicCalls = this.noMusicCalls || []).push("playMusic:" + track); this.wantMusic = false; };
+        P.prefetchMusic = function (i) { (this.noMusicCalls = this.noMusicCalls || []).push("prefetchMusic:" + i); };
+        v.NO_MUSIC = true;
+      } catch {}
+    }
+  });
+}
+
 // ----------------------------- Harness state -----------------------------
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const report = {
   root: ROOT, scenario: SCENARIO, dpr: DPR, mobile: MOBILE,
   config: { seconds: SECONDS, wpm: WPM, accuracy: ACCURACY, reducedMotion: REDUCED_MOTION, ua: UA, cpu: CPU || null, fixture: FIXTURE, entry: ENTRY,
-    failWebp: FAIL_WEBP, delayOptMs: DELAY_OPT || null, expectResourceErrors: EXPECT_RESOURCE_ERRORS, ignoreErrors: IGNORE_ERRORS ? String(IGNORE_ERRORS) : null, fileMode: FILE_MODE },
-  consoleErrors: [], consoleWarnings: [], pageErrors: [], resourceErrors: [], ignoredErrors: [], requestFailures: [], httpErrors: [],
+    failWebp: FAIL_WEBP, delayOptMs: DELAY_OPT || null, expectResourceErrors: EXPECT_RESOURCE_ERRORS, ignoreErrors: IGNORE_ERRORS ? String(IGNORE_ERRORS) : null, fileMode: FILE_MODE,
+    noMusic: NO_MUSIC },
+  consoleErrors: [], consoleWarnings: [], pageErrors: [], resourceErrors: [], ignoredErrors: [], requestFailures: [], mediaAborts: [], httpErrors: [],
   screenshots: [], timings: {}, fps: {}, perf: {}, network: [], networkTotals: null, notes: []
 };
 const SHOT_INDEX = { boot: 1, menu: 2, story: 3, "gameplay-early": 4, "gameplay-mid": 5, paused: 6, "boss-intro": 7, "boss-fight": 8,
@@ -326,6 +350,7 @@ const ctxOpts = MOBILE
 if (UA) ctxOpts.userAgent = UA;
 const context = await browser.newContext(ctxOpts);
 await context.addInitScript(installProbe);
+if (NO_MUSIC) await context.addInitScript(installNoMusic);
 if (fixture) {
   await context.addInitScript(({ key, blob }) => {
     try {
@@ -370,7 +395,17 @@ page.on("pageerror", (e) => {
   const text = String(e && e.stack || e);
   if (IGNORE_ERRORS && IGNORE_ERRORS.test(text)) report.ignoredErrors.push(text); else report.pageErrors.push(text);
 });
-page.on("requestfailed", (r) => report.requestFailures.push(`${r.url()} :: ${r.failure()?.errorText}`));
+// Media traffic = HTMLMediaElement requests (resourceType "media") plus any music file URL. Chrome aborts a
+// media element's open range request whenever its src is replaced or it has read enough for preload=metadata
+// (net::ERR_ABORTED); that is transport behaviour, not a failure, so it is kept apart from requestFailures.
+const MUSIC_URL = /\.(mp3|m4a|ogg|opus)(\?|$)|galactic_high_score/i;
+const isMediaRequest = (type, url) => type === "media" || MUSIC_URL.test(url);
+page.on("requestfailed", (r) => {
+  const err = (r.failure() && r.failure().errorText) || "";
+  const line = `${r.url()} :: ${err}`;
+  if (err === "net::ERR_ABORTED" && isMediaRequest(r.resourceType(), r.url())) report.mediaAborts.push(line);
+  else report.requestFailures.push(line);
+});
 page.on("response", (r) => { if (r.status() >= 400) report.httpErrors.push({ url: r.url(), status: r.status() }); });
 
 let navEpoch = Date.now();
@@ -774,22 +809,29 @@ try {
   }
   const fk = firstKeyAt ? firstKeyAt - navEpoch : null;
   const byType = {}; const byUrl = {};
-  let overall = 0, startedBefore = 0, finishedBefore = 0;
+  let overall = 0, startedBefore = 0, finishedBefore = 0, finishedBeforeNonMedia = 0, finishedBeforeMedia = 0, mediaBytes = 0;
   for (const n of report.network) {
+    const media = isMediaRequest(n.type, n.url);
     overall += n.bytes;
+    if (media) mediaBytes += n.bytes;
     byType[n.type] = (byType[n.type] || 0) + n.bytes;
     const key = n.url.split("?")[0];
     byUrl[key] = (byUrl[key] || 0) + n.bytes;
     if (fk !== null && n.start <= fk) startedBefore += n.bytes;
-    if (fk !== null && n.end <= fk) finishedBefore += n.bytes;
+    if (fk !== null && n.end <= fk) { finishedBefore += n.bytes; if (media) finishedBeforeMedia += n.bytes; else finishedBeforeNonMedia += n.bytes; }
   }
   report.network.sort((a, b) => a.start - b.start);
+  // bytesFinishedBeforeFirstKeystrokeNonMedia is the ~2.5 MB budget figure: a playing media element streams its
+  // whole file in milliseconds on the local server, which says nothing about what the first keystroke waited for.
   report.networkTotals = {
     requests: report.network.length,
     overallBytes: overall,
+    mediaBytes,
     firstKeystrokeMs: fk,
     bytesStartedBeforeFirstKeystroke: fk !== null ? startedBefore : null,
     bytesFinishedBeforeFirstKeystroke: fk !== null ? finishedBefore : null,
+    bytesFinishedBeforeFirstKeystrokeNonMedia: fk !== null ? finishedBeforeNonMedia : null,
+    bytesFinishedBeforeFirstKeystrokeMedia: fk !== null ? finishedBeforeMedia : null,
     byType,
     topUrls: Object.entries(byUrl).sort((a, b) => b[1] - a[1]).slice(0, 15).map(([url, bytes]) => ({ url, bytes }))
   };
@@ -809,13 +851,15 @@ console.log(JSON.stringify({
   ignoredErrors: report.ignoredErrors.length,
   warnings: report.consoleWarnings.length,
   requestFailures: report.requestFailures.length,
+  mediaAborts: report.mediaAborts.length,
   httpErrors: report.httpErrors.length,
   fps: report.fps,
   maxRenderMs: report.maxRenderMs ?? null,
   shadowBlurPerFrame: report.shadowBlurPerFrame ?? null,
   fullFrameFillMaxAlpha: report.fullFrameFillMaxAlpha ?? null,
   layoutCountPer5s: report.layoutCountPer5s ?? null,
-  networkMB: { toFirstKeystroke: mb(report.networkTotals.bytesFinishedBeforeFirstKeystroke), overall: mb(report.networkTotals.overallBytes) },
+  networkMB: { toFirstKeystroke: mb(report.networkTotals.bytesFinishedBeforeFirstKeystroke), toFirstKeystrokeNonMedia: mb(report.networkTotals.bytesFinishedBeforeFirstKeystrokeNonMedia),
+    media: mb(report.networkTotals.mediaBytes), overall: mb(report.networkTotals.overallBytes) },
   timings: report.timings,
   fixture: report.fixture ? { name: report.fixture.name, check: report.fixture.check && report.fixture.check.pass } : null,
   notes: report.notes,
