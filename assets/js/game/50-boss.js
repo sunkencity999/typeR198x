@@ -86,8 +86,7 @@ Object.assign(Game.prototype, {
     const bests = this.save.sectorBests || {};
     const returning = !!bests[String(cfg.level)] || (this.levelStats.retries | 0) > 0;
     this.bossIntro = { t: 0, dur: BOSS_INTRO_S, locked: true, name, skippable: returning };
-    this.flash = Math.max(this.flash, 0.45);
-    this.damagePulse = 1;
+    this.whiteFlash = 0.5;      // D1 draws it; the legacy red tint is not a damage event
     this.screenShake(14);
     this.showBanner({ kind: "bossIntro", eyebrow: "WARNING // INCOMING BOSS", title: name, sub: returning ? "ANY KEY TO ENGAGE" : "" });
   },

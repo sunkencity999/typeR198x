@@ -107,10 +107,11 @@ Object.assign(Game.prototype, {
     const mult = this.stats.mult | 0 || 1;
     if (this.setText(el.mult, `x${mult}`) && el.mult) {
       this.setAttr(el.mult, "data-tier", clamp(mult, 1, 5));
-      // .pop replays on every tier change (restart the animation by re-adding the class).
-      el.mult.classList.remove("pop");
-      void el.mult.offsetWidth;
-      el.mult.classList.add("pop");
+      // .pop replays on every tier change; restart via the animation property (no forced layout).
+      const badge = el.mult;
+      badge.classList.add("pop");
+      badge.style.animation = "none";
+      requestAnimationFrame(() => { badge.style.animation = ""; });
     }
   },
 

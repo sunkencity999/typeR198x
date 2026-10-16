@@ -305,7 +305,7 @@ Object.assign(Game.prototype, {
     this.onComboBreak(lost);
     if (lost < 10) this.sfx.error();
     this.typoFlash = 0.08;
-    this.flash = Math.max(this.flash, 0.08);
+    this.flash = Math.max(this.flash, 0.04);   // legacy full-frame tint: .04 x 3 = alpha .12 (contract cap)
   },
 
   // Dry fire: nothing on screen to type. Nothing changes but a quiet buzz.

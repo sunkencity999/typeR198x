@@ -405,8 +405,8 @@ Object.assign(Game.prototype, {
     this.player.hitT = 0.3;
     this.player.kick = 1;
     this.damageFlash = 1;
-    this.damagePulse = 1;
-    this.flash = Math.max(this.flash, 0.35);
+    this.damagePulse = Math.max(this.damagePulse, 0.3);   // legacy tint: .3 x .4 = alpha .12 (contract cap)
+    this.flash = Math.max(this.flash, 0.04);
     this.screenShake(12);
     this.flashHudHit();
     this.updateLowHp();
