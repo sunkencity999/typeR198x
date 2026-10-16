@@ -950,7 +950,7 @@ body[data-mode] .screen:not(.is-active) .screenInner > * {
 .sectorCard.is-current .sectorStatus { color: var(--c-ui); }
 
 .sectorCard.is-locked, .sectorCard:disabled {
-  opacity: 0.7; /* review R46: dim the chrome, keep the number and boss name legible; grayscale + the lock glyph carry the state */
+  opacity: 0.8; /* review R46 (+V-2): dim the chrome, keep the number and boss name legible; grayscale + the lock glyph carry the state. .8 is the first value where the grayscaled magenta/violet numerals render >= 3:1 (.7 = 2.67, .75 = 2.94 on sector 6) */
   filter: grayscale(0.6);
   cursor: not-allowed;
 }
