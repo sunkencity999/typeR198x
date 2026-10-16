@@ -492,6 +492,11 @@ Object.assign(Game.prototype, {
       });
       for (const body of overlay.querySelectorAll(".modalScroll .modalBody")) {
         if (!body.hasAttribute("tabindex")) body.setAttribute("tabindex", "0");   // review R5: a Tab stop that takes arrow / PageDown scrolling
+        // review R5 follow-up (K2): a focusable scroll body needs a role and a name, or the Tab stop reads as an unnamed group
+        if (!body.hasAttribute("role")) body.setAttribute("role", "region");
+        if (!body.hasAttribute("aria-label") && !body.hasAttribute("aria-labelledby") && overlay.hasAttribute("aria-labelledby")) {
+          body.setAttribute("aria-labelledby", overlay.getAttribute("aria-labelledby"));
+        }
         body.addEventListener("scroll", () => this.updateModalScroll(overlay), { passive: true });
       }
     }
