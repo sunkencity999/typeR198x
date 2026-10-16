@@ -1924,6 +1924,12 @@ fieldset.shipGrid > legend {
   animation: noiseShift 1s steps(1) infinite;
 }
 
+/* Phosphor lines and noise fade toward the tube edge so the vignette really darkens the corners */
+#crtLines, #crtNoise {
+  -webkit-mask-image: radial-gradient(ellipse at center, #000 58%, transparent 100%);
+  mask-image: radial-gradient(ellipse at center, #000 58%, transparent 100%);
+}
+
 #crtOverlay.tear #crtLines { transform: translateY(-6px) skewX(-1.5deg); }
 
 /* ----- 15. Footer ---------------------------------------------------------------- */
