@@ -341,7 +341,10 @@ Object.assign(Game.prototype, {
     if (!run) return false;
     const dead = (Number.isFinite(run.hp) ? run.hp : 1) <= 0;
     const score = (run.stats && run.stats.score) | 0;
-    return dead || (run.levelT || 0) > 0 || !!run.inBoss || score > 0 || (run.levelIndex | 0) > ((run.startLevel | 0) - 1);
+    // review R10: a v1 Game Over stub (main's buildResumeRun: levelT 0, score 0, full HP) is still the player's
+    // saved sector; main offered Continue on it and its score counted toward the headline (E-3).
+    const legacySector = !!run.legacy && (run.levelIndex | 0) > 0;
+    return dead || (run.levelT || 0) > 0 || !!run.inBoss || score > 0 || (run.levelIndex | 0) > ((run.startLevel | 0) - 1) || legacySector;
   },
 
   // ------------------------- Sector grid -------------------------

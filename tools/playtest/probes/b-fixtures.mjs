@@ -9,7 +9,7 @@ import { openProbe, sleep, state, waitFor, continueRun } from "./b_lib.mjs";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const P = await openProbe("b-fixtures");
 
-for (const name of ["legacy-midwave", "legacy-inboss", "legacy-levelcomplete", "legacy-postvictory"]) {
+for (const name of ["legacy-midwave", "legacy-inboss", "legacy-levelcomplete", "legacy-postvictory", "legacy-gameover"]) {
   const fx = JSON.parse(fs.readFileSync(path.join(HERE, "../fixtures", name + ".json"), "utf8"));
   await P.goto(fx.save);
   const t0 = Date.now();
@@ -38,5 +38,5 @@ for (const name of ["legacy-midwave", "legacy-inboss", "legacy-levelcomplete", "
   P.check(`[fixture] ${name}: ${fx.description.slice(0, 60)}...`, pass, { details, snap });
 }
 
-P.check("zero pageErrors across the four fixtures", P.errors.pageErrors.length === 0, P.errors.pageErrors);
+P.check("zero pageErrors across the five fixtures", P.errors.pageErrors.length === 0, P.errors.pageErrors);
 await P.finish();
