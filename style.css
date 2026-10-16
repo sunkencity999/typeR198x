@@ -1542,7 +1542,17 @@ fieldset.shipGrid > legend {
 }
 
 @media (pointer: coarse) and (orientation: portrait) and (max-width: 1024px) {
-  .rotateHint:not(.hidden) { display: flex; }
+  .rotateHint:not(.hidden) {
+    display: flex;
+    position: fixed;
+    left: 8px;
+    right: 8px;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    width: auto;
+    z-index: calc(var(--z-screen) + 5); /* above the fixed screens, below the modals */
+    margin: 0;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+  }
 }
 
 /* ----- 12. Modals ------------------------------------------------------------------ */
@@ -1557,13 +1567,15 @@ fieldset.shipGrid > legend {
   background: rgba(2,3,10,0.85);
   -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
-  transition: opacity 350ms ease, visibility 350ms ease;
+  /* visibility flips at once on open (so the first focus() lands) and only after the fade on close */
+  transition: opacity 350ms ease, visibility 0s linear 0s;
 }
 
 .modalOverlay.is-dismissed {
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
+  transition: opacity 350ms ease, visibility 0s linear 350ms;
 }
 
 .modalInner {
@@ -2218,7 +2230,7 @@ fieldset.shipGrid > legend {
   #hud { top: 8px; left: 8px; right: 8px; padding: 5px 56px 6px 10px; gap: 3px; }
   .hudCell--pilot { display: none; }
   .hudRow { grid-template-columns: repeat(5, auto); justify-content: space-between; column-gap: 8px; }
-  .hudCell .label { font-size: 9px; }
+  .hudCell .label { font-size: 10px; }
   .hudCell .mono { font-size: 12px; }
   .meter { width: 100px; height: 6px; }
   .bossBar { grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; }
@@ -2294,3 +2306,77 @@ fieldset.shipGrid > legend {
 :root.reduce-motion .sectorCard:hover:not(:disabled) { transform: none; }
 :root.reduce-motion #hud.is-hit { transform: none; }
 :root.reduce-motion .toggleNeon, :root.reduce-motion .toggleNeon::before { transition: none; }
+
+/* ----- 19. Shell additions (C1/C2/C6/C7: confirm, settings modal, top bar states, pause chip, touch) ----- */
+/* Confirm: OK carries .primary (cyan) for ordinary questions and .danger (red, display face) for destructive ones */
+.btn-arcade.danger {
+  color: var(--c-danger);
+  border-color: rgba(255,77,109,0.7);
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  background: linear-gradient(90deg, rgba(255,77,109,0.16), rgba(255,57,209,0.10)), rgba(255,255,255,0.04);
+}
+.btn-arcade.danger:hover,
+.btn-arcade.danger:focus-visible {
+  border-color: var(--c-danger);
+  box-shadow: 0 0 0 5px rgba(255,77,109,0.18), 0 0 18px rgba(255,77,109,0.45);
+}
+#confirmModal .modalBody { font-size: var(--fs-md); line-height: 1.55; color: rgba(246,247,255,0.82); }
+#confirmModal .modalInner.compact { border-color: rgba(57,245,255,0.28); }
+#confirmModal .modalActions { margin-top: var(--sp-5); }
+#confirmModal:has(#btnConfirmOk.danger) .modalInner.compact {
+  border-color: rgba(255,77,109,0.5);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.55), 0 0 36px rgba(255,77,109,0.16);
+}
+#confirmModal:has(#btnConfirmOk.danger) .modalEyebrow { color: var(--c-danger); }
+
+/* Settings modal: room for the 120 px label column and a usable slider; the panel loses its inner frame there */
+#settingsModal .modalInner.compact { width: min(560px, 100%); }
+#menuSettingsHost .settingsPanel { border: 0; background: none; padding: 0; }
+#menuSettingsHost h3.label { font-size: var(--fs-sm); letter-spacing: 0.35em; margin-bottom: var(--sp-3); }
+
+/* Top bar toggles: the icon dims and the dot goes grey when the toggle is off; Pause lights amber while paused */
+.topControls .btn-arcade[aria-pressed="false"]::before { opacity: 0.55; }
+.topControls .btn-arcade[aria-pressed="false"] .dot { background: rgba(255,255,255,0.18); box-shadow: none; }
+#btnPause[aria-pressed="true"] { border-color: rgba(255,193,74,0.7); color: var(--c-score); }
+.topControls .btn-arcade:focus-visible { box-shadow: 0 0 0 4px rgba(57,245,255,0.18), var(--glow-strong); }
+
+/* Pause: the reason reads as a status chip under the title */
+#pauseReason {
+  display: inline-block;
+  width: max-content;
+  max-width: 100%;
+  justify-self: start;
+  margin: 0 0 var(--sp-2);
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--chrome1);
+  background: rgba(255,255,255,0.06);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+#screenPaused .metaTile .mono { font-size: var(--fs-xl); }
+#screenPaused .metaTile { background: rgba(0,0,0,0.42); }
+
+/* Fullscreen row in the settings panel: full-width button under its label on narrow panels */
+.settingsRow #btnFullscreen2 { justify-self: stretch; text-align: center; }
+
+/* Tap-to-type pill: amber, glass, above the ship line; never intercepts the tap it asks for */
+.tapToType { text-shadow: 0 0 10px rgba(255,193,74,0.35); }
+
+/* Death: the one-shot power-off line needs the playfield's stacking context (the canvas is below the screens) */
+#main.crtOff { position: relative; }
+
+/* Phones: the brand shrinks and steps aside in play so the five 44 px controls stay on one row */
+@media (max-width: 640px) {
+  .brand img { height: 30px; }
+  body[data-mode="playing"] .brand,
+  body[data-mode="paused"] .brand { display: none; }
+  body[data-mode="playing"] #topBar,
+  body[data-mode="paused"] #topBar { justify-content: center; }
+}
