@@ -88,12 +88,10 @@ class Game {
       endingSkip: document.getElementById("btnEndingSkip"),
       creditsLine: document.getElementById("creditsLine"),
       pauseReason: document.getElementById("pauseReason"),
-      keyboardHint: document.getElementById("keyboardHint"),
       crtOverlay: document.getElementById("crtOverlay"),
       loading: document.getElementById("loadingOverlay"),
       storyModal: document.getElementById("storyModal"),
       storyLaunch: document.getElementById("btnStoryLaunch"),
-      keyboardHintDismiss: document.getElementById("btnKeyboardHint"),
       shipChoices: document.querySelectorAll("input[name='shipChoice']")
     };
 
@@ -126,8 +124,6 @@ class Game {
     this.loadingOverlay = this.ui.loading;
     this.storyModal = this.ui.storyModal;
     this.storyLaunchBtn = this.ui.storyLaunch;
-    this.keyboardHintModal = this.ui.keyboardHint;
-    this.keyboardHintBtn = this.ui.keyboardHintDismiss;
     this.endingScript = getVictoryScript();
     this.endingIndex = 0;
 
@@ -143,9 +139,12 @@ class Game {
     this.plateCache = new Map();
     this.debug = { railsDrawn: false, tileDraws: 0 };
 
-    // Save
+    // Save + settings (applySettings resolves motion, CRT and the audio buses from save.settings)
     this.save = loadSave();
     this.persistUnavailable = false;
+    this.modalStack = [];
+    this.reduceMotion = false;
+    this.touchMode = false;
     this.applySettings();
 
     // state
@@ -204,10 +203,11 @@ class Game {
     this.hitStop = 0;
     this.timeScale = 1;
 
-    // input diagnostics (A4)
+    // input diagnostics (A4) + keyboard evidence (C7)
     this.layoutStrikes = 0;
     this.imeStrikes = 0;
     this.keyboardSeen = false;
+    this.lastTypeValue = "";
 
     // background parallax
     this.stars = this.makeStars(180);
@@ -229,18 +229,12 @@ class Game {
     // autosave
     this.lastSaveAt = 0;
 
-    this.bindUI();
-    this.refreshMenu();
-    this.maybeShowKeyboardHint();
-
-    // focus
+    // focus target: the canvas (or #typeInput on touch devices while playing; see focusGameCanvas)
     this.canvas.tabIndex = 0;
     this.canvas.setAttribute("role", "application");
-    this.canvas.addEventListener("pointerdown", () => this.canvas.focus());
 
-    window.addEventListener("focus", () => {
-      if (this.mode === "playing") this.focusGameCanvas();
-    });
+    this.bindUI();
+    this.refreshMenu();
 
     // HiDPI backing store (A6): logical 1280x720, device pixels = round(1280*renderScale)
     this.bindResize();
@@ -270,6 +264,8 @@ class Game {
 
     try {
       this.tickEffects(raw);
+      // DOM-side timers (tutorial toasts, count-ups) live in the screens track; feature-detected.
+      if (typeof this.tickUI === "function") this.tickUI(raw);
       if (this.mode === "playing") {
         // Per-sector asset gate + next-sector prefetch (05-boot.js); cheap and idempotent per frame.
         this.tickBoot(raw);
