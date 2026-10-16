@@ -1,46 +1,88 @@
 // Type-R 198X — game entity classes (Enemy, Powerup, Bullet, ExplosionSprite, Particle, Boss). Classic script; load order is defined in index.html.
 
 // ----------------------------- Game Entities -----------------------------
+// Plate width before the renderer measures the text: 20 px monospace advances ~12 px per glyph (+28 padding;
+// minions +24). The renderer overwrites textW/plateW with the measured value (see HANDOFF).
+const PLATE_PAD = 28;
+const PLATE_PAD_MINION = 24;
+const GLYPH_ADVANCE_EST = 12;
+
 class Enemy {
-  constructor({ text, x, y, speed, kind = "enemy" }) {
+  constructor({ text, x, y, speed, kind = "enemy", lane = -1 }) {
     this.kind = kind; // enemy | bossMinion
     this.text = text.toLowerCase();
     this.progress = 0;
     this.x = x;
     this.y = y;
+    this.lane = lane;
     this.speed = speed;
     this.radius = 18 + Math.min(42, this.text.length * 6);
     this.alive = true;
     this.flash = 0;
     this.locked = false;
+    // B-14 entity fields
+    this.textW = this.text.length * GLYPH_ADVANCE_EST;
+    this.plateW = this.textW + (kind === "bossMinion" ? PLATE_PAD_MINION : PLATE_PAD);
+    this.plateH = kind === "bossMinion" ? PLATE_H_MINION : PLATE_H;
+    this.cleanSoFar = true;   // no hard miss between lock and kill
+    this.typoT = 0;           // plate flinch after a wrong key
+    this.flinch = 0;
+    this.dying = false;       // auto-detonating (drain timeout / approach / phase clear): not targetable
+    this.age = 0;
   }
   remaining() { return this.text.slice(this.progress); }
   nextChar() { return this.text[this.progress] || null; }
   update(dt) {
     this.x -= this.speed * dt;
+    this.age += dt;
     this.flash = Math.max(0, this.flash - dt * 5);
+    this.typoT = Math.max(0, this.typoT - dt);
+    this.flinch = Math.max(0, this.flinch - dt * 6);
   }
 }
 
 class Powerup {
-  constructor({ type, label, x, y, speed }) {
+  constructor({ type, label, x, y, speed, lane = -1, fromKill = false, ttl = 14, homing = null }) {
     this.kind = "powerup";
     this.type = type;
     this.label = label.toLowerCase();
     this.progress = 0;
     this.x = x;
     this.y = y;
+    this.baseY = y;
+    this.lane = lane;
     this.speed = speed;
     this.alive = true;
     this.locked = false;
     this.floatT = rand(0, Math.PI * 2);
+    // B-14 entity fields
+    this.labelW = this.label.length * GLYPH_ADVANCE_EST;
+    this.plateW = this.labelW + PLATE_PAD;
+    this.plateH = PLATE_H;
+    this.fromKill = fromKill;
+    this.ttl = ttl;
+    this.age = 0;
+    this.dying = false;
+    this.homing = homing; // { tx, ty }: drifts toward this point (kill drops head for the ship's lane)
   }
   remaining() { return this.label.slice(this.progress); }
   nextChar() { return this.label[this.progress] || null; }
   update(dt) {
-    this.x -= this.speed * dt;
+    this.age += dt;
     this.floatT += dt * 2.1;
-    this.y += Math.sin(this.floatT) * dt * 10;
+    if (this.homing) {
+      const dx = this.homing.tx - this.x;
+      const dy = this.homing.ty - this.baseY;
+      const d = Math.hypot(dx, dy) || 1;
+      const step = Math.min(d, this.speed * dt);
+      this.x += (dx / d) * step;
+      this.baseY += (dy / d) * step;
+      if (d <= 1) this.homing = null;
+    } else {
+      this.x -= this.speed * dt;
+    }
+    this.y = this.baseY + Math.sin(this.floatT) * 4;   // bob +-4 px
+    if (this.age >= this.ttl) this.dying = true;
   }
 }
 
@@ -172,7 +214,7 @@ class Particle {
 }
 
 class Boss {
-  constructor({ name, segments, artLevel }) {
+  constructor({ name, segments, artLevel, phaseStarts = [0], artSize = null }) {
     this.kind = "boss";
     this.name = name;
     this.segments = segments.map(s => s.toLowerCase());
@@ -185,6 +227,15 @@ class Boss {
     this.flash = 0;
     this.alive = true;
     this.artLevel = artLevel;
+    // B-14 entity fields
+    this.phase = 0;
+    this.phaseStarts = phaseStarts.slice();
+    this.surge = null;        // { t, dur, armed }
+    this.surgeTimer = 0;      // seconds since the last surge (or the intro)
+    this.surgeFlash = 0;      // bolt afterglow after fireSurge
+    this.enterT = 0;
+    this.artSize = artSize;   // { w, h } of the untrimmed art, for artRect before D6 recomposes
+    this.contentRect = null;  // set by D6 (opaque box in logical px)
   }
   get segment() { return this.segments[this.segmentIndex] || null; }
   get remaining() {
@@ -196,8 +247,28 @@ class Boss {
     return seg ? (seg[this.progress] || null) : null;
   }
   get done() { return this.segmentIndex >= this.segments.length; }
-  get maxLen() { return Math.max(...this.segments.map(s => s.length)); }
   get totalChars() { return this.segments.reduce((a,s)=>a+s.length,0); }
+  get remainingChars() {
+    const seg = this.segment;
+    return seg ? seg.length - this.progress : 0;
+  }
+  // Today's draw box (pre-D6): scale = min(.65*720/h, .7), x = boss.x - .35*artW, y = boss.y - .45*artH.
+  // Without known art it falls back to the console slab so minion spawns still have an anchor.
+  get artRect() {
+    const a = this.artSize;
+    if (a && a.w > 0 && a.h > 0) {
+      const scale = Math.min((720 * 0.65) / a.h, 0.7);
+      const w = a.w * scale, h = a.h * scale;
+      return { x: this.x - w * 0.35, y: this.y - h * 0.45, w, h };
+    }
+    return this.slabRect;
+  }
+  get slabRect() { return { x: this.x - 260, y: this.y - 95, w: 520, h: 190 }; }
+  phaseFor(segmentIndex) {
+    let p = 0;
+    for (let i = 0; i < this.phaseStarts.length; i++) if (segmentIndex >= this.phaseStarts[i]) p = i;
+    return p;
+  }
   charsDone() {
     let done = 0;
     for (let i=0;i<this.segmentIndex;i++) done += this.segments[i].length;
@@ -210,16 +281,25 @@ class Boss {
   }
   update(dt, h) {
     this.phaseT += dt;
+    this.enterT += dt;
     // Gentle float
     this.y = 240 + Math.sin(this.phaseT * 0.8) * 60;
     this.flash = Math.max(0, this.flash - dt * 5);
+    this.surgeFlash = Math.max(0, this.surgeFlash - dt * 4);
   }
+  // One correct character. phaseDone is true when the completed segment closed a phase (never on the kill).
   advance() {
     this.progress++;
     this.flash = 0.25;
+    let segmentDone = false;
+    let phaseDone = false;
     if (this.progress >= this.segment.length) {
       this.segmentIndex++;
       this.progress = 0;
+      segmentDone = true;
+      phaseDone = !this.done && this.phaseStarts.includes(this.segmentIndex);
+      if (phaseDone) this.phase = this.phaseFor(this.segmentIndex);
     }
+    return { segmentDone, phaseDone };
   }
 }

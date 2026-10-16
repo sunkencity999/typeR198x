@@ -11,6 +11,7 @@ const LEVEL_INTRO_S = 1.6;        // sector card; extends up to LEVEL_INTRO_MAX_
 const LEVEL_INTRO_MAX_S = 2.5;
 const WAVE_BANNER_S = 1.2;
 const DRAIN_MAX_S = 6.0;          // the field drain between waves gives up after this
+const DRAIN_MIN_S = 0.4;          // a beat after the last kill before the next wave banner (also makes the phase observable)
 const BOSS_APPROACH_S = 3.0;
 const BOSS_INTRO_S = 2.4;
 const BOSS_INTRO_SKIP_S = 1.0;    // returning players may skip the boss intro from here
