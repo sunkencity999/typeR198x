@@ -435,7 +435,7 @@ remixes are welcome.
 
 ## Changelog
 
-### 2026-10 web overhaul (release token set by `tools/bump-version.sh` at deploy time)
+### 2026-10 web overhaul (release token `20261016a`, art token `202610161134`)
 
 **Foundation.** Classic-script module split with a load-ordered module map; crash-proof game loop and
 lifecycle saves; save schema 2 with checkpoints, boss checkpoints, records and sector bests, plus idempotent

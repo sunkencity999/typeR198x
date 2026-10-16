@@ -35,7 +35,7 @@
 //
 // native/sync-web.sh patches the withAssetVersion return line below by sed; keep it byte-identical.
 
-const ASSET_VERSION = "20251130b";
+const ASSET_VERSION = "20261016a";
 const withAssetVersion = (path) => {
   if (!path) return path;
   const sep = path.includes("?") ? "&" : "?";
