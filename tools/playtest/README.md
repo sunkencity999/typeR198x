@@ -70,7 +70,7 @@ the cache policy the acceptance tests assume (amendment C-4): `Cache-Control: no
 html/js/css/json, `max-age=3600` for everything else under `/assets/`. Media elements seek with
 Range requests, so every acceptance that sets `currentTime` depends on the 206 path; the hour of
 cache is what lets the second music element (the loop lead at `loopEnd - 3 s`) hit the cache instead
-of re-downloading the track. `tools/deploy-check.sh http://127.0.0.1:<port>` can run against it.
+of re-downloading the track. `tools/deploy-check.sh http://127.0.0.1:<port> --local` can run against it (any static server of the repo root works too, e.g. `python3 -m http.server`).
 
 ### Media traffic in the report
 
@@ -182,6 +182,17 @@ Extra one-off scripts live in `probes/` (shipped) or `out/` (ignored). They can 
   longest dropout (5 ms RMS windows 30 dB under the pre-seek median; must be ≤ 20 ms), the energy
   drop after the boundary (≤ 6 dB: the loop lands on the body, not the lead-in) and the alignment
   error between the outgoing fade point and the incoming `loopStart` (≤ 60 ms).
+
+- `probes/b-run.mjs --root ../.. [--wpm N] [--accuracy A] [--sectors 1-3]` — the typist-profile runs behind
+  the balance pass (PLAN B10): time to the sector-1 boss, deaths per sector, `incomingCps` vs `targetCps` per wave,
+  boss-phase `leaksPerMin`, rank reached. The measured numbers and the knobs they drove live in
+  [`balance.md`](./balance.md).
+- `probes/d8.mjs [--dpr 2]` — attract-mode acceptance (PLAN D8, `assets/js/game/85-attract.js`): attract active
+  on the title screen, canvas changes, save blob byte-identical over 15 s on the legacy-midwave menu, no
+  `game.enemies` on the menu, frameCount ≥ 58/s fresh and ≤ 22/s after `attract.idleT > 90`, no
+  `assets/ships/*.png` before the first keystroke, silent / stat-free, ship-radio swap flash, Start / pause-quit
+  round trip, story modal + Reset Save still work, reduce-motion context, legacy-midwave Continue and
+  legacy-postvictory sector tile.
 
 ## Music loop points (`tools/measure-loops.sh`)
 
