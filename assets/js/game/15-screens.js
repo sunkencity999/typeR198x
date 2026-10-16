@@ -474,6 +474,14 @@ Object.assign(Game.prototype, {
     const run = this.save.run;
     const show = !!run && this.runHasProgress(run);
     card.classList.toggle("hidden", !show);
+    const press = document.getElementById("pressStart");
+    if (press) {   // review R14: the blinking line names the real primary (Enter / tap = Continue while the card shows)
+      const kbd = press.querySelector(".pressStart__kbd"), tap = press.querySelector(".pressStart__tap");
+      const kbdText = show ? "Press Enter to continue" : "Press Enter to start";
+      const tapText = show ? "Tap to continue" : "Tap start";
+      if (kbd && kbd.textContent !== kbdText) kbd.textContent = kbdText;
+      if (tap && tap.textContent !== tapText) tap.textContent = tapText;
+    }
     if (E.btnStart) {
       const labelEl = E.btnStart.querySelector(".btnLabel") || E.btnStart;
       const label = (show || (this.save.victories | 0) > 0) ? "NEW RUN" : "START NEW RUN";

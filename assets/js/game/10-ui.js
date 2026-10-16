@@ -843,7 +843,14 @@ Object.assign(Game.prototype, {
   setMode(m) {
     const prev = this.mode;
     if (prev === "menu" && m !== "menu" && typeof this.stopAttract === "function") this.stopAttract();   // D8
+    // review R29: the results count-ups / rank stamp and the ending typewriter end with the screen they belong to.
+    if (prev !== m && typeof this.cancelResultsAnimation === "function") {
+      const leaving = prev === "levelComplete" ? "resultsLevel" : prev === "gameOver" ? "resultsOver" : prev === "victory" ? "resultsRun" : null;
+      if (leaving) this.cancelResultsAnimation(this.$(leaving));
+    }
+    if (prev === "victory" && m !== "victory" && typeof this.cancelEndingTypewriter === "function") this.cancelEndingTypewriter();
     this.mode = m;
+    this._modeAt = nowMs();   // review R26: results screens settle before Enter / Space act on them (30-input.js)
     document.body.dataset.mode = m;
     const screens = this.screens();
     for (const key of Object.keys(screens)) {
