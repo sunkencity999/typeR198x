@@ -250,6 +250,209 @@ Object.assign(Game.prototype, {
   },
 });
 
+// ------------------------- Results cards (C4 / UX-08 / SYS-11) -------------------------
+// renderResultsCard(cardEl, results, {animate}) fills the CONTRACT 2.1 markup from buildResults() output:
+// six tiles count up over 600 ms (easeOutCubic, 80 ms stagger, a tallyTick per visible step), the rank badge
+// stamps in at 700 ms (180 ms pop + rankStamp), badges newBest / newHigh / newWpm, bonus rows from the tally.
+// animate:false or reduced motion -> every value is final on the first frame.
+const RESULTS_COUNT_MS = 600;
+const RESULTS_STAGGER_MS = 80;
+const RESULTS_RANK_AT_MS = 700;
+const RESULTS_RANK_POP_MS = 180;
+const RESULTS_TICK_MIN_MS = 45;
+const RANK_TITLES = { S: "FLAWLESS SIGNAL", A: "CLEAN SWEEP", B: "SOLID FLYING", C: "ROUGH PASSAGE", D: "BARELY THROUGH" };
+
+Object.assign(Game.prototype, {
+  resultsTitleFor(results) {
+    if (results.scope === "run") return "LEGEND STATUS GRANTED";
+    if (results.scope === "over") return "RUN REPORT";
+    return RANK_TITLES[results.rank] || `SECTOR ${results.level} REPORT`;
+  },
+
+  resultsSubFor(results) {
+    const ship = screensShipName(this.currentShipId ? this.currentShipId() : (this.player && this.player.shipId));
+    if (results.scope === "run") return `All ten sectors · ${this.save.playerName || "PILOT"}`;
+    if (results.scope === "over") {
+      const start = (this.runMeta && this.runMeta.startLevel) || results.level;
+      return start < results.level ? `Sectors ${start}–${results.level} · ${ship}` : `Sector ${results.level} · ${ship}`;
+    }
+    const retries = results.retries | 0;
+    return `Sector ${results.level} · ${ship}${retries > 0 ? ` · retry ×${retries}` : ""}`;
+  },
+
+  renderResultsCard(cardEl, results, opts = {}) {
+    if (!cardEl || !results) return;
+    this.cancelResultsAnimation(cardEl);
+    const animate = opts.animate !== false && !screensReducedMotion(this);
+    const q = (sel) => cardEl.querySelector(sel);
+    const level = results.scope === "level";
+    const rank = results.rank || "C";
+    cardEl.dataset.rank = rank;
+    cardEl.dataset.scope = results.scope || "level";
+
+    const title = q(".resultsTitle");
+    const sub = q(".resultsHead .resultsSub");
+    if (title) title.textContent = this.resultsTitleFor(results);
+    if (sub) sub.textContent = this.resultsSubFor(results);
+    const toggle = (sel, on) => { const el = q(sel); if (el) el.classList.toggle("hidden", !on); };
+    toggle(".newBest", level && !!results.newSectorBest);
+    toggle(".newHigh", !!results.newHigh);
+    toggle(".newWpm", !!results.newWpm && (results.wpm | 0) > 0);
+
+    const tally = level ? (this.lastTally || null) : null;
+    const bonusTotal = tally ? (tally.total | 0) : 0;
+    const tiles = {
+      wpm: { to: results.wpm | 0, fmt: (n) => String(Math.round(n)) },
+      acc: { to: Number(results.acc) || 0, fmt: (n) => `${Math.round(n)}%` },
+      maxCombo: { to: results.maxCombo | 0, fmt: (n) => `x${Math.round(n)}` },
+      words: { to: results.words | 0, fmt: (n) => String(Math.round(n)) },
+      time: { to: results.timeMs | 0, fmt: (n) => screensFormatTime(n) },
+      bonus: { to: bonusTotal, fmt: (n) => `+${formatInt(Math.round(n))}` },
+      score: { to: results.score | 0, fmt: (n) => formatInt(Math.round(n)) }
+    };
+    const anim = cardEl._resultsAnim = { counts: [], timers: [] };
+    let i = 0;
+    for (const el of cardEl.querySelectorAll(".statTile__value[data-stat]")) {
+      const t = tiles[el.dataset.stat];
+      if (!t) continue;
+      el.classList.remove("is-counting");
+      if (animate && t.to > 0) {
+        anim.counts.push(this.animateCount(el, 0, t.to, RESULTS_COUNT_MS, { delay: i * RESULTS_STAGGER_MS, format: t.fmt, tick: true }));
+      } else {
+        el.textContent = t.fmt(t.to);
+      }
+      i++;
+    }
+
+    const list = q(".bonusList");
+    if (list) {
+      list.textContent = "";
+      const lines = level && Array.isArray(results.bonusLines) ? results.bonusLines : [];
+      for (const row of lines) {
+        const li = document.createElement("li");
+        li.className = "bonusRow";
+        const label = document.createElement("span");
+        label.className = "bonusLabel";
+        label.textContent = row.label;
+        const value = document.createElement("span");
+        value.className = "bonusValue mono";
+        if (typeof row.value === "number") value.textContent = `+${formatInt(row.value)}`;
+        else { value.textContent = String(row.value); li.classList.add("bonusRow--penalty"); }
+        li.append(label, value);
+        list.appendChild(li);
+      }
+    }
+
+    const badge = q(".rankBadge");
+    if (badge) {
+      badge.dataset.rank = rank;
+      badge.classList.remove("stamp");
+      if (animate) {
+        badge.textContent = "";
+        anim.timers.push(setTimeout(() => {
+          badge.textContent = rank;
+          badge.classList.add("stamp");
+          const sfx = this.sfx;
+          if (sfx) {
+            if (typeof sfx.rankStamp === "function") sfx.rankStamp();
+            else if (typeof sfx.uiTick === "function") sfx.uiTick("stamp");
+          }
+          anim.timers.push(setTimeout(() => badge.classList.remove("stamp"), RESULTS_RANK_POP_MS));
+        }, RESULTS_RANK_AT_MS));
+      } else {
+        badge.textContent = rank;
+      }
+    }
+  },
+
+  cancelResultsAnimation(cardEl) {
+    const anim = cardEl && cardEl._resultsAnim;
+    if (!anim) return;
+    for (const c of anim.counts) if (c && typeof c.cancel === "function") c.cancel();
+    for (const t of anim.timers) clearTimeout(t);
+    cardEl._resultsAnim = null;
+  },
+
+  // Count el from `from` to `to` over ms (easeOutCubic) after an optional delay. Returns { cancel(), done }.
+  animateCount(el, from, to, ms, opts = {}) {
+    const handle = { done: false, cancel() { handle.done = true; if (handle.raf) cancelAnimationFrame(handle.raf); el.classList.remove("is-counting"); } };
+    if (!el) { handle.done = true; return handle; }
+    const format = typeof opts.format === "function" ? opts.format : (n) => String(Math.round(n));
+    const delay = Math.max(0, opts.delay || 0);
+    const total = Math.max(1, ms || RESULTS_COUNT_MS);
+    const ease = typeof easeOutCubic === "function" ? easeOutCubic : (t) => 1 - Math.pow(1 - t, 3);
+    let start = null;
+    let last = null;
+    el.textContent = format(from);
+    el.classList.add("is-counting");
+    const step = (t) => {
+      if (handle.done) return;
+      if (start === null) start = t + delay;
+      const k = clamp((t - start) / total, 0, 1);
+      const v = from + (to - from) * ease(k);
+      const text = format(v);
+      if (text !== last) {
+        last = text;
+        el.textContent = text;
+        if (opts.tick && k > 0) this.resultsTallyTick();
+      }
+      if (k >= 1) {
+        handle.done = true;
+        el.classList.remove("is-counting");
+        if (typeof opts.onDone === "function") opts.onDone();
+        return;
+      }
+      handle.raf = requestAnimationFrame(step);
+    };
+    handle.raf = requestAnimationFrame(step);
+    return handle;
+  },
+
+  // One tallyTick per visible step across all counting tiles, at most every RESULTS_TICK_MIN_MS.
+  resultsTallyTick() {
+    const sfx = this.sfx;
+    if (!sfx) return;
+    const now = nowMs();
+    if (now - (this._tallyTickAt || 0) < RESULTS_TICK_MIN_MS) return;
+    this._tallyTickAt = now;
+    try {
+      if (typeof sfx.tallyTick === "function") sfx.tallyTick();
+      else if (typeof sfx.uiTick === "function") sfx.uiTick("count");
+    } catch (_) { /* audio optional */ }
+  },
+
+  // ------------------------- Ending controls (victory) -------------------------
+  // #btnEndingSkip and a click on the transmission window are ours; #btnEndingNext stays with the shell (bindUI).
+  // Until the shell's key router (primaryFor) lands, Enter / Space advance and Escape skips here.
+  initEndingControls() {
+    const E = this.screenEls || {};
+    if (E.btnEndingSkip && !E.btnEndingSkip._screensBound) {
+      E.btnEndingSkip._screensBound = true;
+      E.btnEndingSkip.addEventListener("click", () => this.skipEndingDialogue());
+    }
+    const win = document.querySelector("#screenVictory .dialogueWindow");
+    if (win) win.addEventListener("click", () => { if (this.mode === "victory") this.advanceEndingDialogue(); });
+    window.addEventListener("keydown", (e) => {
+      if (typeof this.primaryFor === "function") return;
+      if (this.mode !== "victory") return;
+      if (Array.isArray(this.modalStack) && this.modalStack.length) return;
+      const t = e.target;
+      const tag = (t && t.tagName) ? t.tagName.toLowerCase() : "";
+      const onControl = tag === "button" || tag === "input" || tag === "select" || tag === "textarea" || tag === "a";
+      if (e.key === "Escape") {
+        e.preventDefault();
+        if (!this.endingDone) this.skipEndingDialogue();
+        else this.stopToMenu(true);
+        return;
+      }
+      if ((e.key === "Enter" || e.key === "NumpadEnter" || e.key === " ") && !onControl) {
+        e.preventDefault();
+        this.advanceEndingDialogue();
+      }
+    });
+  },
+});
+
 // Self-boot: bindUI() calls initScreens() once the shell lands; until then run it after every script has executed
 // (99-boot.js constructs the game synchronously, so window.game exists by DOMContentLoaded).
 if (typeof document !== "undefined") {
