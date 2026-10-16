@@ -175,12 +175,14 @@ come from `PALETTE` / CSS variables rather than literals.
    tools/bump-version.sh 20261016a            # rewrite every shell token (index, info, support, privacy pages, game.js)
    tools/bump-version.sh                      # today's date + next letter
    tools/bump-version.sh --dry-run            # report only
-   tools/bump-version.sh --add-missing        # also stamp tags that have no ?v= yet
+   tools/bump-version.sh --add-missing        # also stamp script/stylesheet tags that have no ?v= yet (never the font preload)
    tools/bump-version.sh --root /tmp/copy     # rehearse on a copy
    ```
 
    It leaves the `withAssetVersion` literal line in `game.js` untouched because `native/sync-web.sh`
-   patches that exact line.
+   patches that exact line, and `--add-missing` never stamps the Orbitron `<link rel="preload" as="font">`:
+   its `href` must stay byte-identical to the `@font-face` `url()` in `assets/style/tokens.css`, otherwise the
+   browser preloads one URL, fetches another for the face and warns about an unused preload.
 2. **ART token**: the `"version"` in `assets/opt/manifest.json` (and the identical value in
    `manifest.js`), written by `tools/build-web-assets.sh`. `Assets.url()` and the music transport append
    it to every `assets/opt/*` URL; `bump-version.sh` stamps it on any `assets/opt` URL that appears in the

@@ -19,6 +19,8 @@
 # --dry-run  report what would change, write nothing.
 # --add-missing  also append ?v=<token> to local <link rel=stylesheet|preload> and <script src> tags
 #            that have no version yet (off by default: the html owners add the first token by hand).
+#            Font preloads (as="font") are skipped: their href must stay byte-identical to the @font-face
+#            url() in assets/style/tokens.css or the browser fetches the font twice (review R40).
 # Idempotent: a second run with the same token reports "no changes" and writes nothing. Exit 0 on success,
 # 1 when index.html or game.js is missing, 2 on usage errors.
 set -euo pipefail
@@ -110,7 +112,7 @@ function rewriteHtml(file) {
     }
     if (ADD_MISSING) {
       const isScript = /^<script/i.test(tag);
-      const isVersionedLink = /^<link/i.test(tag) && /\brel=["'](stylesheet|preload|modulepreload)["']/i.test(tag);
+      const isVersionedLink = /^<link/i.test(tag) && /\brel=["'](stylesheet|preload|modulepreload)["']/i.test(tag) && !/\bas=["']font["']/i.test(tag); // review R40
       if (isScript || isVersionedLink) {
         const next = `${url}${url.includes("?") ? "&" : "?"}v=${token}`;
         added++;
