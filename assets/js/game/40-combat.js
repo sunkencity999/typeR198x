@@ -553,6 +553,7 @@ Object.assign(Game.prototype, {
     this.addExplosion(p.x, p.y, 16);
     const gained = this.addScore(SCORE.pickup * mult);
     this.addFloater(p.x, p.y - ((p.plateH || 36) / 2 + 14), `${def.label.toUpperCase()} +${formatInt(gained)}`, accent, 20);
+    if (typeof this.announce === "function") this.announce(`${def.label} collected`); // review R48: the floater is canvas-only
     if (!this.powerMax) this.powerMax = {};
     switch (p.type) {
       case "SPREAD":

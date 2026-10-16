@@ -117,6 +117,17 @@ Object.assign(Game.prototype, {
   },
 
   // ------------------------- Shared fallbacks (shell hooks) -------------------------
+  // Abandon-run confirm copy (review R38): one wording for Start and the sector tiles; the shell's builder when present.
+  screensAbandonRunOpts(okLabel) {
+    if (typeof this.abandonRunConfirmOpts === "function") return this.abandonRunConfirmOpts(okLabel);
+    const run = this.save.run || {};
+    return {
+      eyebrow: "Saved run", title: "Abandon current run?",
+      body: `Sector ${(run.levelIndex | 0) + 1}, ${formatInt((run.stats && run.stats.score) | 0)} pts. Starting a new run replaces it.`,
+      okLabel, cancelLabel: "Keep my run", danger: true
+    };
+  },
+
   // confirm({eyebrow,title,body,okLabel,cancelLabel,danger}) -> Promise<boolean>; the shell's modal when it exists,
   // else a minimal driver of the same #confirmModal markup.
   screensConfirm(opts = {}) {
@@ -301,14 +312,7 @@ Object.assign(Game.prototype, {
 
     // Destructive actions confirm first. The guards run in the capture phase ahead of the shell's handlers and
     // step aside when the shell marks its own handler as confirming (startHandlesConfirm / resetHandlesConfirm).
-    this.guardClick(E.btnStart, () => !this.startHandlesConfirm && this.runHasProgress(this.save.run), () => {
-      const run = this.save.run;
-      return {
-        eyebrow: "Saved run", title: "Abandon current run?",
-        body: `Sector ${(run.levelIndex | 0) + 1}, ${formatInt((run.stats && run.stats.score) | 0)} pts. Starting a new run replaces it.`,
-        okLabel: "Start new run", cancelLabel: "Keep my run", danger: true
-      };
-    });
+    this.guardClick(E.btnStart, () => !this.startHandlesConfirm && this.runHasProgress(this.save.run), () => this.screensAbandonRunOpts("Start new run"));
     this.guardClick(E.btnResetSave, () => !this.resetHandlesConfirm, () => ({
       eyebrow: "Reset save", title: "Erase all progress?",
       body: "High scores, sector bests, unlocked sectors and settings on this device will be reset.",
@@ -394,7 +398,10 @@ Object.assign(Game.prototype, {
           status.innerHTML = `<span class="rankBadge" data-rank="${screensEscape(rank)}">${screensEscape(rank)}</span><span class="sectorBest mono">${screensEscape(screensCompact(best.score))}</span>`;
           aria += `, cleared, rank ${rank}, best ${formatInt(best.score | 0)}`;
         } else if (current) {
-          status.textContent = saved ? "RESUME" : "NEXT";
+          // review R38: agree with the resume card (RETRY = boss checkpoint, REPLAY = dead at the sector start).
+          const dead = saved && (Number.isFinite(run.hp) ? run.hp : 1) <= 0;
+          const bossRetry = dead && !!(run.inBoss && run.bossCheckpoint && run.boss);
+          status.textContent = saved ? (dead ? (bossRetry ? "RETRY" : "REPLAY") : "RESUME") : "NEXT";
           aria += saved ? ", saved run" : ", next";
         } else if (locked) {
           status.textContent = "";
@@ -440,11 +447,7 @@ Object.assign(Game.prototype, {
       if (i + 1 > ((this.save.lastUnlockedLevel | 0) || 1)) return false;
       const run = this.save.run;
       if (run && this.runHasProgress(run)) {
-        const ok = await this.screensConfirm({
-          eyebrow: "Saved run", title: `Start Sector ${i + 1} fresh?`,
-          body: `Your saved run (Sector ${(run.levelIndex | 0) + 1}, ${formatInt((run.stats && run.stats.score) | 0)} pts) will be replaced.`,
-          okLabel: `Start Sector ${i + 1}`, cancelLabel: "Keep my run", danger: true
-        });
+        const ok = await this.screensConfirm(this.screensAbandonRunOpts(`Start Sector ${i + 1}`));
         if (!ok) { this.screensUiTick("back"); return false; }
       }
       const name = (this.ui && this.ui.playerName && this.ui.playerName.value || "").trim();
@@ -515,7 +518,7 @@ Object.assign(Game.prototype, {
     }
     if (E.btnContinue) {
       const btnLabel = E.btnContinue.querySelector(".btnLabel") || E.btnContinue;
-      const text = `${dead ? (bossRetry ? "Retry boss" : "Replay") : "Resume"} Sector ${L}`;
+      const text = `${dead ? (bossRetry ? "Retry boss" : "Replay") : "Resume"} · Sector ${L}`; // review R38 (PLAN B-8)
       if (E.btnContinue.getAttribute("aria-busy") === "true") E.btnContinue.dataset.idleLabel = text;
       else if (btnLabel.textContent !== text) btnLabel.textContent = text;
       E.btnContinue.disabled = false;
@@ -1052,7 +1055,7 @@ Object.assign(Game.prototype, {
     caret.setAttribute("aria-hidden", "true");
     el.textContent = "";
     el.append(textNode, caret);
-    el.setAttribute("aria-label", full);
+    // review R49: no aria-label on the paragraph (prohibited on that role); the text node carries the line and announce() the speech.
     let shown = 0, acc = 0, typed = 0, last = null, raf = 0;
     const tick = () => {
       const sfx = this.sfx;

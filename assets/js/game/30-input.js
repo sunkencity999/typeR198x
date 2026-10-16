@@ -261,6 +261,7 @@ Object.assign(Game.prototype, {
     } else if (reason === "lost") {
       this.sfx.lockLost();
       if (ref) this.addFloater(ref.x, ref.y - 30, "LOCK LOST", "danger", 14);
+      if (typeof this.announce === "function") this.announce("Lock lost"); // review R48: the floater is canvas-only
     }
   },
 

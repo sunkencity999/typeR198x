@@ -793,7 +793,7 @@ body[data-mode] .screen:not(.is-active) .screenInner > * {
   text-decoration-style: solid;
 }
 
-.btn-link.danger { color: var(--c-danger); }
+.btn-link.danger { color: #FF7A92; opacity: 1; } /* review R45: resting tint lighter and opaque (danger at .75 measured 3.9:1 on the menu panel) */
 .btn-link.danger:hover, .btn-link.danger:focus-visible { color: var(--c-danger); }
 
 /* ----- 7. Menu (title cabinet) -------------------------------------------------- */
@@ -950,10 +950,11 @@ body[data-mode] .screen:not(.is-active) .screenInner > * {
 .sectorCard.is-current .sectorStatus { color: var(--c-ui); }
 
 .sectorCard.is-locked, .sectorCard:disabled {
-  opacity: 0.4;
+  opacity: 0.8; /* review R46 (+V-2): dim the chrome, keep the number and boss name legible; grayscale + the lock glyph carry the state. .8 is the first value where the grayscaled magenta/violet numerals render >= 3:1 (.7 = 2.67, .75 = 2.94 on sector 6) */
   filter: grayscale(0.6);
   cursor: not-allowed;
 }
+.sectorCard.is-locked .sectorBoss, .sectorCard:disabled .sectorBoss { opacity: 1; }
 
 .sectorCard.is-locked .sectorStatus::before {
   content: "";
@@ -1634,7 +1635,7 @@ fieldset.shipGrid > legend {
 .toastStack {
   position: absolute;
   left: 50%;
-  bottom: 14%;
+  bottom: 19%; /* review R33: clears the boss console slab (its top sits at 16.7% of the playfield) at every 16:9 size */
   transform: translateX(-50%);
   z-index: var(--z-toast);
   display: flex;
@@ -1662,7 +1663,7 @@ fieldset.shipGrid > legend {
 }
 
 .toast--tip { border-color: rgba(255,193,74,0.6); color: var(--c-score); }
-.toast--warn { border-color: rgba(255,77,109,0.7); color: var(--c-danger); }
+.toast--warn { border-color: rgba(255,77,109,0.7); } /* review R19: danger on the border only; the text stays --c-text (danger on glass over the art measured < 4.5:1) */
 .toast--success { border-color: rgba(57,245,255,0.7); color: var(--c-ui); text-shadow: 0 0 8px rgba(57,245,255,0.45); }
 .toast.is-leaving { animation: toastOut 200ms var(--ease-in-out) forwards; }
 
@@ -2379,7 +2380,6 @@ fieldset.shipGrid > legend {
   .modalInner { padding: 20px 18px; max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); }
   .modalActions { flex-direction: column; }
   .modalActions .btn-arcade { width: 100%; }
-  .toastStack { bottom: 10%; }
   .toast { font-size: 11px; letter-spacing: 0.08em; padding: 6px 10px; }
   .dialogueLine { font-size: var(--fs-md); }
 }
@@ -2538,6 +2538,7 @@ fieldset.shipGrid > legend {
 @media (pointer: coarse) {
   .btn-arcade, .sectorCard, .shipCardInner, .btn-link { min-height: 44px; }
   .hudPause { width: 40px; height: 40px; }
+  .rotateHintClose { min-width: 44px; min-height: 44px; margin: -6px -6px -6px 0; } /* review R47: 44px hit box; the negative margins keep the strip height */
 }
 
 /* ----- 18. Reduced motion (JS sets :root.reduce-motion from settings/OS) ------------ */
@@ -2563,6 +2564,9 @@ fieldset.shipGrid > legend {
 :root.reduce-motion #main.crtOff::after {
   animation: none;
 }
+
+/* review R18: the crit pulse rule (#hud[data-hp="crit"] #hudHPFill, 2,1,0) outranks the list above (1,2,0) */
+:root.reduce-motion #hud[data-hp="crit"] #hudHPFill { animation: none; }
 
 :root.reduce-motion .chip.expiring { opacity: 0.5; }
 :root.reduce-motion .toast { opacity: 1; }

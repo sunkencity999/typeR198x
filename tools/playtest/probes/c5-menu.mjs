@@ -109,7 +109,7 @@ const rc = await P.g(() => ({
   state: document.getElementById("resumeCard").dataset.state, ship: document.getElementById("resumeShip").getAttribute("src") || "",
   stats: document.getElementById("resumeStats").textContent.trim(), saved: document.querySelector(".sectorCard.is-saved") && document.querySelector(".sectorCard.is-saved").dataset.level
 }));
-P.check("after game over: #resumeCard shows /Replay|Resume Sector \\d+/ and Start reads NEW RUN", rc.mode === "menu" && !rc.hidden && /^(Replay|Resume|Retry boss) Sector \d+$/.test(rc.cont) && rc.start === "NEW RUN", JSON.stringify(rc));
+P.check("after game over: #resumeCard shows /Replay|Resume · Sector \\d+/ and Start reads NEW RUN", rc.mode === "menu" && !rc.hidden && /^(Replay|Resume|Retry boss) · Sector \d+$/.test(rc.cont) && rc.start === "NEW RUN", JSON.stringify(rc));
 P.check("resume card: dead state, ship art from the manifest x1, checkpoint copy, saved tile marked", rc.state === "dead" && /ships\/sofrito/.test(rc.ship) && /Checkpoint/.test(rc.stats) && rc.saved === "1", JSON.stringify({ state: rc.state, ship: rc.ship, stats: rc.stats, saved: rc.saved }));
 await P.shot("menu-resume");
 await page.click("#btnStart");

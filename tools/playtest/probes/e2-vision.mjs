@@ -37,7 +37,7 @@ await P.goto({
 await sleep(800);
 const grid = await P.g(() => Array.from(document.querySelectorAll(".sectorCard")).map((c) => ({ cls: c.className.replace("sectorCard", "").trim(), status: c.querySelector(".sectorStatus").textContent.trim(), disabled: c.disabled })));
 await captureAll("01-menu");
-P.check("sector grid states carry text / shape cues (rank letter, NEXT / RESUME, disabled)", grid.slice(0, 4).every((c) => /^[SABCD]/.test(c.status)) && /RESUME|NEXT/.test(grid[4].status) && grid[5].disabled, grid);
+P.check("sector grid states carry text / shape cues (rank letter, NEXT / RESUME / REPLAY / RETRY, disabled)", grid.slice(0, 4).every((c) => /^[SABCD]/.test(c.status)) && /RESUME|REPLAY|RETRY|NEXT/.test(grid[4].status) && grid[5].disabled, grid);
 
 // Gameplay: a locked plate, a danger plate near the ship, a capsule, three chips, crit hull.
 await P.g(() => window.game.startSector(2));

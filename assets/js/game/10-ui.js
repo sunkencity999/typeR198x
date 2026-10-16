@@ -321,18 +321,24 @@ Object.assign(Game.prototype, {
     if (name) this.save.playerName = name;
   },
 
+  // One wording for every "abandon the saved run" confirm (review R38): Start and the sector tiles share it.
+  abandonRunConfirmOpts(okLabel) {
+    const run = this.save.run || {};
+    return {
+      eyebrow: "Saved run",
+      title: "Abandon current run?",
+      body: `Sector ${(run.levelIndex | 0) + 1}, ${formatInt((run.stats && run.stats.score) | 0)} pts. Starting a new run replaces it.`,
+      okLabel,
+      cancelLabel: "Keep my run",
+      danger: true
+    };
+  },
+
   async onStartPressed() {
     if (this._launchBusy) return;
     const run = this.save.run;
     if (this.runHasProgress(run)) {
-      const ok = await this.confirm({
-        eyebrow: "New run",
-        title: "Abandon the saved run?",
-        body: `Sector ${(run.levelIndex | 0) + 1} · score ${formatInt((run.stats && run.stats.score) || 0)}. Starting a new run erases it.`,
-        okLabel: "Start new run",
-        cancelLabel: "Keep it",
-        danger: true
-      });
+      const ok = await this.confirm(this.abandonRunConfirmOpts("Start new run"));
       if (!ok) return;
     }
     this.readPilotName();
@@ -398,7 +404,7 @@ Object.assign(Game.prototype, {
       title: "Erase everything?",
       body: `${parts.join(" · ")}. This cannot be undone.`,
       okLabel: "Erase everything",
-      cancelLabel: "Keep it",
+      cancelLabel: "Keep my save",
       danger: true
     });
     if (!ok) return;

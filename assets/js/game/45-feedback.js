@@ -401,7 +401,7 @@ Object.assign(Game.prototype, {
     if (b.kind === "sector") {
       const gateOpen = typeof this.isLevelGateOpen === "function" ? this.isLevelGateOpen() : true;
       if (!gateOpen && t >= b.dur - 0.2) { hint = "SPOOLING SECTOR ART…"; hintAlpha = 0.70; }
-      else if (t >= 0.9) { hint = "GET READY"; hintColor = "lime"; hintSize = 20; hintAlpha = rm ? 0.92 : blink(t - 0.9, 3, 0.25) * 0.92; }
+      else if (t >= 0.9) { hint = "GET READY"; hintColor = "accent"; hintSize = 20; hintAlpha = rm ? 0.92 : blink(t - 0.9, 3, 0.25) * 0.92; } // review R37: sector accent; lime is reserved for type-this cues
     } else if (b.kind === "bossIntro") {
       const intro = this.bossIntro;
       const skipAt = typeof BOSS_INTRO_SKIP_S === "number" ? BOSS_INTRO_SKIP_S : 1.0;
