@@ -1,0 +1,28 @@
+{
+  "description": "Pre-overhaul save written during the sector 2 boss (levelIndex 1, inBoss true, levelT past the 108 s duration, no run.boss). Amendment B-10: migrateSave must turn this into approach -> fresh boss within 6 s of Continue.",
+  "entry": "continue",
+  "expect": { "levelIndex": 1, "scoreMin": 3100, "highScore": 5100, "lastUnlockedLevel": 2, "inBossWithinS": 6 },
+  "save": {
+    "playerName": "LEGACY",
+    "selectedShip": "coconut",
+    "highScore": 5100,
+    "lastUnlockedLevel": 2,
+    "storySeen": true,
+    "keyboardHintSeen": true,
+    "settings": { "muted": false, "crt": true },
+    "run": {
+      "levelIndex": 1,
+      "levelT": 110.4,
+      "inBoss": true,
+      "hp": 180,
+      "maxHp": 300,
+      "shield": 0,
+      "power": { "spread": 0, "pierce": 0, "rapid": 0, "multiplier": 0 },
+      "stats": { "score": 3100, "combo": 0, "mult": 1, "correct": 64, "total": 71 },
+      "shipId": "coconut",
+      "spawnAcc": 0,
+      "powerAcc": 1.2,
+      "hazardAcc": 0.4
+    }
+  }
+}

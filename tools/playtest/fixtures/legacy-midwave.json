@@ -1,0 +1,28 @@
+{
+  "description": "Pre-overhaul save written mid-wave on sector 3 (levelIndex 2, levelT 40, score 6000). No schema, no run.id, no run.checkpoint; legacy stats shape {score, combo, mult, correct, total}.",
+  "entry": "continue",
+  "expect": { "levelIndex": 2, "scoreMin": 6000, "highScore": 8800, "lastUnlockedLevel": 3, "playerName": "LEGACY", "levelTBelowDuration": true },
+  "save": {
+    "playerName": "LEGACY",
+    "selectedShip": "sofrito",
+    "highScore": 8800,
+    "lastUnlockedLevel": 3,
+    "storySeen": true,
+    "keyboardHintSeen": true,
+    "settings": { "muted": false, "crt": true },
+    "run": {
+      "levelIndex": 2,
+      "levelT": 40,
+      "inBoss": false,
+      "hp": 260,
+      "maxHp": 400,
+      "shield": 0,
+      "power": { "spread": 0, "pierce": 0, "rapid": 0, "multiplier": 0 },
+      "stats": { "score": 6000, "combo": 4, "mult": 1, "correct": 118, "total": 127 },
+      "shipId": "sofrito",
+      "spawnAcc": 0.31,
+      "powerAcc": 2.4,
+      "hazardAcc": 0
+    }
+  }
+}
