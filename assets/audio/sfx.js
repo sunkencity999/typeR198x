@@ -30,14 +30,24 @@
   // Track 3 (the fastest) is reserved for the last tier.
   const MUSIC_FOR_LEVEL = [0, 5, 2, 2, 1, 1, 4, 4, 3, 3];
 
-  // [loopStart, loopEnd] seconds per track, measured on assets/opt/audio/*.mp3 with tools/measure-loops.sh:
-  // loopStart = first sample above -50 dBFS; loopEnd = start of the last 100 ms RMS window still within
-  // 3 dB of the body median, i.e. the last point before the trailing fade-out/silence. The WAV masters
-  // have identical timelines (LAME gapless), so the table is valid for the legacy fallback too.
-  const MUSIC_LOOP = [[1.3, 123.8], [1.02, 121.9], [0.01, 128.2], [0.37, 126.8], [0.47, 135.9], [0.18, 123.6]];
+  // [loopStart, loopEnd] seconds per track, measured on assets/opt/audio/*.mp3 with tools/measure-loops.sh
+  // (the WAV masters have identical timelines, LAME gapless, so the table serves the legacy fallback too).
+  // loopStart = the first onset of the sustained body: the first 100 ms window within 6 dB of the body median
+  // whose next 2 s and 8 s medians are too, snapped to the strongest onset within +-150 ms (first audio when the
+  // lead-in is under 0.5 s: track 5). Tracks 1, 2 and 6 have intros and build-ups 8-10 dB under the body for
+  // 17.3 / 15.2 / 16.9 s; tracks 3 and 4 have 2-3 s intros 6-7 dB under. Looping into a lead-in was a 10-40 dB
+  // energy hole every two minutes, so the loop (and every sector start) lands on the body instead.
+  // loopEnd = X + LOOP_FADE where X, the moment the incoming element starts at loopStart, is beat-aligned: the
+  // first beat after loopStart coincides with an onset peak near the end of the body, a whole number of bars
+  // from it where the pulse is steady (tracks 2-5 at 126/115/70/167 BPM), the strongest onset in the last two
+  // bars for 1 and 6 (same song, weak pulse). "MUSIC_LOOP adopted" in the script output is this table; its
+  // "raw" line is the first-audio / last-body table the transport would loop on without the analysis.
+  const MUSIC_LOOP = [[17.21, 119.67], [15.23, 120.36], [3.25, 126.72], [2.08, 122.25], [0.47, 133.32], [16.94, 119.81]];
 
   const LOOP_FADE = 0.6;        // equal-power crossfade length at loopEnd - LOOP_FADE
   const PREFETCH_LEAD = 3.0;    // the idle element receives the same src at loopEnd - 3 s (amendment C-4)
+  const LOOP_ARM_S = 0.25;      // inside this window a one-shot timer fires the crossfade at the exact moment
+  const PRIME_TIMEOUT_MS = 1500; // media primes / ctx.resume() never hold Start longer than this
   const MASTER_BASE = 0.8;
   const MUSIC_BASE = 0.8;
   const SFX_BASE = 1.0;
@@ -94,6 +104,22 @@
     return audio;
   };
 
+  // Resolves with "ok" | "error" | "timeout"; never rejects, never holds the caller longer than ms.
+  const withTimeout = (promise, ms) => new Promise((resolve) => {
+    const timer = setTimeout(() => resolve("timeout"), ms);
+    Promise.resolve(promise).then(() => { clearTimeout(timer); resolve("ok"); }, () => { clearTimeout(timer); resolve("error"); });
+  });
+
+  // play() then pause() inside the gesture activates a media element on engines that unlock per element.
+  const primeElement = (el) => {
+    try {
+      const p = el.play();
+      if (p && p.then) return p.then(() => { try { el.pause(); } catch (_) {} }, () => {});
+      try { el.pause(); } catch (_) {}
+    } catch (_) {}
+    return Promise.resolve();
+  };
+
   class SFX {
     constructor() {
       this.ctx = null;
@@ -134,6 +160,7 @@
       this._unlockPromise = null;
       this._bufferPromises = new Map();
       this._loopTimer = null;
+      this._fadeTimer = null;
       this._endTimer = null;
       this._lowHpTimer = null;
       this._surge = null;
@@ -173,7 +200,7 @@
         try { this._buildBus(new Ctx()); } catch (_) { this.ctx = null; }
       }
       if (!this.ctx) this.forceHtmlAudio = true;
-      this._createMusicSlots();
+      const primes = this._createMusicSlots();
       if (this.forceHtmlAudio && !this.htmlBigExplosion) {
         this.htmlBigExplosion = createHtmlAudio(this.sfxSources.bigExplosion);
       }
@@ -182,8 +209,13 @@
         loads.push(this._fetchBuffer(this.sfxSources.laser).then((b) => { this.laserBuffer = b; }));
         loads.push(this._fetchBuffer(this.sfxSources.bigExplosion).then((b) => { this.bigExplosionBuffer = b; }));
       }
+      // Only the two one-shot buffers gate Start. The media primes and ctx.resume() are raced against
+      // PRIME_TIMEOUT_MS: a play() promise that never settles (seen in headless Chrome over HTTP under the
+      // native UA) or a resume() stuck in 'interrupted' must not keep the player on the menu.
+      await withTimeout(Promise.all(primes), PRIME_TIMEOUT_MS);
       await Promise.all(loads);
-      await this.resumeIfNeeded();
+      const resumed = await withTimeout(this.resumeIfNeeded(), PRIME_TIMEOUT_MS);
+      if (resumed !== "ok" && this.ctx && this.ctx.state !== "running") this.needsGesture = true;
       if (this.pendingTrack != null) {
         const index = this.pendingTrack;
         this.pendingTrack = null;
@@ -225,15 +257,19 @@
       return this;
     }
 
+    // Two media slots. Idle slots stay at preload "none"/"metadata" so no track streams before playMusic
+    // targets it; the loop lead (loopEnd - 3 s) is the only time a slot preloads "auto" without playing.
+    // Returns the gesture-prime promises (empty when the slots already exist).
     _createMusicSlots() {
-      if (this.musicEls.length || typeof Audio === "undefined") return;
+      const primes = [];
+      if (this.musicEls.length || typeof Audio === "undefined") return primes;
       for (let i = 0; i < 2; i++) {
         const el = new Audio();
-        el.preload = "auto";
+        el.preload = "none";
         el.setAttribute("playsinline", "");
         el.playsInline = true;
         el.loop = false;
-        const slot = { el, source: null, gain: null, index: -1, src: null, level: 0, fade: null, pendingSeek: null, id: i };
+        const slot = { el, source: null, gain: null, index: -1, src: null, level: 0, fade: null, pendingSeek: null, parkedAt: null, id: i };
         if (this.ctx && !this.forceHtmlAudio) {
           try {
             slot.source = this.ctx.createMediaElementSource(el);
@@ -263,10 +299,10 @@
         // Gesture priming with a silent clip; the real src arrives with playMusic/prefetchMusic.
         try {
           el.src = silentWav();
-          const p = el.play();
-          if (p && p.then) p.then(() => el.pause(), () => {});
+          primes.push(primeElement(el));
         } catch (_) {}
       }
+      return primes;
     }
 
     _fetchBuffer(src) {
@@ -292,14 +328,18 @@
       return promise;
     }
 
+    // Called on every gesture (keydown / pointerdown) and inside unlock(). A context left 'suspended' or
+    // 'interrupted' (iOS phone call, Safari tab switch) is resumed here; when resume() rejects or does not
+    // settle within PRIME_TIMEOUT_MS, needsGesture stays set so the shell shows TAP TO RESTORE AUDIO.
     resumeIfNeeded() {
       const ctx = this.ctx;
       let p = Promise.resolve();
       if (ctx && ctx.state !== "running" && ctx.state !== "closed" && !this._hidden) {
+        const guard = setTimeout(() => { if (ctx.state !== "running") this.needsGesture = true; }, PRIME_TIMEOUT_MS);
         p = Promise.resolve()
           .then(() => ctx.resume())
-          .then(() => { this.needsGesture = false; })
-          .catch(() => { this.needsGesture = true; });
+          .then(() => { clearTimeout(guard); this.needsGesture = ctx.state !== "running"; })
+          .catch(() => { clearTimeout(guard); this.needsGesture = true; });
       }
       this._resumeMusicElement();
       return p;
@@ -473,18 +513,21 @@
       this._startSlot(this._idleSlot(), index, fade, true);
     }
 
-    _startSlot(slot, index, fade, fromLoopStart) {
+    // offset: seconds past loopStart to begin at (the loop crossfade passes how late it fired).
+    _startSlot(slot, index, fade, fromLoopStart, offset = 0) {
       if (!slot) return;
       const prev = this.active;
       const src = this.musicTracks[index];
       const [loopStart] = this._loopFor(index);
+      this._clearFadeTimer();
+      slot.el.preload = "auto"; // this slot plays now: stream ahead
       if (slot.src !== src) {
         slot.src = src;
-        slot.el.preload = "auto";
         slot.el.src = versioned(src);
       }
       slot.index = index;
-      if (fromLoopStart) this._seek(slot, loopStart);
+      slot.parkedAt = null;
+      if (fromLoopStart) this._seek(slot, loopStart + Math.max(0, offset || 0));
       const p = slot.el.play();
       if (p && p.catch) p.catch(() => { this.needsGesture = true; });
       this.active = slot;
@@ -497,8 +540,10 @@
     }
 
     _seek(slot, t) {
-      slot.pendingSeek = slot.el.readyState >= 1 ? null : t;
-      try { slot.el.currentTime = t; } catch (_) {}
+      const el = slot.el;
+      if (el.readyState >= 1 && Math.abs((el.currentTime || 0) - t) < 0.01) { slot.pendingSeek = null; return; }
+      slot.pendingSeek = el.readyState >= 1 ? null : t;
+      try { el.currentTime = t; } catch (_) {}
     }
 
     _pauseLater(slot, sec) {
@@ -535,6 +580,8 @@
       this._loopTimer = null;
     }
 
+    // Polled at 100 ms (interval + timeupdate). Inside the last LOOP_ARM_S a one-shot timer takes over so the
+    // crossfade starts within a few ms of loopEnd - LOOP_FADE instead of up to a poll late.
     _loopTick() {
       const slot = this.active;
       if (!slot || !this.wantMusic || slot.index < 0) return;
@@ -542,14 +589,30 @@
       if (el.paused || !Number.isFinite(el.currentTime)) return;
       const [, end] = this._loopFor(slot.index);
       const t = el.currentTime;
-      if (t >= end - LOOP_FADE) { this._crossfadeLoop(slot); return; }
-      if (t >= end - PREFETCH_LEAD) this._prefetchSlot(this._idleSlot(), slot.index);
+      const fadeAt = end - LOOP_FADE;
+      if (t >= fadeAt - 0.004) { this._crossfadeLoop(slot); return; }
+      if (t >= end - PREFETCH_LEAD) {
+        this._prefetchSlot(this._idleSlot(), slot.index, "auto");
+        if (!this._fadeTimer && fadeAt - t <= LOOP_ARM_S + 0.1) {
+          const ms = Math.max(0, (fadeAt - t) / (el.playbackRate || 1) * 1000 - 2);
+          this._fadeTimer = setTimeout(() => { this._fadeTimer = null; this._loopTick(); }, ms);
+        }
+      }
     }
 
+    _clearFadeTimer() {
+      if (this._fadeTimer) clearTimeout(this._fadeTimer);
+      this._fadeTimer = null;
+    }
+
+    // The incoming element starts at loopStart (+ however late the fade point was caught, so the two
+    // elements stay beat-aligned) while the outgoing one fades over LOOP_FADE.
     _crossfadeLoop(slot) {
       const next = this._idleSlot();
       if (!next || next === slot) return;
-      this._startSlot(next, slot.index, LOOP_FADE, true);
+      const [, end] = this._loopFor(slot.index);
+      const late = (slot.el.currentTime || 0) - (end - LOOP_FADE);
+      this._startSlot(next, slot.index, LOOP_FADE, true, late > 0.015 ? late : 0);
     }
 
     _onSlotEnded(slot) {
@@ -563,14 +626,26 @@
       this._prefetchSlot(this._idleSlot(), i);
     }
 
-    _prefetchSlot(slot, index) {
+    // preload "metadata" (default: the next sector's track, headers only) or "auto" (the loop lead:
+    // same track as the active slot, parked at loopStart so the crossfade starts from buffered data).
+    _prefetchSlot(slot, index, preload) {
       const src = this.musicTracks[index];
-      if (!slot || slot === this.active || slot.level > 0 || slot.src === src) return;
-      slot.src = src;
-      slot.index = -1;
-      slot.el.preload = "auto";
-      slot.el.src = versioned(src);
-      try { slot.el.load(); } catch (_) {}
+      if (!slot || slot === this.active || slot.level > 0) return;
+      const mode = preload === "auto" ? "auto" : "metadata";
+      if (slot.src !== src) {
+        slot.src = src;
+        slot.index = -1;
+        slot.pendingSeek = null;
+        slot.parkedAt = null;
+        slot.el.preload = mode;
+        slot.el.src = versioned(src);
+      } else if (mode === "auto" && slot.el.preload !== "auto") {
+        slot.el.preload = "auto";
+      }
+      if (mode === "auto") {
+        const [loopStart] = this._loopFor(index);
+        if (slot.parkedAt !== loopStart) { slot.parkedAt = loopStart; this._seek(slot, loopStart); }
+      }
     }
 
     stopMusic() {
@@ -579,6 +654,7 @@
       this.currentTrack = -1;
       this._clearEndTimer();
       this._disarmLoopTimer();
+      this._clearFadeTimer();
       this.bossPulse(false);
       for (const slot of this.musicEls) {
         this._setSlotLevel(slot, 0, 0.05);
