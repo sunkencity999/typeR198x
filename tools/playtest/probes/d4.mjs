@@ -130,7 +130,7 @@ const blink = await P.g(async () => {
     const img = ctx.getImageData(X0, Y0, W, W).data; let v = 0, n = 0;
     for (let py = 0; py < W; py++) for (let px = 0; px < W; px++) {
       const dx = (px + X0) / s - cx, dy = (py + Y0) / s - cy; const r = Math.hypot(dx, dy);
-      if (r < 58 || r > 76 || Math.abs(dy) < r * 0.7) continue;
+      if (r < 55 || r > 78 || Math.abs(dy) < 52) continue;   // hull is +-46 px tall (+bob); the hex edges sit at |dy| 57..66, the arc at 72
       const k = (py * W + px) * 4; v += Math.max(0, img[k + 2] - img[k + 1]); n++;
     }
     return Math.round(v / Math.max(1, n) * 10) / 10;

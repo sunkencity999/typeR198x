@@ -178,7 +178,8 @@ Object.assign(Game.prototype, {
     if (p.kick < 0.05) p.kick = 0;
 
     this.detectFxEdges(m);
-    if (this.mode !== "paused") this.tickFxLists(dt);
+    // paused and Game Over hold the world (update() is not called either): rings, bolts, debris stay put
+    if (this.mode !== "paused" && this.mode !== "gameOver") this.tickFxLists(dt);
     if (this.mode === "playing" && typeof this.emitExhaust === "function") this.emitExhaust(dt);
 
     // legacy channels still written by 30-input.js / 40-combat.js; nothing draws them any more
@@ -644,7 +645,8 @@ const CAMERA_HOOKS = { keyFx: false, bossKeyFx: false, killFx: false, damageFx: 
     const orig = proto.takeDamage;
     proto.takeDamage = function () {
       const out = orig.apply(this, arguments);
-      if (out > 0 && this.player) {
+      // not on the killing blow: onGameOver() has reset the ship and the Game Over backdrop must hold still
+      if (out > 0 && this.player && this.mode === "playing") {
         this.player.kick = fxNum(FXM.kickPx, 14);
         this.player.hitT = fxNum(FXM.hitT, 0.12);
       }

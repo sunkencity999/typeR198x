@@ -122,8 +122,6 @@ const kill = await P.g(async () => {
   const g = window.game; const ctx = g.ctx; const s = g.renderScale;
   g.enemies.length = 0; g.lock = null; g.rings.length = 0; g.particles.length = 0; g.explosions.length = 0; g.debris.length = 0; g.bullets.length = 0;
   const KX = 420, KY = 250;   // dark starfield: the "brighter than background by > 60" rule needs headroom
-  const en = new Enemy({ text: "ringer", x: KX, y: KY, speed: 0 });
-  g.enemies.push(en);
   await new Promise(r => requestAnimationFrame(r));
   // background luminance around the plate before the kill (ring radius band 30..50 px); ONE readback per sample
   // (per-pixel getImageData calls take longer than the ring lives)
@@ -142,7 +140,11 @@ const kill = await P.g(async () => {
     }
     return out;
   };
-  const bg = probeRing();   // background before the kill (the 1.25x white impact plate would reach into the band)
+  const bg = probeRing();   // background with no plate yet (the plate itself reaches r 50 on the horizontal angles)
+  const en = new Enemy({ text: "ringer", x: KX, y: KY, speed: 0 });
+  g.enemies.push(en);
+  await new Promise(r => requestAnimationFrame(r));
+  await new Promise(r => requestAnimationFrame(r));
   g.killEnemy(en);
   const ring0 = g.rings[0] && { life: g.rings[0].life, size: g.rings[0].size, color: g.rings[0].color };
   const debris = g.debris.length;
