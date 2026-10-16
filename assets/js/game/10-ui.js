@@ -406,6 +406,10 @@ Object.assign(Game.prototype, {
     this.run = null;
     this.runMeta = null;
     this._hsCommitted = null;
+    // review R28/R50: session state follows the erased save (title ship, a tip still on screen, the tutorial 'shown' map).
+    this.setPlayerShip(this.getSelectedShipId());
+    if (typeof this.dismissTutorialToast === "function") this.dismissTutorialToast();
+    if (typeof this.initOnboarding === "function") this.initOnboarding();
     storeSave(this.save);
     this.applySettings();
     this.refreshMenu();
