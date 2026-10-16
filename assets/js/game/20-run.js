@@ -58,10 +58,10 @@ Object.assign(Game.prototype, {
 
   // Sector select (C5 / SYS-12): a fresh run that starts at sector levelIndex+1 with that sector's HP curve, score 0
   // and a level checkpoint; run.startLevel > 1 keeps it off the headline high score (commitHighScore) but in the
-  // top-10 table. Locked sectors are refused. The menu confirm (a saved run at stake) lives in enterSectorFromMenu.
+  // top-10 table. This is the direct entry (the harness jumps to sector 10 with it); the unlock check and the
+  // confirm for a saved run live in the sector-tile path (enterSectorFromMenu, 15-screens.js).
   startSector(levelIndex) {
     const i = clamp(levelIndex | 0, 0, 9);
-    if (i + 1 > ((this.save.lastUnlockedLevel | 0) || 1)) return false;
     this.beginRunAt(i);
     return true;
   },

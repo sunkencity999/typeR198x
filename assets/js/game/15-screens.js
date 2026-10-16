@@ -865,11 +865,13 @@ Object.assign(Game.prototype, {
     const badge = q(".rankBadge");
     if (badge) {
       badge.dataset.rank = rank;
+      badge.textContent = rank;
       badge.classList.remove("stamp");
+      badge.classList.toggle("is-pending", animate);
       if (animate) {
-        badge.textContent = "";
+        // The frame holds its place from the first frame (dim, unstamped); the letter stamps in at 700 ms.
         anim.timers.push(setTimeout(() => {
-          badge.textContent = rank;
+          badge.classList.remove("is-pending");
           badge.classList.add("stamp");
           const sfx = this.sfx;
           if (sfx) {
@@ -878,8 +880,6 @@ Object.assign(Game.prototype, {
           }
           anim.timers.push(setTimeout(() => badge.classList.remove("stamp"), RESULTS_RANK_POP_MS));
         }, RESULTS_RANK_AT_MS));
-      } else {
-        badge.textContent = rank;
       }
     }
   },
@@ -889,6 +889,8 @@ Object.assign(Game.prototype, {
     if (!anim) return;
     for (const c of anim.counts) if (c && typeof c.cancel === "function") c.cancel();
     for (const t of anim.timers) clearTimeout(t);
+    const badge = cardEl.querySelector(".rankBadge");
+    if (badge) badge.classList.remove("is-pending", "stamp");
     cardEl._resultsAnim = null;
   },
 

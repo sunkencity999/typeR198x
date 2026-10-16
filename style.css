@@ -1464,6 +1464,13 @@ fieldset.shipGrid > legend {
   text-shadow: 0 0 10px rgba(255,193,74,0.45);
 }
 
+.rankBadge--lg { transition: opacity 180ms var(--ease-out), transform 180ms var(--ease-out), filter 180ms var(--ease-out); }
+.rankBadge--lg.is-pending {
+  opacity: 0.4;
+  transform: scale(0.92);
+  filter: saturate(0.3);
+  text-shadow: none;
+}
 .rankBadge--lg.stamp { animation: rankStamp 180ms var(--ease-snap); }
 .resultsCard[data-rank="S"] .rankBadge--lg { box-shadow: 0 0 18px rgba(255,193,74,0.45), 0 0 14px rgba(0,0,0,0.35); }
 .resultsCard[data-rank="D"] .rankBadge--lg { box-shadow: 0 0 14px rgba(255,77,109,0.35); }
@@ -1500,6 +1507,7 @@ fieldset.shipGrid > legend {
 
 :root.reduce-motion .rankBadge--lg.stamp,
 :root.reduce-motion .resultsCard.is-revealed { animation: none; }
+:root.reduce-motion .rankBadge--lg { transition: none; }
 :root.reduce-motion .statTile__value { transition: none; }
 
 /* ----- 10. Victory dialogue ------------------------------------------------------ */
