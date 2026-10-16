@@ -2526,6 +2526,7 @@ fieldset.shipGrid > legend {
 @media (pointer: coarse) {
   .btn-arcade, .sectorCard, .shipCardInner, .btn-link { min-height: 44px; }
   .hudPause { width: 40px; height: 40px; }
+  .rotateHintClose { min-width: 44px; min-height: 44px; margin: -6px -6px -6px 0; } /* review R47: 44px hit box; the negative margins keep the strip height */
 }
 
 /* ----- 18. Reduced motion (JS sets :root.reduce-motion from settings/OS) ------------ */
