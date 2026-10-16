@@ -30,11 +30,19 @@
   // Track 3 (the fastest) is reserved for the last tier.
   const MUSIC_FOR_LEVEL = [0, 5, 2, 2, 1, 1, 4, 4, 3, 3];
 
-  // [loopStart, loopEnd] seconds per track, measured on assets/opt/audio/*.mp3 with tools/measure-loops.sh:
-  // loopStart = first sample above -50 dBFS; loopEnd = start of the last 100 ms RMS window still within
-  // 3 dB of the body median, i.e. the last point before the trailing fade-out/silence. The WAV masters
-  // have identical timelines (LAME gapless), so the table is valid for the legacy fallback too.
-  const MUSIC_LOOP = [[1.3, 123.8], [1.02, 121.9], [0.01, 128.2], [0.37, 126.8], [0.47, 135.9], [0.18, 123.6]];
+  // [loopStart, loopEnd] seconds per track, measured on assets/opt/audio/*.mp3 with tools/measure-loops.sh
+  // (the WAV masters have identical timelines, LAME gapless, so the table serves the legacy fallback too).
+  // loopStart = the first onset of the sustained body: the first 100 ms window within 6 dB of the body median
+  // whose next 2 s and 8 s medians are too, snapped to the strongest onset within +-150 ms (first audio when the
+  // lead-in is under 0.5 s: track 5). Tracks 1, 2 and 6 have intros and build-ups 8-10 dB under the body for
+  // 17.3 / 15.2 / 16.9 s; tracks 3 and 4 have 2-3 s intros 6-7 dB under. Looping into a lead-in was a 10-40 dB
+  // energy hole every two minutes, so the loop (and every sector start) lands on the body instead.
+  // loopEnd = X + LOOP_FADE where X, the moment the incoming element starts at loopStart, is beat-aligned: the
+  // first beat after loopStart coincides with an onset peak near the end of the body, a whole number of bars
+  // from it where the pulse is steady (tracks 2-5 at 126/115/70/167 BPM), the strongest onset in the last two
+  // bars for 1 and 6 (same song, weak pulse). "MUSIC_LOOP adopted" in the script output is this table; its
+  // "raw" line is the first-audio / last-body table the transport would loop on without the analysis.
+  const MUSIC_LOOP = [[17.21, 119.67], [15.23, 120.36], [3.25, 126.72], [2.08, 122.25], [0.47, 133.32], [16.94, 119.81]];
 
   const LOOP_FADE = 0.6;        // equal-power crossfade length at loopEnd - LOOP_FADE
   const PREFETCH_LEAD = 3.0;    // the idle element receives the same src at loopEnd - 3 s (amendment C-4)
