@@ -345,16 +345,17 @@ Object.assign(Game.prototype, {
       const x = pose && pose.muzzle ? pose.muzzle.x : mz.x;
       const y = pose && pose.muzzle ? pose.muzzle.y : mz.y;
       const a = 0.9 * (1 - u);
+      // review R12: fixed stop alphas, the per-frame fade goes through globalAlpha (same product as before)
       const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-      g.addColorStop(0, PALETTE.rgba("text", a));
-      g.addColorStop(0.35, PALETTE.rgba(mz.color, a * 0.8));
+      g.addColorStop(0, PALETTE.rgba("text", 1));
+      g.addColorStop(0.35, PALETTE.rgba(mz.color, 0.8));
       g.addColorStop(1, PALETTE.rgba(mz.color, 0));
-      ctx.globalAlpha = 1;
+      ctx.globalAlpha = a;
       ctx.fillStyle = g;
       ctx.beginPath();
       ctx.arc(x, y, r, 0, FXD_TAU);
       ctx.fill();
-      ctx.strokeStyle = PALETTE.rgba("text", a * 0.8);
+      ctx.strokeStyle = PALETTE.rgba("text", 0.8);
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       for (let i = 0; i < 3; i++) {
@@ -365,6 +366,7 @@ Object.assign(Game.prototype, {
       }
       ctx.stroke();
     }
+    ctx.globalAlpha = 1;
   },
 
   // Debris shards: sheet frame 16, rotated, fading over the last .2 s (small tinted squares until the sheet is up).
@@ -372,7 +374,7 @@ Object.assign(Game.prototype, {
     const sheet = ExplosionSprite.sheet;
     const ready = ExplosionSprite.isReady(sheet);
     const frame = (typeof EXPLOSION_FRAMES !== "undefined" && EXPLOSION_FRAMES[16]) || null;
-    const k = ExplosionSprite.sheetScale || 1;
+    const k = ExplosionSprite.scaleFor(sheet);   // review R1: per-draw factor, never the cached field
     for (const d of this.debris) {
       const a = d.alpha();
       if (a <= 0) continue;
@@ -422,8 +424,9 @@ Object.assign(Game.prototype, {
   },
 
   // ------------------------- L12: explosions, dying plates, particles, rings, bolts -------------------------
-  // The additive batch opens at the end of drawExplosionSprites (after the source-over smoke frames and the white
-  // impact plates) and closes at the end of drawParticles: two composite assignments for the whole layer.
+  // drawExplosionSprites draws the source-over smoke frames, then the dying plates (impact plates and fades,
+  // 70-render.js), and only then opens the additive batch for the flash frames; drawParticles closes it: two
+  // composite assignments for the whole layer (review R13: plates inside the batch lost their text and fill).
   openAdditive(ctx) {
     if (this._fxAdditive) return;
     ctx.globalCompositeOperation = "lighter";
@@ -443,6 +446,7 @@ Object.assign(Game.prototype, {
       if (ex.isFlash()) { flashes++; continue; }
       ex.drawFrame(ctx);
     }
+    if (typeof this.drawDyingPlates === "function") this.drawDyingPlates(ctx);   // source-over, before the batch (review R13)
     if (!this.needsAdditiveBatch(flashes)) return;
     this.openAdditive(ctx);
     if (flashes) for (const ex of list) if (!ex.done && ex.isFlash()) ex.drawFrame(ctx);
@@ -622,8 +626,11 @@ Object.assign(Game.prototype, {
       const cap = m.anim > 0 ? (typeof FXD.whiteFlashMax === "number" ? FXD.whiteFlashMax : 0.12) : (typeof FXD.whiteFlashMaxReduced === "number" ? FXD.whiteFlashMaxReduced : 0.08);
       const a = Math.min(cap, wf * 0.24 * m.flash);
       if (a > 0.004) {
-        ctx.fillStyle = PALETTE.rgba("text", a);
+        const ga = ctx.globalAlpha;   // review R12: alpha through globalAlpha, one memoised colour string
+        ctx.globalAlpha = ga * a;
+        ctx.fillStyle = PALETTE.rgba("text", 1);
         ctx.fillRect(0, 0, this.w, this.h);
+        ctx.globalAlpha = ga;
       }
     }
 

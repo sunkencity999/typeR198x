@@ -115,6 +115,9 @@ Object.assign(Game.prototype, {
       this.canvas.height = wantH;
       this.spriteEpoch++;
       if (this.plateCache) this.plateCache.clear();
+      // review R30: re-bake the active content's plate sprites in idle slices at the new scale (sector 1 for the
+      // menu / attract) instead of inside the next frames; during boot activateAttract / loadLevelAssets warm anyway.
+      if (this.loadingDismissed && typeof this.warmPlateCache === "function") this.warmPlateCache(this.mode === "menu" ? 0 : this.levelIndex);
       this.vignetteSprite = null;
       this.dangerVignette = null;
       if (typeof Assets !== "undefined" && Assets && typeof Assets.setRenderScale === "function") Assets.setRenderScale(s);
@@ -1179,10 +1182,13 @@ Object.assign(Game.prototype, {
     if (scale !== 1) { ctx.translate(cx, cy); ctx.scale(scale, scale); ctx.translate(-cx, -cy); }
     this.drawGlowSprite(ctx, this.getPlateSprite("slab", s.w, s.h, "boss"), cx, cy);
     if (boss.flash > 0) {
-      ctx.strokeStyle = PALETTE.rgba("text", clamp(boss.flash * 2, 0, 0.70));
+      const ga = ctx.globalAlpha;   // review R12: flash alpha through globalAlpha, one memoised colour string
+      ctx.globalAlpha = ga * clamp(boss.flash * 2, 0, 0.70);
+      ctx.strokeStyle = PALETTE.rgba("text", 1);
       ctx.lineWidth = 2;
       roundRect(ctx, s.x, s.y, s.w, s.h, SLAB.r);
       ctx.stroke();
+      ctx.globalAlpha = ga;
     }
 
     // left cell: name (Orbitron 13, tracked .2em, fit 184) + SEG k/N + PHASE p/n
@@ -1302,10 +1308,10 @@ Object.assign(Game.prototype, {
     if (boss) this.drawBossSlab(ctx, boss);                    // L10
     if (boss && typeof this.drawBossHazardMeter === "function") this.drawBossHazardMeter(ctx, this.bossHazardRect()); // L10 surge cell
     this.drawShip(ctx);                                        // L11
-    this.drawExplosionSprites(ctx);                            // L12
-    this.drawDyingPlates(ctx);
+    this.drawExplosionSprites(ctx);                            // L12 (smoke frames, dying plates, then the additive batch opens)
     this.drawParticles(ctx);
-    // rings / bolts / debris / muzzles are drawn by drawBullets (L7) and drawParticles (L12) in 75-fx-draw.js
+    // dying plates are drawn by drawExplosionSprites before its additive batch (review R13); rings / bolts / debris /
+    // muzzles by drawBullets (L7) and drawParticles (L12) in 75-fx-draw.js
     if (typeof this.drawFloaters === "function") this.drawFloaters(ctx); // L13 (D5)
     this.drawWorldOverlays(ctx);                               // L14
     ctx.restore();

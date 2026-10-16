@@ -238,7 +238,7 @@ Assets.prepare(key, {w, h, scale?})           // re-prepare a bitmap at a differ
 Assets.setRenderScale(s)                      // variant flip and re-prepare in the background
 Assets.levelKeys(i) / loadLevel(i) / prefetchLevel(i)
 Assets.pin(key) / unpin(key) / gc(keepKeys) / release(key)
-Assets.sheetScale('fx/explosions')            // 0.5 at x1, 1 at x2 (ExplosionSprite.sheetScale)
+Assets.sheetScale('fx/explosions')            // 0.5 at x1, 1 at x2 (ExplosionSprite.sheetScale fallback; draws derive it per frame)
 Assets.retryFailed()                          // re-request every errored key
 Assets.on('progress'|'ready'|'error', fn) / off(...)
 Assets.stats()                                // decodedPx, bootReason, resident keys, errors

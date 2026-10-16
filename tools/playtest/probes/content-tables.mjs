@@ -179,6 +179,14 @@ check("EXPLOSION_SETS large", eq(G("EXPLOSION_SETS.large.frames"), [15, 14, 12, 
 check("EXPLOSION_SETS keep legacy shape (frames/scale/frameTime)", G("['small','medium','large'].every(k => Array.isArray(EXPLOSION_SETS[k].frames) && typeof EXPLOSION_SETS[k].scale === 'number' && typeof EXPLOSION_SETS[k].frameTime === 'number')"));
 check("EXPLOSION_FRAMES indices intact (21)", G("EXPLOSION_FRAMES.length") === 21 && G("['small','medium','large'].every(k => EXPLOSION_SETS[k].frames.every(i => EXPLOSION_FRAMES[i] && ![10,18,20].includes(i)))"));
 check("FX_CAPS", eq(G("FX_CAPS"), { explosionsLarge: 4, explosionsTotal: 10, particles: 600, bullets: 24 }));
+// The synthetic manifest derives the half-sheet prepare and ExplosionSprite.scaleFor from EXPLOSION_SHEET, so it must be
+// the master's real pixel size (PNG IHDR) and every frame rect must fit inside it (review R1 follow-up).
+const sheet = G("EXPLOSION_SHEET");
+const png = fs.readFileSync(path.join(ROOT, sheet.src));
+const ihdr = { w: png.readUInt32BE(16), h: png.readUInt32BE(20) };
+check("EXPLOSION_SHEET width/height match the PNG master's IHDR", sheet.width === ihdr.w && sheet.height === ihdr.h, { sheet: [sheet.width, sheet.height], png: ihdr });
+check("every EXPLOSION_FRAMES rect fits inside EXPLOSION_SHEET", G("EXPLOSION_FRAMES.every(f => f.x >= 0 && f.y >= 0 && f.x + f.w <= EXPLOSION_SHEET.width && f.y + f.h <= EXPLOSION_SHEET.height)"),
+  G("EXPLOSION_FRAMES.filter(f => f.x + f.w > EXPLOSION_SHEET.width || f.y + f.h > EXPLOSION_SHEET.height)"));
 
 // ---- rank ----
 check("rankFor(99,60,1) === 'S'", G("rankFor(99,60,1)") === "S", G("rankFor(99,60,1)"));

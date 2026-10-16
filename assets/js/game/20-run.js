@@ -83,6 +83,8 @@ Object.assign(Game.prototype, {
     this.power = { spread: 0, pierce: 0, rapid: 0, multiplier: 0 };
     this.toastOnce.clear();
     this._accuracyTipPending = false;
+    if (this._spawnLog) this._spawnLog.length = 0;   // review R31: telemetry windows do not carry across runs
+    if (this._leakLog) this._leakLog.length = 0;
     this.run = this.save.run = this.newRunRecord(i, L);
     this.setRunMeta(this.run);
     this.startLevel(i, { fromMenu: true, fresh: true });

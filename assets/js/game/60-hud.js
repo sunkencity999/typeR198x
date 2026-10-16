@@ -431,18 +431,20 @@ Object.assign(Game.prototype, {
     return n;
   },
 
-  // TypeRDebug.stats(): trailing-window telemetry for the balance pass and the harness (B-15).
+  // TypeRDebug.stats(): trailing-window telemetry for the balance pass and the harness (B-15). A pure reader: the
+  // logs are trimmed where they grow (_noteSpawn / _noteLeak, 40-combat.js); the windows are re-applied here
+  // because the last entries can outlive them between pushes (review R31).
   debugStats() {
     const now = nowMs();
     const spawnLog = this._spawnLog || [];
     const leakLog = this._leakLog || [];
-    while (spawnLog.length && now - spawnLog[0].t > 10000) spawnLog.shift();
-    while (leakLog.length && now - leakLog[0] > 60000) leakLog.shift();
     let chars = 0;
-    for (const s of spawnLog) chars += s.n;
+    for (const s of spawnLog) if (now - s.t <= 10000) chars += s.n;
+    let leaks = 0;
+    for (const t of leakLog) if (now - t <= 60000) leaks++;
     return {
       incomingCps: Math.round((chars / 10) * 100) / 100,
-      leaksPerMin: leakLog.length,
+      leaksPerMin: leaks,
       deathsBySector: { ...(this.deathsBySector || {}) },
       liveChars: this.liveChars()
     };

@@ -272,7 +272,7 @@ Object.assign(Game.prototype, {
     const en = new Enemy({ text, x, y: ys[lane], speed: cfg.speed * MINION_SPEED_MUL, kind: "bossMinion", lane });
     this.enemies.push(en);
     this.lastMinionLane = lane;
-    this._spawnLog.push({ t: nowMs(), n: text.length });
+    this._noteSpawn(text.length);
     return en;
   },
 
@@ -398,10 +398,12 @@ Object.assign(Game.prototype, {
       ctx.arc(cx, r.y + 40, 16, 0, Math.PI * 2);
       ctx.stroke();
       if (k > 0) {
-        ctx.strokeStyle = feedbackColor("magenta", 0.45 + 0.25 * k);
+        ctx.globalAlpha = 0.45 + 0.25 * k;   // review R12: ladder colour + globalAlpha (no per-frame colour string)
+        ctx.strokeStyle = feedbackColor("magenta", 1);
         ctx.beginPath();
         ctx.arc(cx, r.y + 40, 16, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * k);
         ctx.stroke();
+        ctx.globalAlpha = 1;
       }
     } else {
       ctx.font = feedbackFont(10, 700);

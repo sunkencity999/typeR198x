@@ -87,16 +87,18 @@ function readPalette() {
     strict,
     names: Object.keys(rgb),
     rgba(name, alpha = 1) {
-      const key = name + "|" + alpha;
+      // review R12: clamp and quantise to 1/100 before keying so a continuously varying alpha (surge arc, flashes)
+      // cannot grow the memo without bound: at most names x 101 entries.
+      const a = Math.round(Math.max(0, Math.min(1, Number(alpha))) * 100) / 100;
+      const key = name + "|" + a;
       let out = memo.get(key);
       if (out) return out;
       const c = rgb[name];
       if (!c) {
         if (strict) throw new Error(`PALETTE: unknown colour "${name}"`);
         if (!warned.has(name)) { warned.add(name); if (typeof console !== "undefined") console.warn("PALETTE: unknown colour", name); }
-        return palette.rgba("magenta", alpha);
+        return palette.rgba("magenta", a);
       }
-      const a = Math.max(0, Math.min(1, Number(alpha)));
       out = `rgba(${c[0]},${c[1]},${c[2]},${a})`;
       memo.set(key, out);
       return out;
