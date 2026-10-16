@@ -129,15 +129,16 @@ P.check("Enter on the menu (body focused) starts / resumes", entered, `playing=$
 await P.g(() => window.game.stopToMenu(true));
 await sleep(200);
 
-// Briefing re-read: read-only modal, Back closes, focus returns.
+// Briefing re-read (C5 contract, E2: the duplicate screens binding is gone): the shell's read-only story, Launch
+// relabelled Close and focused, Back hidden; Close dismisses it, focus returns to #btnBriefing, storySeen untouched.
 await page.click("#btnBriefing");
 await sleep(300);
-const br = await P.g(() => ({ open: !document.getElementById("storyModal").classList.contains("hidden") && !document.getElementById("storyModal").classList.contains("is-dismissed"), launchHidden: document.getElementById("btnStoryLaunch").classList.contains("hidden"), focus: document.activeElement.id }));
-P.check("Re-read briefing opens the story read-only (Launch hidden, Back focused)", br.open && br.launchHidden && br.focus === "btnStoryBack", JSON.stringify(br));
-await page.click("#btnStoryBack");
+const br = await P.g(() => ({ open: !document.getElementById("storyModal").classList.contains("hidden") && !document.getElementById("storyModal").classList.contains("is-dismissed"), launch: document.getElementById("btnStoryLaunch").textContent.trim(), backHidden: document.getElementById("btnStoryBack").classList.contains("hidden"), focus: document.activeElement && document.activeElement.id }));
+P.check("Re-read briefing opens the story read-only (Launch relabelled Close + focused, Back hidden)", br.open && br.launch === "Close" && br.backHidden && br.focus === "btnStoryLaunch", JSON.stringify(br));
+await page.click("#btnStoryLaunch");
 await sleep(250);
-const br2 = await P.g(() => ({ closed: document.getElementById("storyModal").classList.contains("hidden") || document.getElementById("storyModal").classList.contains("is-dismissed"), launchHidden: document.getElementById("btnStoryLaunch").classList.contains("hidden"), focus: document.activeElement.id }));
-P.check("Back closes the briefing, Launch restored, focus back on #btnBriefing", br2.closed && !br2.launchHidden && br2.focus === "btnBriefing", JSON.stringify(br2));
+const br2 = await P.g(() => ({ closed: document.getElementById("storyModal").classList.contains("hidden") || document.getElementById("storyModal").classList.contains("is-dismissed"), mode: window.game.mode, focus: document.activeElement && document.activeElement.id }));
+P.check("Close dismisses the briefing, mode stays menu, focus back on #btnBriefing", br2.closed && br2.mode === "menu" && br2.focus === "btnBriefing", JSON.stringify(br2));
 
 P.check("no page errors", P.errors.pageErrors.length === 0, JSON.stringify(P.errors.pageErrors));
 

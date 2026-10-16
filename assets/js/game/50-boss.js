@@ -64,7 +64,7 @@ Object.assign(Game.prototype, {
     this.refreshBossUI({ full: true });
     this.sfx.bossSiren(3);
     this.sfx.setMusicState("boss");
-    if (typeof this.announce === "function") this.announce(`Boss: ${boss.name}. Type the highlighted word.`);
+    if (typeof this.announce === "function") this.announce(`Boss: ${boss.name}. Type the highlighted word; minions are typable too.`);
     this.saveRun(true);
     return boss;
   },

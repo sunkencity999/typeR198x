@@ -171,27 +171,6 @@ Object.assign(Game.prototype, {
     watchDpr();
   },
 
-  // Reduce-motion fallback until the shell's resolveMotion() (C6) exists: an explicit settings.reduceMotion
-  // true/false wins, null follows the OS query (CONTRACT section 0). Inert the moment resolveMotion is defined.
-  ensureMotionFlag() {
-    if (typeof this.resolveMotion === "function") return;
-    const pref = this.save && this.save.settings ? this.save.settings.reduceMotion : null;
-    let want;
-    if (pref === true || pref === false) want = pref;
-    else {
-      if (this._rmQuery === undefined) {
-        this._rmQuery = null;
-        try { if (typeof matchMedia === "function") this._rmQuery = matchMedia("(prefers-reduced-motion: reduce)"); } catch (e) { this._rmQuery = null; }
-      }
-      want = !!(this._rmQuery && this._rmQuery.matches);
-    }
-    if (this.reduceMotion !== want) {
-      this.reduceMotion = want;
-      this._motionFallback = true;
-      try { document.documentElement.classList.toggle("reduce-motion", want); } catch (e) { /* no DOM */ }
-    }
-  },
-
   // Motion profile from the shell (C6) when it exists; the contract's reduce-motion values otherwise.
   motionProfile() {
     if (typeof this.motion === "function") {
@@ -781,16 +760,32 @@ Object.assign(Game.prototype, {
     return en.x < dangerX ? "danger" : "idle";
   },
 
-  // Cyan warp streak trailing a freshly spawned plate (additive, fades over SPAWN_STRETCH_S).
+  // Cyan warp streaks trailing freshly spawned plates: every streak of the frame in ONE additive batch (two
+  // composite sets however many plates spawned together; the E2 budget run spawns 14 at once). Fades over
+  // SPAWN_STRETCH_S; none under reduce-motion (the plate fades in instead).
+  drawWarpStreaks(ctx, list) {
+    if (this.reduceMotion) return;
+    let open = false;
+    for (const en of list) {
+      if (!(en.age < SPAWN_STRETCH_S) || en.dying || en.alive === false) continue;
+      if (!open) {
+        open = true;
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        ctx.lineCap = "round";
+      }
+      this.drawWarpStreak(ctx, en.x, en.y, en.plateW, en.plateH, en.age);
+    }
+    if (open) ctx.restore();
+  },
+
+  // One streak; the caller owns the additive batch (drawWarpStreaks).
   drawWarpStreak(ctx, x, y, w, h, age) {
     const k = clamp(age / SPAWN_STRETCH_S, 0, 1);
     if (k >= 1) return;
     const len = 140 * (1 - k * 0.6);
     const sx = x + w / 2 + 8;
-    const prevComp = ctx.globalCompositeOperation;
     const prevAlpha = ctx.globalAlpha;
-    ctx.globalCompositeOperation = "lighter";
-    ctx.lineCap = "round";
     ctx.globalAlpha = prevAlpha * 0.7 * (1 - k);
     ctx.strokeStyle = PALETTE.rgba("cyan", 0.70);
     ctx.lineWidth = 2;
@@ -799,7 +794,6 @@ Object.assign(Game.prototype, {
     ctx.strokeStyle = PALETTE.rgba("text", 0.92);
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(sx, y); ctx.lineTo(sx + len * 0.6, y); ctx.stroke();
-    ctx.globalCompositeOperation = prevComp;
     ctx.globalAlpha = prevAlpha;
   },
 
@@ -834,7 +828,6 @@ Object.assign(Game.prototype, {
 
     ctx.save();
     if (alpha < 1) ctx.globalAlpha *= alpha;
-    if (!rm && en.age < SPAWN_STRETCH_S) this.drawWarpStreak(ctx, x, y, w, h, en.age);
     if (sx !== 1 || sy !== 1) { ctx.translate(x, y); ctx.scale(sx, sy); ctx.translate(-x, -y); }
     this.drawDimBand(ctx, x, y, w, h);
     this.drawGlyphPlate(ctx, x, y, w, h, { state, shape, flash: en.flash, typo: en.typoT });
@@ -923,6 +916,7 @@ Object.assign(Game.prototype, {
     const list = this.enemies;
     if (!list.length) return;
     const sorted = list.slice().sort((a, b) => b.x - a.x);
+    this.drawWarpStreaks(ctx, sorted);   // behind every plate, one additive batch
     let lockedEn = null;
     for (const en of sorted) {
       if (en.locked && !lockedEn) { lockedEn = en; continue; }
@@ -1275,7 +1269,6 @@ Object.assign(Game.prototype, {
   render(dt) {
     const ctx = this.ctx;
     const s = this.renderScale || 1;
-    this.ensureMotionFlag();
     // Shake transform: D1 (80-fx.js) supplies shakeOffset() -> {x, y, rot}; until then the A2 integer random offset.
     const sh = (typeof this.shakeOffset === "function") ? this.shakeOffset() : null;
     const amp = 18 * this.trauma * this.trauma;

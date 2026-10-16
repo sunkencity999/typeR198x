@@ -444,13 +444,14 @@
                 <li>Type the first letter of a target to lock on, then keep typing to finish it. Enemies win over powerups when they share a first letter.</li>
                 <li><kbd>Space</kbd> or <kbd>Backspace</kbd> releases your lock. Three misses on a locked target also drop it. Wrong keys never cost points, but a hard miss breaks your combo.</li>
                 <li><kbd>Enter</kbd> advances screens. <kbd>Esc</kbd> pauses or backs out. <kbd>Alt</kbd>+<kbd>Enter</kbd> (<kbd>Cmd</kbd>+<kbd>Enter</kbd> on a Mac) or <kbd>F11</kbd> toggles fullscreen. <kbd>M</kbd> mutes on the title and pause screens. <kbd>?</kbd> or <kbd>F1</kbd> opens this manual.</li>
+                <li>Keys are ignored (never counted) during the sector card and a boss intro. Once you have beaten a boss before, any key skips its intro after one second; after a boss falls, any key, <kbd>Space</kbd>, <kbd>Enter</kbd> or a tap skips the finale after two seconds.</li>
                 <li>Keep typing through hit-stop and slow motion; input is never dropped while the playfield is live.</li>
               </ul>
             </details>
             <details class="helpSection" open>
               <summary>Scoring</summary>
               <ul>
-                <li>Letters pay 50 pts, words 60 + 12 per letter, and a word typed without a miss pays ×1.2. Minions pay 40, pickups 100, boss letters 10 and a boss segment 30 per letter.</li>
+                <li>Letters pay 50 pts, words 60 + 12 per letter, and a word typed without a miss pays ×1.2. Minions pay 40, pickups 100, boss letters 10, a boss segment 30 per letter and a boss phase 300 × sector. Kills made by SPREAD, PIERCE or RAPID pay half.</li>
                 <li>Combo tiers: ×2 at 10, ×3 at 25, ×4 at 50, ×5 at 100. MULTI adds two tiers (cap ×7). A hard miss or real hull damage resets the combo.</li>
                 <li>Sector clear pays 1,500 + 350 × sector, plus bonuses for time under par, accuracy (90 / 95 / 98%), perfect waves, a flawless boss and countered surges. Retrying a sector scales those bonuses down by 25% per retry.</li>
                 <li>Your rank (S, A, B, C, D) weighs accuracy 50%, speed 30% and hull 20%.</li>
@@ -459,8 +460,8 @@
             <details class="helpSection" open>
               <summary>Powerups</summary>
               <ul>
-                <li>Six capsules drift in. Type a capsule’s label to grab it; enemies win ties on the first letter.</li>
-                <li><strong>SHIELD</strong> (9 s) absorbs hits fully; each hit costs 3 s of shield.</li>
+                <li>Six capsules drift in, and kills drop them too (those home toward you). Type a capsule’s label to grab it; enemies win ties on the first letter. Shield and heal capsules turn up more often while your hull is low.</li>
+                <li><strong>SHIELD</strong> (9 s) absorbs hits fully; each hit costs 3 s of shield, and shield time stacks up to 15 s.</li>
                 <li><strong>MULTI</strong> (12 s) adds two combo tiers.</li>
                 <li><strong>SPREAD</strong> (9 s): finishing a word also destroys enemies within 160 px.</li>
                 <li><strong>PIERCE</strong> (9 s): each correct key also damages the enemy behind your target in the same lane.</li>
@@ -473,8 +474,8 @@
               <ul>
                 <li>Each sector ends with a boss made of word segments in three phases (four for the finale). Type the highlighted segment; the lock is automatic.</li>
                 <li>Minions are typable. Their letters count for combo and score, not for wave quotas. A minion that reaches you costs 10 hull.</li>
-                <li>Signal Surge: the boss charges a visible attack. Finish the current segment before the charge completes to counter it for a bonus; otherwise it hits for 8 + 2 × sector.</li>
-                <li>Clearing a phase grants 3 s of shield. Once the finale starts, <kbd>Enter</kbd> skips the rest after the first burst.</li>
+                <li>Signal Surge (from Sector 3): the boss charges a visible attack. Finish the current segment before the charge completes to counter it for a bonus; otherwise it hits for 8 + 2 × sector.</li>
+                <li>Clearing a phase grants 3 s of shield and a boss checkpoint. Once the finale starts, any key or a tap skips the rest after two seconds.</li>
               </ul>
             </details>
             <details class="helpSection" open>

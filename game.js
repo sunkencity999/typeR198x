@@ -12,17 +12,20 @@
 //   assets/js/core/40-save.js        LS_KEY, defaultSave/loadSave/storeSave/migrateSave, checkpoint + resume helpers
 //   assets/js/core/50-assets.js      Assets IIFE: manifest-driven image loader (window.TypeRAssets)
 //   assets/js/core/60-entities.js    Enemy, Powerup, Bullet, ExplosionSprite, Particle, Boss
-//   assets/js/core/70-canvas.js      roundRect, bracketRect, drawSplitText, fitText, drawTracked
+//   assets/js/core/70-canvas.js      roundRect, bracketRect, capsulePath, drawSplitText, fitText, drawTracked, typewriterText
 //   game.js (this file)              ASSET_VERSION/withAssetVersion + class Game { constructor, loop }
-//   assets/js/game/05-boot.js        Game.prototype: boot sequence, loading overlay, per-sector asset gate, prefetch
-//   assets/js/game/10-ui.js          Game.prototype: bindUI, menus, modals, settings, toasts, ending dialogue
-//   assets/js/game/20-run.js         Game.prototype: run/level lifecycle, checkpoints, end screens, saveRun
-//   assets/js/game/30-input.js       Game.prototype: keydown routing, handleTyped, onCorrectKey/onWrongKey
-//   assets/js/game/40-combat.js      Game.prototype: spawning, combat resolution, update(dt)
-//   assets/js/game/50-boss.js        Game.prototype: boss fight logic (intro/finale)
-//   assets/js/game/60-hud.js         Game.prototype: updateHUD, getAccuracyPct
-//   assets/js/game/70-render.js      Game.prototype: resizeCanvas, render(dt) and all draw* methods
-//   assets/js/game/80-fx.js          Game.prototype: lasers, sparks, explosions, trauma/effects clock
+//   assets/js/game/05-boot.js        Game.prototype: boot sequence, loading overlay, per-sector asset gate, prefetch, warmSector
+//   assets/js/game/10-ui.js          Game.prototype: bindUI, setMode state machine, focus/announcer, modals/confirm, settings, toasts, top bar, mobile input
+//   assets/js/game/15-screens.js     Game.prototype: sector grid, resume card, records/help modals, results cards, tutorial toasts, CRT overlay, typewriter
+//   assets/js/game/20-run.js         Game.prototype: run/level lifecycle, checkpoints, saves, level complete / game over / victory, ending dialogue
+//   assets/js/game/30-input.js       Game.prototype: keydown routing, handleTyped, lock rules, combo/multiplier, addScore
+//   assets/js/game/40-combat.js      Game.prototype: spawning, waves, kills, powerups, damage, update(dt)
+//   assets/js/game/45-feedback.js    Game.prototype: banner system (bossIntro/bossClear/sector/wave/callout), floaters
+//   assets/js/game/50-boss.js        Game.prototype: boss fight (phases, minions, Signal Surge, intro/outro, finale tally)
+//   assets/js/game/60-hud.js         Game.prototype: DOM HUD (diffed writes on a 5 Hz commit cadence), chips, boss bar, live WPM
+//   assets/js/game/70-render.js      Game.prototype: resizeCanvas, plates/capsules/rails, boss art + slab, parallax, stars, render() layer order
+//   assets/js/game/75-fx-draw.js     Game.prototype: ship, beams, rings/bolts/debris, particles, overlays, vignette, active-target redraw
+//   assets/js/game/80-fx.js          Game.prototype: trauma camera, hit-stop/slow-mo, flash channels, onKeyFx/onKillFx, effect lists, stepAmbient
 //   assets/js/game/85-attract.js     Game.prototype: attract mode (ghost typist behind the title, PERF-10 idle drift)
 //   assets/js/99-boot.js             const game = new Game(); window.game = game; window.TypeRDebug
 //
@@ -196,11 +199,9 @@ class Game {
 
     this.lock = null; // { kind: "enemy"|"powerup"|"boss", ref: objectRef }
 
-    // Effects clock (A2): trauma drives the camera; shake mirrors its amplitude for legacy readers.
+    // Effects clock (A2): trauma drives the camera; shake mirrors its amplitude in px (pause / reduce-motion zero it).
     this.trauma = 0;
     this.shake = 0;
-    this.flash = 0;
-    this.damagePulse = 0;
     this.hitStop = 0;
     this.timeScale = 1;
 
@@ -221,7 +222,6 @@ class Game {
     this.spawnAcc = 0;
     this.powerAcc = 0;
     this.minionAcc = 0;
-    this.hazardAcc = 0;
 
     // debug telemetry (TypeRDebug.stats)
     this._spawnLog = [];

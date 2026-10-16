@@ -2,11 +2,10 @@
 // CRT overlay layers and the typewriter. Methods are mixed into Game.prototype; load order is defined in index.html
 // (right after 10-ui.js, before 20-run.js).
 //
-// Every cross-track hook is feature-detected (Phase 3 lead notes, section 3): the shell's openModal / closeModal /
-// confirm / announce / focusPrimary / openSettingsModal, the loop's tickUI(raw) call, refreshMenu's
-// renderMenuScreens() call and bindUI's initScreens() call. Each has a local fallback, so this file runs on the base
-// alone: initScreens() self-boots on DOMContentLoaded, tickUI() runs from its own rAF until the loop calls it, and
-// renderMenuScreens() is called from the run-lifecycle paths (20-run.js) until refreshMenu does.
+// Shell hooks (openModal / closeModal / confirm / announce / focusPrimary / openSettingsModal, the loop's tickUI(raw),
+// refreshMenu's renderMenuScreens(), bindUI's initScreens()) are called through the screens* wrappers below, which
+// null-guard the shell so a probe page without it still runs. The keydown fallbacks that duplicated the shell's
+// router (menu Enter, ? / F1, ending keys) are gone: 30-input.js owns every key.
 
 // Marker for self-driven calls. A call WITHOUT it comes from the other side of the hook contract, which switches the
 // fallback off for good (the loop's tickUI, refreshMenu's renderMenuScreens).
@@ -152,11 +151,17 @@ Object.assign(Game.prototype, {
     });
   },
 
-  // openModal(el, {returnFocusTo, initialFocus, onClose}) / closeModal(el): the shell's when present.
+  // openModal(el, {returnFocusTo, initialFocus, onClose}) / closeModal(el): the shell's when present. initialFocus /
+  // returnFocusTo may be selectors here; the shell wants elements (a string reached its .hasAttribute and threw,
+  // leaving the modal on the stack and every key swallowed: E2).
   screensOpenModal(el, opts = {}) {
     if (!el) return false;
-    if (typeof this.openModal === "function") { this.openModal(el, opts); return true; }
-    return this.screensOpenModalFallback(el, opts);
+    const o = { ...opts };
+    if (typeof o.initialFocus === "string") o.initialFocus = el.querySelector(o.initialFocus) || null;
+    if (typeof o.returnFocusTo === "string") o.returnFocusTo = document.querySelector(o.returnFocusTo) || null;
+    if (!o.primary && o.initialFocus) o.primary = o.initialFocus;
+    if (typeof this.openModal === "function") { this.openModal(el, o); return true; }
+    return this.screensOpenModalFallback(el, o);
   },
 
   screensCloseModal(el) {
@@ -261,7 +266,8 @@ Object.assign(Game.prototype, {
 // ------------------------- Title cabinet (C5 / VIS-11 / UX-02 / UX-03 / SYS-12) -------------------------
 // renderSectorGrid(): ten .sectorCard tiles from save.lastUnlockedLevel / save.sectorBests with roving tabindex;
 // renderResumeCard(): "Resume Sector N" for a live run, "Replay Sector N" for a saved death; renderMenuStats();
-// records modal (top-10 with the B-12 tag column); briefing re-read; Start / Reset confirm guards.
+// records modal (top-10 with the B-12 tag column); Start / Reset confirm guards. #btnBriefing is the shell's
+// (showStoryModal({launch:false}) in bindUI relabels Launch to Close and hides Back).
 const SECTOR_TAG = (h) => (h.levelReached === 11 ? "LEGEND" : (h.startLevel > 1 ? `FROM S${h.startLevel}` : "FULL"));
 
 function screensCompact(n) {
@@ -283,7 +289,8 @@ Object.assign(Game.prototype, {
     on(E.btnRecordsClose, "click", () => this.closeRecords());
     on(E.btnHelp, "click", () => { if (typeof this.openHelp === "function") this.openHelp(); });
     on(E.btnHelpClose, "click", () => { if (typeof this.closeHelp === "function") this.closeHelp(); });
-    on(E.btnBriefing, "click", () => this.openBriefing());
+    // Re-read briefing (C5): the shell's read-only story (Launch relabelled Close, Back hidden, no storySeen write).
+    on(E.btnBriefing, "click", () => { if (typeof this.showStoryModal === "function") this.showStoryModal({ launch: false }); });
     on(E.btnMenuSettings, "click", () => this.openSettingsFromMenu());
     on(E.sectorGrid, "click", (e) => {
       const card = e.target && e.target.closest ? e.target.closest(".sectorCard") : null;
@@ -308,21 +315,6 @@ Object.assign(Game.prototype, {
       okLabel: "Erase everything", cancelLabel: "Keep my save", danger: true
     }), () => this.renderMenuScreens(SCREENS_SELF));
 
-    // Enter on the menu with nothing focused starts (resume when the card shows). Fallback until the shell's router lands.
-    window.addEventListener("keydown", (e) => {
-      if (typeof this.primaryFor === "function") return;
-      if (this.mode !== "menu" || (e.key !== "Enter" && e.key !== "NumpadEnter") || e.repeat) return;
-      if (Array.isArray(this.modalStack) && this.modalStack.length) return;
-      const t = e.target;
-      const tag = (t && t.tagName) ? t.tagName.toLowerCase() : "";
-      if (tag === "button" || tag === "a" || tag === "select" || tag === "textarea") return;
-      if (tag === "input" && t.id !== "playerName") return;
-      const card = E.resumeCard;
-      const primary = (card && !card.classList.contains("hidden") && E.btnContinue && !E.btnContinue.disabled) ? E.btnContinue : E.btnStart;
-      if (!primary) return;
-      e.preventDefault();
-      primary.click();
-    });
   },
 
   guardClick(btn, needsConfirm, makeOpts, afterPass) {
@@ -568,29 +560,6 @@ Object.assign(Game.prototype, {
     this.screensCloseModal(E.recordsModal);
   },
 
-  // Read-only briefing: Launch hidden, Back closes; the shell's showStoryModal({launch}) keeps the launch path.
-  openBriefing() {
-    const E = this.screenEls || {};
-    const modal = E.storyModal;
-    if (!modal) return;
-    const launch = document.getElementById("btnStoryLaunch");
-    const back = document.getElementById("btnStoryBack");
-    const hadLaunch = launch && !launch.classList.contains("hidden");
-    if (launch) launch.classList.add("hidden");
-    const onBack = () => this.screensCloseModal(modal);
-    if (back) back.addEventListener("click", onBack);
-    modal.dataset.readonly = "1";
-    this.screensOpenModal(modal, {
-      returnFocusTo: E.btnBriefing,
-      initialFocus: back || "#btnStoryBack",
-      onClose: () => {
-        delete modal.dataset.readonly;
-        if (launch && hadLaunch) launch.classList.remove("hidden");
-        if (back) back.removeEventListener("click", onBack);
-      }
-    });
-  },
-
   openSettingsFromMenu() {
     if (typeof this.openSettingsModal === "function") { this.openSettingsModal(); return; }
     const btn = document.getElementById("btnSettings");
@@ -616,18 +585,7 @@ const TUTORIAL_KEY = "tut";
 
 Object.assign(Game.prototype, {
   initOnboarding() {
-    this._tut = { shown: {}, prevLock: null, prevCorrect: null, prevMisses: null, prevKills: null, prevMode: null, watchPowerup: null };
-    // '?' / F1 open the manual from the title and pause screens (fallback until the shell routes it in onKeyDown).
-    window.addEventListener("keydown", (e) => {
-      if ((e.key !== "?" && e.key !== "F1") || e.repeat) return;
-      if (this.mode !== "menu" && this.mode !== "paused") return;
-      if (Array.isArray(this.modalStack) && this.modalStack.length) return;
-      const t = e.target;
-      const tag = (t && t.tagName) ? t.tagName.toLowerCase() : "";
-      if (tag === "input" || tag === "textarea" || tag === "select" || (t && t.isContentEditable)) return;
-      e.preventDefault();
-      this.openHelp();
-    });
+    this._tut = { shown: {}, prevLock: null, prevCorrect: null, prevMisses: null, prevKills: null, prevMode: null, watchPowerup: null, visible: false };
   },
 
   tutorialEnabled() {
@@ -705,12 +663,18 @@ Object.assign(Game.prototype, {
       T.watchPowerup = null;
     }
 
-    // Boss intro (the whole ceremony, not only the locked part) and the finale: no tip appears and one already on
-    // screen goes away; the events of those frames are consumed below, so nothing is queued for afterwards.
-    const bossGate = !!this.bossIntro || !!this.bossClear;
-    if (bossGate) this.dismissTutorialToast();
-    const gated = !!this.levelIntro || bossGate;
-    if (this.tutorialEnabled() && !gated) {
+    // Boss intro (the whole ceremony, not only the locked part) and the finale: no event tip appears and one already
+    // on screen goes away when the intro locks or the finale starts; the events of those frames are consumed below,
+    // so nothing is queued for afterwards. The boss tip itself shows the moment the intro unlocks.
+    const introLocked = !!(this.bossIntro && this.bossIntro.locked);
+    if (introLocked || this.bossClear) this.dismissTutorialToast();
+    const gated = !!this.levelIntro || !!this.bossIntro || !!this.bossClear;
+    const enabled = this.tutorialEnabled();
+    if (enabled && !seen.boss && !T.shown.boss && this.inBoss && this.boss && !introLocked && !this.bossClear) {
+      this.tutorialToast("boss", TUTORIAL_TIPS.boss.text, TUTORIAL_TIPS.boss.ms);
+      this.markTutorial("boss");
+    }
+    if (enabled && !gated) {
       const levelT = this.levelT || 0;
       if (!seen.lock && !T.shown.lock && !lock && this.levelIndex === 0 && levelT >= 1 && this.hasEnemyOnScreen()) {
         this.tutorialToast("lock", TUTORIAL_TIPS.lock.text, TUTORIAL_TIPS.lock.ms);
@@ -725,10 +689,6 @@ Object.assign(Game.prototype, {
           this.tutorialToast("powerup", TUTORIAL_TIPS.powerup.text(p.label), TUTORIAL_TIPS.powerup.ms);
           T.watchPowerup = p;
         }
-      }
-      if (!seen.boss && !T.shown.boss && this.inBoss && this.boss) {
-        this.tutorialToast("boss", TUTORIAL_TIPS.boss.text, TUTORIAL_TIPS.boss.ms);
-        this.markTutorial("boss");
       }
       if (!seen.release && !T.shown.release && lost) {
         this.tutorialToast("release", TUTORIAL_TIPS.release.text, TUTORIAL_TIPS.release.ms);
@@ -954,8 +914,8 @@ Object.assign(Game.prototype, {
   },
 
   // ------------------------- Ending controls (victory) -------------------------
-  // #btnEndingSkip and a click on the transmission window are ours; #btnEndingNext stays with the shell (bindUI).
-  // Until the shell's key router (primaryFor) lands, Enter / Space advance and Escape skips here.
+  // #btnEndingSkip and a click on the transmission window are ours; #btnEndingNext and the keys (Enter advances,
+  // Escape skips) are the shell's (bindUI / onKeyDown).
   initEndingControls() {
     const E = this.screenEls || {};
     if (E.btnEndingSkip && !E.btnEndingSkip._screensBound) {
@@ -964,24 +924,6 @@ Object.assign(Game.prototype, {
     }
     const win = document.querySelector("#screenVictory .dialogueWindow");
     if (win) win.addEventListener("click", () => { if (this.mode === "victory") this.advanceEndingDialogue(); });
-    window.addEventListener("keydown", (e) => {
-      if (typeof this.primaryFor === "function") return;
-      if (this.mode !== "victory") return;
-      if (Array.isArray(this.modalStack) && this.modalStack.length) return;
-      const t = e.target;
-      const tag = (t && t.tagName) ? t.tagName.toLowerCase() : "";
-      const onControl = tag === "button" || tag === "input" || tag === "select" || tag === "textarea" || tag === "a";
-      if (e.key === "Escape") {
-        e.preventDefault();
-        if (!this.endingDone) this.skipEndingDialogue();
-        else this.stopToMenu(true);
-        return;
-      }
-      if ((e.key === "Enter" || e.key === "NumpadEnter" || e.key === " ") && !onControl) {
-        e.preventDefault();
-        this.advanceEndingDialogue();
-      }
-    });
   },
 });
 

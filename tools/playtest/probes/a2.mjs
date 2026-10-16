@@ -63,7 +63,7 @@ const fresh = await P.g(() => { const g = window.game; return { shake: g.shake, 
 P.check("Try Again starts with shake===0 && bossIntro===null", fresh.shake === 0 && fresh.bossIntro === null && fresh.trauma === 0, fresh);
 
 // --- victory path (harness shape) ---
-await P.g(() => { const g = window.game; g.startNewRun(); g.startLevel(9, true); });
+await P.g(() => { const g = window.game; g.startNewRun(); g.startLevel(9, { fromMenu: true, fresh: true }); });
 await sleep(500);
 await P.forceBoss();
 await sleep(2800);

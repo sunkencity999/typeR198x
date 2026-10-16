@@ -157,16 +157,12 @@ Object.assign(Game.prototype, {
     }
     this.timeScale = scale;
 
-    // flash channels and ship timers: while 40-combat.js still decays these inside update() (see HANDOFF) this
-    // clock takes over only outside play so nothing decays twice; once those lines are gone it owns every mode
-    const own = this.mode !== "playing" || !CAMERA_HOOKS.legacyDecay;
-    if (own) {
-      this.typoFlash = Math.max(0, this.typoFlash - dt * fxNum(FXM.typoFlashDecay, 3));
-      this.damageFlash = Math.max(0, this.damageFlash - dt * fxNum(FXM.damageFlashDecay, 1.8));
-      this.whiteFlash = Math.max(0, this.whiteFlash - dt * fxNum(FXM.whiteFlashDecay, 2));
-      p.hitT = Math.max(0, p.hitT - dt);
-      p.shieldFlash = Math.max(0, p.shieldFlash - dt * 3);
-    }
+    // flash channels and ship timers decay here in every mode (40-combat.js only ticks invulnT)
+    this.typoFlash = Math.max(0, this.typoFlash - dt * fxNum(FXM.typoFlashDecay, 3));
+    this.damageFlash = Math.max(0, this.damageFlash - dt * fxNum(FXM.damageFlashDecay, 1.8));
+    this.whiteFlash = Math.max(0, this.whiteFlash - dt * fxNum(FXM.whiteFlashDecay, 2));
+    p.hitT = Math.max(0, p.hitT - dt);
+    p.shieldFlash = Math.max(0, p.shieldFlash - dt * 3);
     this.introPulse = Math.max(0, this.introPulse - dt * fxNum(FXM.introPulseDecay, 1.2));
     this.typoEdge = Math.max(0, this.typoEdge - dt);
     p.recoil = Math.max(0, p.recoil - dt * fxNum(FXM.recoilDecay, 6));
@@ -181,10 +177,6 @@ Object.assign(Game.prototype, {
     // paused and Game Over hold the world (update() is not called either): rings, bolts, debris stay put
     if (this.mode !== "paused" && this.mode !== "gameOver") this.tickFxLists(dt);
     if (this.mode === "playing" && typeof this.emitExhaust === "function") this.emitExhaust(dt);
-
-    // legacy channels still written by 30-input.js / 40-combat.js; nothing draws them any more
-    this.flash = Math.max(0, (this.flash || 0) - dt * 3);
-    this.damagePulse = Math.max(0, (this.damagePulse || 0) - dt * 1.8);
   },
 
   // Rising edges of fields other files write (typoFlash, shieldFlash, bossIntro, boss.segmentIndex, bossClear)
@@ -425,8 +417,6 @@ Object.assign(Game.prototype, {
     this.ensureFx();
     this.trauma = 0;
     this.shake = 0;
-    this.flash = 0;
-    this.damagePulse = 0;
     this.hitStop = 0;
     this.timeScale = 1;
     this.slowMo = null;
@@ -599,60 +589,3 @@ Object.assign(Game.prototype, {
     return "medium";
   },
 });
-
-// ----------------------------- Cross-track hooks (fallbacks) -----------------------------
-// The input / combat / boss files call onKeyFx and onKillFx and write kick 14 / hitT .12 once their owners apply
-// the HANDOFF lines. Until then these wraps supply the same calls; each steps aside as soon as the owner's source
-// contains the hook, so nothing fires twice after the merge. CAMERA_HOOKS records what is active (probes, report).
-const CAMERA_HOOKS = { keyFx: false, bossKeyFx: false, killFx: false, damageFx: false, legacyDecay: false };
-(function installCameraHooks(proto) {
-  const src = (fn) => (typeof fn === "function" ? Function.prototype.toString.call(fn) : "");
-  if (typeof proto.onCorrectKey === "function" && !/onKeyFx/.test(src(proto.onCorrectKey))) {
-    const orig = proto.onCorrectKey;
-    proto.onCorrectKey = function (ref) {
-      const ch = ref ? (typeof ref.nextChar === "function" ? ref.nextChar() : ref.nextChar) : null;
-      const out = orig.call(this, ref);
-      if (typeof this.onKeyFx === "function") this.onKeyFx(ref, ch);
-      return out;
-    };
-    CAMERA_HOOKS.keyFx = true;
-  }
-  if (typeof proto.onBossChar === "function" && !/onKeyFx/.test(src(proto.onBossChar))) {
-    const orig = proto.onBossChar;
-    proto.onBossChar = function () {
-      const boss = this.boss;
-      const ch = boss ? boss.nextChar : null;
-      const out = orig.apply(this, arguments);
-      if (boss && typeof this.onKeyFx === "function") this.onKeyFx(boss, ch);
-      return out;
-    };
-    CAMERA_HOOKS.bossKeyFx = true;
-  }
-  if (typeof proto.killEnemy === "function" && !/onKillFx/.test(src(proto.killEnemy))) {
-    const orig = proto.killEnemy;
-    proto.killEnemy = function (en, opts) {
-      const was = !!(en && en.alive);
-      const x = en ? en.x : 0;
-      const y = en ? en.y : 0;
-      const out = orig.call(this, en, opts);
-      if (was && en && !en.alive && typeof this.onKillFx === "function") this.onKillFx(en, x, y);
-      return out;
-    };
-    CAMERA_HOOKS.killFx = true;
-  }
-  if (typeof proto.takeDamage === "function" && !/kick = 14|kickPx/.test(src(proto.takeDamage))) {
-    const orig = proto.takeDamage;
-    proto.takeDamage = function () {
-      const out = orig.apply(this, arguments);
-      // not on the killing blow: onGameOver() has reset the ship and the Game Over backdrop must hold still
-      if (out > 0 && this.player && this.mode === "playing") {
-        this.player.kick = fxNum(FXM.kickPx, 14);
-        this.player.hitT = fxNum(FXM.hitT, 0.12);
-      }
-      return out;
-    };
-    CAMERA_HOOKS.damageFx = true;
-  }
-  CAMERA_HOOKS.legacyDecay = /damageFlash/.test(src(proto.tickPowerTimers) + src(proto.update));
-})(Game.prototype);
-Game.CAMERA_HOOKS = CAMERA_HOOKS;
