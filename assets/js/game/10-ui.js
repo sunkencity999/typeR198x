@@ -57,12 +57,43 @@ Object.assign(Game.prototype, {
     }
   },
 
+  // Game Over gains #btnRetryBoss and #retryNote when index.html lacks them (see HANDOFF.md); the retry
+  // buttons carry the checkpoint copy.
+  ensureGameOverControls() {
+    const over = this.ui.gameOver;
+    if (!over) return;
+    if (this.btnTryAgain) this.btnTryAgain.textContent = "Retry sector";
+    if (this.btnRestart) this.btnRestart.textContent = "Restart sector";
+    if (!this.btnRetryBoss) {
+      const b = document.createElement("button");
+      b.id = "btnRetryBoss";
+      b.type = "button";
+      b.className = "btn-arcade hidden";
+      b.textContent = "Retry boss";
+      if (this.btnTryAgain && this.btnTryAgain.parentElement) this.btnTryAgain.insertAdjacentElement("afterend", b);
+      else over.appendChild(b);
+      this.btnRetryBoss = b;
+    }
+    if (!document.getElementById("retryNote")) {
+      const p = document.createElement("p");
+      p.id = "retryNote";
+      p.className = "small";
+      p.textContent = "Score returns to sector start";
+      const host = (this.btnTryAgain && this.btnTryAgain.parentElement && this.btnTryAgain.parentElement.parentElement) || over;
+      host.appendChild(p);
+    }
+  },
+
   bindUI() {
+    this.ensureGameOverControls();
+
     this.btnStart.addEventListener("click", async () => {
       await this.ensureAudio();
       const name = (this.ui.playerName.value || "").trim();
       if (name) this.save.playerName = name;
+      this.commitHighScore(); // the abandoned run's score counts (F009)
       this.save.run = null;
+      this.run = null;
       this.storeAndRefresh();
       this.handleLaunchRequest();
     });
@@ -79,7 +110,8 @@ Object.assign(Game.prototype, {
       }
       const resumeIndex = getResumeLevelIndex(this.save);
       if (resumeIndex !== null) {
-        this.save.run = buildResumeRun(resumeIndex, this.player.maxHp, this.getSelectedShipId());
+        // HP from the level curve, never the menu-time player object (F004)
+        this.save.run = buildResumeRun(resumeIndex, getHpBonusForLevel(resumeIndex + 1), this.getSelectedShipId());
         storeSave(this.save);
         this.continueRun();
         this.focusGameCanvas();
@@ -90,6 +122,9 @@ Object.assign(Game.prototype, {
 
     this.btnResetSave.addEventListener("click", () => {
       this.save = defaultSave();
+      this.run = null;
+      this.runMeta = null;
+      this._hsCommitted = null;
       storeSave(this.save);
       this.applySettings();
       this.refreshMenu();
@@ -108,10 +143,14 @@ Object.assign(Game.prototype, {
     this.btnBackToMenu2.addEventListener("click", () => this.stopToMenu(true));
     this.btnBackToMenu3.addEventListener("click", () => this.stopToMenu(true));
     this.btnTryAgain.addEventListener("click", () => { this.restartLevel(); this.focusGameCanvas(); });
+    if (this.btnRetryBoss) this.btnRetryBoss.addEventListener("click", () => { this.retryBoss(); this.focusGameCanvas(); });
     this.btnNewRun.addEventListener("click", () => { this.startNewRun(); this.focusGameCanvas(); });
 
     if (this.ui.endingNext) {
       this.ui.endingNext.addEventListener("click", () => this.advanceEndingDialogue());
+    }
+    if (this.ui.endingSkip) {
+      this.ui.endingSkip.addEventListener("click", () => this.skipEndingDialogue());
     }
 
     if (this.keyboardHintBtn) {
@@ -137,53 +176,158 @@ Object.assign(Game.prototype, {
       });
     });
 
-    // Keyboard
-    window.addEventListener("keydown", async (e) => {
-      if (e.repeat) return;
+    // Keyboard (routing order lives in 30-input.js onKeyDown)
+    window.addEventListener("keydown", (e) => this.onKeyDown(e));
 
-      const target = e.target;
-      const tag = (target && target.tagName) ? target.tagName.toLowerCase() : "";
-      const isEditable =
-        tag === "input" ||
-        tag === "textarea" ||
-        (target && target.isContentEditable) ||
-        (document.activeElement && document.activeElement.isContentEditable);
-      if (isEditable) return;
+    this.bindLifecycle();
+  },
 
-      if (e.key === "Escape") {
-        e.preventDefault();
-        if (this.mode === "playing" || this.mode === "paused") this.togglePause();
-        return;
-      }
-
-      if (this.mode !== "playing") return;
-      const ch = normalizeKey(e);
-      if (!ch) return;
-
-      e.preventDefault();
-      await this.ensureAudio();
-      this.handleTyped(ch);
+  // Page lifecycle: pause + save on blur/hidden, stop the rAF while hidden, save on pagehide (F091).
+  bindLifecycle() {
+    window.addEventListener("blur", () => {
+      if (this.mode === "playing") this.pauseGame("blur");
+      this.saveRun(true);
+      this.commitHighScore();
     });
 
-    window.addEventListener("blur", () => {
-      if (this.mode === "playing") this.setMode("paused");
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) this.onPageHidden();
+      else this.onPageVisible();
+    });
+
+    window.addEventListener("pagehide", () => {
       this.saveRun(true);
+      this.commitHighScore();
     });
 
     window.addEventListener("beforeunload", () => {
       this.saveRun(true);
+      this.commitHighScore();
     });
   },
 
-  async ensureAudio() {
-    if (this.audioUnavailable) return;
-    try {
-      await this.sfx.unlock();
-      this.sfx.setMuted(this.save.settings.muted);
-    } catch (err) {
-      console.warn("Audio init failed; continuing without sound", err);
-      this.audioUnavailable = true;
+  onPageHidden() {
+    if (this.mode === "playing") this.pauseGame("hidden");
+    this.saveRun(true);
+    this.commitHighScore();
+    if (this.rafId !== null) {
+      cancelAnimationFrame(this.rafId);
+      this.rafId = null;
     }
+    if (this.sfx && typeof this.sfx.onHidden === "function") this.sfx.onHidden();
+  },
+
+  onPageVisible() {
+    this.prev = nowMs();
+    if (this.rafId === null && this._loop) this.rafId = requestAnimationFrame(this._loop);
+    if (this.sfx && typeof this.sfx.onVisible === "function") this.sfx.onVisible();
+  },
+
+  pauseGame(reason = "user") {
+    if (this.mode !== "playing") return;
+    this.pauseReason = reason;
+    this.setMode("paused");
+  },
+
+  // Unlock audio once (memoised while in flight). Resolves immediately after the first success, so
+  // keystrokes never wait on it (A4).
+  ensureAudio() {
+    if (this.audioReady || this.audioUnavailable) return Promise.resolve();
+    if (this._audioPromise) return this._audioPromise;
+    this._audioPromise = (async () => {
+      try {
+        await this.sfx.unlock();
+        this.sfx.setMuted(this.save.settings.muted);
+        this.audioReady = true;
+      } catch (err) {
+        console.warn("Audio init failed; continuing without sound", err);
+        this.audioUnavailable = true;
+      } finally {
+        this._audioPromise = null;
+      }
+    })();
+    return this._audioPromise;
+  },
+
+  // ------------------------- Toasts (primitive; C8 adds the tutorial kinds) -------------------------
+  // #toastStack lives in #main (created here when index.html lacks it); the CSS below is the fallback
+  // until style.css carries .toastStack/.toast (see HANDOFF.md).
+  ensureToastStack() {
+    if (this.toastStack && this.toastStack.isConnected) return this.toastStack;
+    let el = document.getElementById("toastStack");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "toastStack";
+      el.className = "toastStack";
+      el.setAttribute("aria-hidden", "true");
+      (document.getElementById("main") || document.body).appendChild(el);
+    }
+    if (!document.getElementById("toastStyles")) {
+      const style = document.createElement("style");
+      style.id = "toastStyles";
+      style.textContent = [
+        ".toastStack{position:absolute;left:50%;bottom:19%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:8px;z-index:15;pointer-events:none;max-width:92%}",
+        ".toast{font-family:var(--font-mono);font-size:13px;letter-spacing:.12em;text-transform:uppercase;padding:8px 14px;border-radius:999px;background:var(--glass1);border:1px solid var(--border);color:rgba(255,255,255,.92);white-space:nowrap;opacity:0;transform:translateY(12px);transition:opacity 160ms ease,transform 160ms ease}",
+        ".toast.is-in{opacity:1;transform:none}",
+        ".toast.is-out{opacity:0;transition:opacity 200ms ease}",
+        ".toast--tip{border-color:var(--neon-amber);border-color:color-mix(in srgb,var(--neon-amber) 60%,transparent)}",
+        ".toast--warn{border-color:var(--danger);border-color:color-mix(in srgb,var(--danger) 70%,transparent)}",
+        ".toast--success{border-color:var(--neon-lime);border-color:color-mix(in srgb,var(--neon-lime) 60%,transparent)}",
+        ":root.reduce-motion .toast{transform:none;transition:opacity 120ms ease}",
+        "@media (max-width:640px){.toast{font-size:12px;white-space:normal;text-align:center}}"
+      ].join("\n");
+      document.head.appendChild(style);
+    }
+    this.toastStack = el;
+    this.toasts = this.toasts || [];
+    return el;
+  },
+
+  showToast(text, opts = {}) {
+    const TOAST_MS = { info: 3200, tip: 4000, warn: 4200, success: 2400 };
+    const kind = opts.kind || "info";
+    const ms = (typeof opts.ms === "number") ? opts.ms : (TOAST_MS[kind] || 3200);
+    const key = opts.key ?? null;
+    const stack = this.ensureToastStack();
+    let entry = key ? this.toasts.find(t => t.key === key) : null;
+    if (entry) {
+      // same key: replace in place and restart the timer
+      clearTimeout(entry.timer);
+      entry.el.textContent = text;
+      entry.el.className = `toast toast--${kind} is-in`;
+      entry.el.dataset.kind = kind;
+    } else {
+      const el = document.createElement("div");
+      el.className = `toast toast--${kind}`;
+      el.dataset.kind = kind;
+      if (key) el.dataset.key = key;
+      el.textContent = text;
+      stack.appendChild(el);
+      entry = { el, key, timer: null };
+      this.toasts.push(entry);
+      while (this.toasts.length > 2) this.removeToast(this.toasts[0], true);
+      void el.offsetWidth; // commit the start state so the enter transition runs
+      el.classList.add("is-in");
+    }
+    entry.timer = setTimeout(() => this.removeToast(entry), ms);
+    if (typeof this.announce === "function") this.announce(text);
+    return entry.el;
+  },
+
+  removeToast(entry, immediate = false) {
+    if (!entry || !this.toasts) return;
+    const i = this.toasts.indexOf(entry);
+    if (i >= 0) this.toasts.splice(i, 1);
+    clearTimeout(entry.timer);
+    if (immediate) { entry.el.remove(); return; }
+    entry.el.classList.remove("is-in");
+    entry.el.classList.add("is-out");
+    setTimeout(() => entry.el.remove(), 220);
+  },
+
+  dismissToast(key) {
+    const entry = (this.toasts || []).find(t => t.key === key);
+    if (entry) this.removeToast(entry);
   },
 
   applySettings() {
@@ -206,24 +350,101 @@ Object.assign(Game.prototype, {
   },
 
   togglePause() {
-    if (this.mode === "playing") this.setMode("paused");
+    if (this.mode === "playing") this.pauseGame("user");
     else if (this.mode === "paused") this.setMode("playing");
   },
 
   setMode(m) {
     this.mode = m;
-    // screens
-    this.ui.menu.classList.toggle("hidden", m !== "menu");
-    this.ui.paused.classList.toggle("hidden", m !== "paused");
-    this.ui.levelComplete.classList.toggle("hidden", m !== "levelComplete");
-    this.ui.gameOver.classList.toggle("hidden", m !== "gameOver");
-    this.ui.victory.classList.toggle("hidden", m !== "victory");
+    document.body.dataset.mode = m;
+    // screens: .hidden (today's CSS) + .is-active (C1's transitions)
+    const screens = {
+      menu: this.ui.menu,
+      paused: this.ui.paused,
+      levelComplete: this.ui.levelComplete,
+      gameOver: this.ui.gameOver,
+      victory: this.ui.victory
+    };
+    for (const key of Object.keys(screens)) {
+      const el = screens[key];
+      if (!el) continue;
+      const active = key === m;
+      el.classList.toggle("hidden", !active);
+      el.classList.toggle("is-active", active);
+    }
     // Pause button label
     this.btnPause.textContent = (m === "paused") ? "Resume" : "Pause";
+    if (m === "paused") {
+      // Freeze-frame: the pause screen sits on a still canvas.
+      this.trauma = 0;
+      this.shake = 0;
+      // Restart is unavailable while a finale is banking the clear (F039).
+      if (this.btnRestart) this.btnRestart.classList.toggle("hidden", !!this.bossClear);
+      if (this.ui.pauseReason) {
+        const copy = { user: "Paused", blur: "Window lost focus", hidden: "Tab hidden", fullscreen: "Left fullscreen" };
+        this.ui.pauseReason.textContent = copy[this.pauseReason] || copy.user;
+      }
+    } else {
+      this.pauseReason = "user";
+    }
     // Autosave when leaving playing
     if (m !== "playing") this.saveRun(true);
     // Focus canvas
     if (m === "playing") this.canvas.focus();
+    this.requestFrame();
+  },
+
+  // ------------------------- Ending dialogue (victory) -------------------------
+  resetEndingDialogue() {
+    this.endingScript = getVictoryScript();
+    this.endingIndex = 0;
+    const u = this.ui;
+    if (u.endingStage) { u.endingStage.textContent = ""; u.endingStage.classList.add("hidden"); }
+    if (u.endingSpeaker) { u.endingSpeaker.textContent = ""; u.endingSpeaker.classList.add("hidden"); }
+    if (u.endingLine) u.endingLine.textContent = "";
+    if (u.creditsLine) u.creditsLine.classList.add("hidden");
+    if (this.btnNewRun) this.btnNewRun.classList.add("hidden");
+    if (u.endingNext) u.endingNext.classList.remove("hidden");
+    if (u.endingSkip) u.endingSkip.classList.remove("hidden");
+  },
+
+  showEndingLine(i) {
+    const n = this.endingScript.length;
+    const line = this.endingScript[i];
+    if (!line) return;
+    const u = this.ui;
+    if (u.endingStage) { u.endingStage.textContent = `TRANSMISSION ${i + 1}/${n}`; u.endingStage.classList.remove("hidden"); }
+    if (u.endingSpeaker) { u.endingSpeaker.textContent = line.speaker || ""; u.endingSpeaker.classList.remove("hidden"); }
+    if (u.endingLine) u.endingLine.textContent = line.text || "";
+    const win = u.endingLine ? u.endingLine.closest(".dialogueWindow") : null;
+    if (win) win.dataset.speaker = (line.speaker || "").toLowerCase().replace(/[^a-z]+/g, "-");
+  },
+
+  advanceEndingDialogue() {
+    const n = this.endingScript.length;
+    if (this.endingIndex >= n) { this.finishEndingDialogue(); return; }
+    this.showEndingLine(this.endingIndex);
+    this.endingIndex++;
+    if (this.endingIndex >= n) this.finishEndingDialogue();
+  },
+
+  skipEndingDialogue() {
+    const n = this.endingScript.length;
+    if (n) this.showEndingLine(n - 1);
+    this.endingIndex = n;
+    this.finishEndingDialogue();
+  },
+
+  // Last line shown: reveal Play again + credits, retire Next/Skip.
+  finishEndingDialogue() {
+    const u = this.ui;
+    if (u.creditsLine) u.creditsLine.classList.remove("hidden");
+    if (this.btnNewRun) this.btnNewRun.classList.remove("hidden");
+    if (u.endingNext) u.endingNext.classList.add("hidden");
+    if (u.endingSkip) u.endingSkip.classList.add("hidden");
+    if (this.btnNewRun && this.mode === "victory") {
+      try { this.btnNewRun.focus({ preventScroll: true }); } catch (_) {}
+    }
   },
 
   refreshMenu() {

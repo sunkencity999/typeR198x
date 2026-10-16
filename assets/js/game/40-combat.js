@@ -30,6 +30,7 @@ Object.assign(Game.prototype, {
     const x = this.w + rand(20, 260);
     const speed = cfg.baseSpeed * rand(0.85, 1.18) * (text.length <= 1 ? rand(1.0, 1.25) : 1.0);
     this.enemies.push(new Enemy({ text, x, y, speed }));
+    this._spawnLog.push({ t: nowMs(), n: text.length });
   },
 
   spawnPowerup() {
@@ -38,7 +39,7 @@ Object.assign(Game.prototype, {
     if (Math.random() < (cfg.level <= 2 ? 0.55 : 0.72)) {
       const types = ["SPREAD","PIERCE","RAPID","SHIELD","MULTI"];
       const type = choice(types);
-      const label = (type === "SHIELD") ? "shield" : (type === "MULTI" ? "x2" : type.toLowerCase());
+      const label = type.toLowerCase(); // SPREAD/PIERCE/RAPID/SHIELD -> spread/pierce/rapid/shield, MULTI -> multi (G003)
       const y = rand(210, this.h - 220);
       const x = this.w + rand(80, 380);
       const speed = cfg.baseSpeed * 0.70;
@@ -107,16 +108,9 @@ Object.assign(Game.prototype, {
   update(dt) {
     const cfg = LEVELS[this.levelIndex];
 
-    // timers
+    // timers (effects decay lives in tickEffects, which the loop runs in every mode)
     this.levelT += dt;
-    this.starT += dt;
-    if (this.currentTheme) {
-      this.parallax.bgOffset += (this.currentTheme.bgSpeed || 0) * dt;
-      this.parallax.fgOffset += (this.currentTheme.fgSpeed || 0) * dt;
-    }
-    this.flash = Math.max(0, this.flash - dt * 3);
-    this.shake = Math.max(0, this.shake - dt * 12);
-    this.damagePulse = Math.max(0, this.damagePulse - dt * 1.8);
+    this.stepAmbient(dt);
 
     // powerups durations
     this.power.spread = Math.max(0, this.power.spread - dt);
@@ -170,6 +164,7 @@ Object.assign(Game.prototype, {
       // If enemy reaches the player line, it damages.
       if (!celebrating && en.x < this.player.x + 35) {
         en.alive = false;
+        this._leakLog.push(nowMs());
         this.takeDamage(12 + Math.min(12, en.text.length * 2));
         this.addExplosion(this.player.x + 40, en.y, 18);
         this.addExplosionSprite(this.player.x + 40, en.y, this.getExplosionTypeForEnemy(en));
@@ -194,22 +189,18 @@ Object.assign(Game.prototype, {
       this.ui.bossSegment.textContent = `segment ${Math.min(seg,total)}/${total}  •  ${this.boss.remaining}`;
     }
 
-    // Bullets (visual only)
-    this.bullets = this.bullets.filter(b => (b.update(dt), b.alive()));
-
-    // Particles
-    this.particles = this.particles.filter(p => (p.update(dt), p.alive()));
-    this.explosions = this.explosions.filter(ex => (ex.update(dt), !ex.done));
-
-    // Clean dead arrays occasionally
-    this.enemies = this.enemies.filter(e => e.alive);
-    this.powerups = this.powerups.filter(p => p.alive);
+    // Bullets (visual only), particles, explosions: in-place compaction keeps object identity (F101)
+    compactInPlace(this.bullets, b => (b.update(dt), b.alive()));
+    compactInPlace(this.particles, p => (p.update(dt), p.alive()));
+    compactInPlace(this.explosions, ex => (ex.update(dt), !ex.done));
+    compactInPlace(this.enemies, e => e.alive);
+    compactInPlace(this.powerups, p => p.alive);
 
     // Lock validity
     if (this.lock?.ref && !this.lock.ref.alive) this.lock = null;
 
-    // autosave
-    this.saveRun(false);
+    // autosave (never during the finale: the clear is committed once, by the finale itself)
+    if (!this.bossClear) this.saveRun(false);
 
     // HUD
     this.updateHUD();
@@ -220,13 +211,14 @@ Object.assign(Game.prototype, {
         const burst = this.bossFinaleBursts.shift();
         this.runBossFinaleBurst(burst);
       }
-      if (this.bossClear.t >= 6.3) {
+      if (this.bossClear.t >= (this.bossClear.duration || 6.3)) {
         const info = this.bossClear;
+        this.commitLevelClear(info);
         this.bossClear = null;
         this.bossFinaleBursts.length = 0;
         this.bossFinaleOrigin = null;
         if (info.target === "victory") this.onVictory();
-        else this.onLevelComplete(info.bonus);
+        else this.onLevelComplete(info);
       }
     }
 

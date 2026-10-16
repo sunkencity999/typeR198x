@@ -20,4 +20,28 @@ Object.assign(Game.prototype, {
     if (this.stats.total <= 0) return 100;
     return Math.round((this.stats.correct / this.stats.total) * 100);
   },
+
+  // Characters still to type across every live enemy (pressure-valve input for B3; debug telemetry now).
+  liveChars() {
+    let n = 0;
+    for (const en of this.enemies) if (en.alive) n += en.text.length - en.progress;
+    return n;
+  },
+
+  // TypeRDebug.stats(): trailing-window telemetry for the balance pass and the harness.
+  debugStats() {
+    const now = nowMs();
+    const spawnLog = this._spawnLog || [];
+    const leakLog = this._leakLog || [];
+    while (spawnLog.length && now - spawnLog[0].t > 10000) spawnLog.shift();
+    while (leakLog.length && now - leakLog[0] > 60000) leakLog.shift();
+    let chars = 0;
+    for (const s of spawnLog) chars += s.n;
+    return {
+      incomingCps: Math.round((chars / 10) * 100) / 100,
+      leaksPerMin: leakLog.length,
+      deathsBySector: { ...(this.deathsBySector || {}) },
+      liveChars: this.liveChars()
+    };
+  },
 });

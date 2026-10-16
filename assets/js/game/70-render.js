@@ -1,5 +1,78 @@
 // Type-R 198X — canvas rendering: render(dt) and every draw* method, plus makeStars (background setup). Methods are mixed into Game.prototype; load order is defined in index.html.
 Object.assign(Game.prototype, {
+  // ------------------------- Canvas sizing (PERF-07 / VIS-02 / VIS-07) -------------------------
+  // The backing store follows the element's CSS size x device pixel ratio (capped by settings.renderScaleCap);
+  // every gameplay number stays in the 1280x720 logical space and render() applies the scale transform.
+  resizeCanvas() {
+    const cap = clamp(Number(this.save && this.save.settings && this.save.settings.renderScaleCap) || 2, 0.5, 2);
+    const dpr = Math.min(window.devicePixelRatio || 1, cap);
+    const rect = this.canvas.getBoundingClientRect();
+    if (!(rect.width > 0)) return;
+    const s = clamp((rect.width * dpr) / LOGICAL_W, 0.5, 2);
+    this.cssScale = rect.width / LOGICAL_W;
+    const wantW = Math.round(LOGICAL_W * s);
+    const wantH = Math.round(LOGICAL_H * s);
+    const scaleDelta = Math.abs(s - this.renderScale) / (this.renderScale || 1);
+    const changed = scaleDelta >= 0.02 || this.canvas.width !== wantW || this.canvas.height !== wantH;
+    if (changed) {
+      this.renderScale = s;
+      this.canvas.width = wantW;   // resets the context state
+      this.canvas.height = wantH;
+      this.spriteEpoch++;
+      if (typeof Assets !== "undefined" && Assets && typeof Assets.setRenderScale === "function") Assets.setRenderScale(s);
+    }
+    this.ctx.imageSmoothingEnabled = true;
+    this.ctx.imageSmoothingQuality = "high";
+    this.ctx.setTransform(this.renderScale, 0, 0, this.renderScale, 0, 0);
+    this.updateHudSafeTop();
+    if (changed && this._loop) this.requestFrame();
+  },
+
+  // Logical y below which the canvas is not covered by the DOM HUD (clamp 72..140, fallback 112).
+  updateHudSafeTop() {
+    const hud = document.getElementById("hud");
+    const cr = this.canvas.getBoundingClientRect();
+    let top = 112;
+    if (hud && cr.width > 0 && this.cssScale > 0) {
+      const hr = hud.getBoundingClientRect();
+      const overlaps = hr.height > 0 && hr.bottom > cr.top && hr.top < cr.bottom;
+      top = overlaps ? ((hr.bottom - cr.top) / this.cssScale) + 8 : 72;
+    }
+    this.hudSafeTop = clamp(Math.round(top), 72, 140);
+  },
+
+  // Resize triggers: #main / #hud size (ResizeObserver), window resize, monitor DPR change. Debounced 120 ms.
+  bindResize() {
+    let timer = null;
+    const schedule = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => this.resizeCanvas(), 120);
+    };
+    this.scheduleResize = schedule;
+    if (typeof ResizeObserver === "function") {
+      const ro = new ResizeObserver(schedule);
+      const main = document.getElementById("main");
+      const hud = document.getElementById("hud");
+      if (main) ro.observe(main);
+      if (hud) ro.observe(hud);
+      this._resizeObserver = ro;
+    }
+    window.addEventListener("resize", schedule);
+    const watchDpr = () => {
+      if (typeof matchMedia !== "function") return;
+      const mq = matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+      const onChange = () => {
+        if (mq.removeEventListener) mq.removeEventListener("change", onChange);
+        else if (mq.removeListener) mq.removeListener(onChange);
+        schedule();
+        watchDpr();
+      };
+      if (mq.addEventListener) mq.addEventListener("change", onChange);
+      else if (mq.addListener) mq.addListener(onChange);
+    };
+    watchDpr();
+  },
+
   // ------------------------- Rendering -------------------------
   makeStars(n) {
     const stars = [];
@@ -40,9 +113,6 @@ Object.assign(Game.prototype, {
     }
 
     for (const s of this.stars) {
-      const spd = lerp(30, 140, 1 - s.z);
-      s.x -= spd * (1/60);
-      if (s.x < -5) { s.x = this.w + rand(0, 80); s.y = rand(0, this.h); s.z = Math.random(); }
       const alpha = lerp(0.25, 0.9, 1 - s.z);
       ctx.fillStyle = `rgba(255,255,255,${alpha})`;
       ctx.fillRect(s.x, s.y, s.s, s.s);
@@ -484,13 +554,19 @@ Object.assign(Game.prototype, {
 
   render(dt) {
     const ctx = this.ctx;
-    // Shake transform
-    const sx = (this.shake > 0) ? rand(-this.shake, this.shake) : 0;
-    const sy = (this.shake > 0) ? rand(-this.shake, this.shake) : 0;
+    const s = this.renderScale || 1;
+    // Shake transform: integer random offset with amplitude from trauma (D1 replaces this with smooth noise).
+    const amp = 18 * this.trauma * this.trauma;
+    const sx = amp >= 0.5 ? Math.round(rand(-amp, amp)) : 0;
+    const sy = amp >= 0.5 ? Math.round(rand(-amp, amp)) : 0;
 
+    // L0: opaque base fill under identity over the whole backing store (covers the shake margin), then
+    // the logical-space transform. No clearRect: the context is opaque.
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = (typeof PALETTE !== "undefined" && PALETTE && PALETTE.bg0) || "#05060B";
+    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    ctx.setTransform(s, 0, 0, s, 0, 0);
     ctx.save();
-    ctx.setTransform(1,0,0,1,0,0);
-    ctx.clearRect(0,0,this.w,this.h);
     ctx.translate(sx, sy);
 
     this.drawBackground(ctx);
