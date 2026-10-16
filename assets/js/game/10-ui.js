@@ -541,7 +541,9 @@ Object.assign(Game.prototype, {
     el.removeAttribute("aria-hidden");
     this.syncInert();
     this.updateModalScroll(el);
-    const focusEl = opts.initialFocus || entry.primary || this.focusables(el)[0] || el.querySelector(".modalInner");
+    let focusEl = opts.initialFocus;
+    if (typeof focusEl === "string") focusEl = el.querySelector(focusEl);   // selectors are accepted (screens track)
+    if (!(focusEl && typeof focusEl.focus === "function")) focusEl = entry.primary || this.focusables(el)[0] || el.querySelector(".modalInner");
     if (focusEl) {
       if (!focusEl.hasAttribute("tabindex") && !focusEl.matches(MODAL_FOCUSABLE)) focusEl.setAttribute("tabindex", "-1");
       const tryFocus = () => {
@@ -769,7 +771,7 @@ Object.assign(Game.prototype, {
     const L = cfg.level;
     const score = formatInt(this.stats.score || 0);
     switch (m) {
-      case "menu": this.announce("Main menu. Press Enter to start."); break;
+      case "menu": this.announce(this.primaryFor("menu") === this.btnContinue ? "Main menu. Press Enter to continue your saved run." : "Main menu. Press Enter to start."); break;
       case "paused": this.announce("Paused. Press Enter to resume."); break;
       case "levelComplete": this.announce(`Sector ${L} cleared. Score ${score}.${L < 10 ? ` Press Enter for Sector ${L + 1}.` : ""}`); break;
       case "gameOver": this.announce(`Game over in Sector ${L}. Score ${score}. Press Enter to retry.`); break;
@@ -1335,11 +1337,6 @@ Object.assign(Game.prototype, {
     const canContinue = resumeIndex !== null;
     this.btnContinue.disabled = !canContinue;
     this.btnContinue.classList.toggle("disabled", !canContinue);
-    // Stopgap until renderResumeCard (C5) owns the card: Continue must be clickable whenever a run can resume.
-    if (typeof this.renderResumeCard !== "function") {
-      const card = this.$("resumeCard");
-      if (card) card.classList.toggle("hidden", !canContinue);
-    }
     const shipId = this.getSelectedShipId();
     this.shipInputs.forEach(input => {
       input.checked = (input.value === shipId);

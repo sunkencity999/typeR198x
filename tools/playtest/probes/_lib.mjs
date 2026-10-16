@@ -70,8 +70,14 @@ export async function openProbe(name, opts = {}) {
   const { server, port } = await startServer(ROOT);
   const base = `http://127.0.0.1:${port}/index.html`;
   const browser = await chromium.launch({ channel: "chrome", headless: true, args: ["--autoplay-policy=no-user-gesture-required", "--mute-audio"] });
-  const context = await browser.newContext({ viewport: opts.viewport || { width: 1440, height: 900 }, deviceScaleFactor: dpr, reducedMotion: opts.reducedMotion ? "reduce" : "no-preference" });
+  const context = await browser.newContext({
+    viewport: opts.viewport || { width: 1440, height: 900 }, deviceScaleFactor: dpr,
+    reducedMotion: opts.reducedMotion ? "reduce" : "no-preference",
+    ...(opts.isMobile ? { isMobile: true, hasTouch: true } : {})
+  });
   const page = await context.newPage();
+  let cdpSession = null;
+  let perfEnabled = false;
   const errors = { pageErrors: [], consoleErrors: [] };
   page.on("pageerror", (e) => errors.pageErrors.push(String(e && e.stack || e)));
   page.on("console", (m) => { if (m.type() === "error") errors.consoleErrors.push(m.text()); });
@@ -92,10 +98,70 @@ export async function openProbe(name, opts = {}) {
         const el = document.getElementById("loadingOverlay");
         return !el || el.classList.contains("hidden") || getComputedStyle(el).visibility === "hidden";
       }, null, { timeout: 120000 });
-      const kb = page.locator("#btnKeyboardHint");
-      if (await kb.isVisible().catch(() => false)) await kb.click();
     },
     async g(fn, arg) { return page.evaluate(fn, arg); },
+    // Raw DevTools session (Performance metrics, vision-deficiency emulation).
+    async cdp() { if (!cdpSession) cdpSession = await context.newCDPSession(page); return cdpSession; },
+    // Performance.getMetrics LayoutCount / RecalcStyleCount with a timestamp; subtract two readings for a rate.
+    async metrics() {
+      const c = await P.cdp();
+      if (!perfEnabled) { await c.send("Performance.enable"); perfEnabled = true; }
+      const { metrics } = await c.send("Performance.getMetrics");
+      const get = (n) => { const m = metrics.find((x) => x.name === n); return m ? m.value : null; };
+      return { t: Date.now(), layout: get("LayoutCount"), recalc: get("RecalcStyleCount") };
+    },
+    // Rates per 5 s between two metrics() readings (the harness report's layoutCountPer5s shape).
+    per5s(m0, m1) {
+      const span = Math.max(1, m1.t - m0.t);
+      return { layoutPer5s: Math.round((m1.layout - m0.layout) / span * 5000 * 10) / 10, recalcPer5s: Math.round((m1.recalc - m0.recalc) / span * 5000 * 10) / 10, spanMs: span };
+    },
+    // Chrome's colour-vision simulation: 'none' | 'deuteranopia' | 'protanopia' | 'tritanopia' | 'achromatopsia' | 'blurredVision'.
+    async vision(type) { const c = await P.cdp(); await c.send("Emulation.setEmulatedVisionDeficiency", { type }); },
+    async fps(ms = 2000) {
+      return page.evaluate((ms) => new Promise((resolve) => {
+        let frames = 0; const t0 = performance.now();
+        const tick = () => { frames++; if (performance.now() - t0 < ms) requestAnimationFrame(tick); else resolve(Math.round(frames / ((performance.now() - t0) / 1000))); };
+        requestAnimationFrame(tick);
+      }), ms);
+    },
+    // Canvas budget counters (the harness probe's shape, compact): call BEFORE goto(). window.__e2Probe.mark() /
+    // snapshot() give per-frame maxima of shadowBlur sets, globalCompositeOperation sets and render() ms.
+    async installCanvasCounters() {
+      await context.addInitScript(() => {
+        if (window.__e2Probe) return;
+        const fresh = () => ({ shadowBlurSets: 0, shadowBlur: 0, composite: 0, renderMs: 0 });
+        const acc = () => ({ frames: 0, shadowBlurSetsMax: 0, shadowBlurMax: 0, compositeMax: 0, maxRenderMs: 0, renderSum: 0, renderSamples: 0, renderOver16: 0 });
+        const E = window.__e2Probe = { cur: fresh(), win: acc(), wrapped: false };
+        const proto = CanvasRenderingContext2D.prototype;
+        const wrap = (prop, on) => {
+          const d = Object.getOwnPropertyDescriptor(proto, prop);
+          if (!d || !d.set) return;
+          Object.defineProperty(proto, prop, { configurable: true, enumerable: d.enumerable, get() { return d.get.call(this); }, set(v) { try { on(v); } catch (_) {} return d.set.call(this, v); } });
+        };
+        wrap("shadowBlur", (v) => { E.cur.shadowBlurSets++; if (v > 0) E.cur.shadowBlur++; });
+        wrap("globalCompositeOperation", () => { E.cur.composite++; });
+        const wrapGame = () => {
+          const g = window.game;
+          if (!g || typeof g.render !== "function") return;
+          const orig = g.render;
+          g.render = function () { const t0 = performance.now(); try { return orig.apply(this, arguments); } finally { const ms = performance.now() - t0; if (ms > E.cur.renderMs) E.cur.renderMs = ms; } };
+          E.wrapped = true;
+        };
+        const tick = () => {
+          if (!E.wrapped) wrapGame();
+          const f = E.cur; E.cur = fresh();
+          const a = E.win; a.frames++;
+          if (f.shadowBlurSets > a.shadowBlurSetsMax) a.shadowBlurSetsMax = f.shadowBlurSets;
+          if (f.shadowBlur > a.shadowBlurMax) a.shadowBlurMax = f.shadowBlur;
+          if (f.composite > a.compositeMax) a.compositeMax = f.composite;
+          if (f.renderMs > 0) { a.renderSamples++; a.renderSum += f.renderMs; if (f.renderMs > a.maxRenderMs) a.maxRenderMs = f.renderMs; if (f.renderMs > 16) a.renderOver16++; }
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+        E.mark = () => { E.win = acc(); };
+        E.snapshot = () => { const a = E.win; return { frames: a.frames, shadowBlurPerFrame: a.shadowBlurMax, shadowBlurSetsPerFrame: a.shadowBlurSetsMax, compositeSetsPerFrame: a.compositeMax, maxRenderMs: Math.round(a.maxRenderMs * 100) / 100, avgRenderMs: a.renderSamples ? Math.round(a.renderSum / a.renderSamples * 100) / 100 : 0, renderFramesOver16ms: a.renderOver16, wrapped: E.wrapped }; };
+      });
+    },
     async shot(label) {
       const file = path.join(out, `${String(++shots).padStart(2, "0")}-${label}.png`);
       await page.screenshot({ path: file });

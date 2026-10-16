@@ -11,11 +11,10 @@
 // PERF-10: full rAF while the menu is visible; after 90 s without input (attract.idleT) or while document.hidden
 // the simulation and the draw drop to 20 fps (the loop asks attractFrameSkip() before drawFrame).
 //
-// Hooks (game.js loop: updateAttract / attractFrameSkip; setMode -> startAttract / stopAttract;
-// startNewRun / continueRun / startSector -> stopAttract; render() L9 -> drawAttract) are feature-detected by
-// their owners. Until they land, the self-disabling wraps at the end of this file supply them (ATTRACT_HOOKS
-// records which are active); each wrap steps aside as soon as the owner's source contains the call.
-// Methods are mixed into Game.prototype; load order is defined in index.html (after 80-fx.js, before 99-boot.js).
+// Hooks live in their owners: game.js loop (updateAttract / attractFrameSkip), setMode (startAttract /
+// stopAttract, 10-ui.js), startNewRun / continueRun / startSector (stopAttract, 20-run.js), render() L9
+// (drawAttract, 70-render.js). Methods are mixed into Game.prototype; load order is defined in index.html
+// (after 80-fx.js, before 99-boot.js).
 
 const ATTRACT = Object.freeze({
   spawnEvery: 1.6,      // s between ghost spawns
@@ -489,46 +488,3 @@ Object.assign(Game.prototype, {
     p.hitT = Math.max(p.hitT || 0, ATTRACT.swapFlashS);   // drawShipAdditive: white silhouette, fades over the channel
   }
 });
-
-// ----------------------------- Cross-track hooks (fallbacks) -----------------------------
-// The loop (game.js, this track's two lines), setMode (10-ui.js), the run entries (20-run.js) and render()
-// (70-render.js) call into the attract once their owners apply the HANDOFF lines. Until then these wraps supply
-// the same calls and each steps aside when the owner's source already contains the hook, so nothing fires
-// twice after the merge. ATTRACT_HOOKS records what is active (probes, report).
-const ATTRACT_HOOKS = { loop: false, render: false, setMode: false, run: false };
-(function installAttractHooks(proto) {
-  const src = (fn) => (typeof fn === "function" ? Function.prototype.toString.call(fn) : "");
-  // L9: drawEnemies is render()'s L9 call; the ghosts follow it on the menu.
-  if (typeof proto.render === "function" && !/drawAttract/.test(src(proto.render)) && typeof proto.drawEnemies === "function") {
-    const orig = proto.drawEnemies;
-    proto.drawEnemies = function (ctx) {
-      const out = orig.call(this, ctx);
-      if (this.mode === "menu") this.drawAttract(ctx);
-      return out;
-    };
-    ATTRACT_HOOKS.render = true;
-  }
-  if (typeof proto.setMode === "function" && !/startAttract/.test(src(proto.setMode))) {
-    const orig = proto.setMode;
-    proto.setMode = function (m) {
-      const prev = this.mode;
-      if (prev === "menu" && m !== "menu") this.stopAttract();
-      const out = orig.apply(this, arguments);
-      if (m === "menu") this.startAttract();
-      return out;
-    };
-    ATTRACT_HOOKS.setMode = true;
-  }
-  for (const name of ["startNewRun", "continueRun", "startSector"]) {
-    if (typeof proto[name] === "function" && !/stopAttract/.test(src(proto[name]))) {
-      const orig = proto[name];
-      proto[name] = function () {
-        this.stopAttract();
-        return orig.apply(this, arguments);
-      };
-      ATTRACT_HOOKS.run = true;
-    }
-  }
-  ATTRACT_HOOKS.loop = !/updateAttract/.test(src(proto.loop));
-})(Game.prototype);
-Game.ATTRACT_HOOKS = ATTRACT_HOOKS;

@@ -268,6 +268,7 @@ const Assets = (() => {
         wantPrep: null,     // last requested logical {w,h,scale?}
         wantPrepDefault: true, // wantPrep came from defaultPrepareSize (recomputed on variant/scale changes)
         prepPromise: null,
+        preparing: false,   // between finish() and settle(): decode + default prepare in flight, raw img withheld
         promise: null,
         resolve: null,
         queued: null,
@@ -280,9 +281,13 @@ const Assets = (() => {
     return r || null;
   }
 
+  // The raw <img> is never handed out while its off-thread decode + default prepare are still pending (finish ->
+  // settle): drawing an undecoded 2800 px image decodes and uploads it synchronously on the main thread, which was
+  // the 45-80 ms first frame of every direct sector jump at DPR 2 (E2). Callers draw their fallback for those frames.
   const drawableOf = (r) => {
     if (!r) return null;
     if (r.bitmap) return r.bitmap;
+    if (r.preparing) return null;
     const img = r.img;
     return img && img.complete && img.naturalWidth > 0 ? img : null;
   };
@@ -437,6 +442,7 @@ const Assets = (() => {
     r.natural = { w: img.naturalWidth, h: img.naturalHeight };
     r.state = "ready";
     r.lastUsed = now();
+    r.preparing = true;
     const decoded = typeof img.decode === "function" ? img.decode().catch(() => {}) : Promise.resolve();
     decoded
       .then(() => {
@@ -463,6 +469,7 @@ const Assets = (() => {
   }
 
   function settle(r, ok) {
+    r.preparing = false;
     releaseSlot(r);
     const resolve = r.resolve;
     r.resolve = null;
@@ -717,6 +724,7 @@ const Assets = (() => {
     r.src = null;
     r.variant = null;
     r.state = "idle";
+    r.preparing = false;
     r.promise = null;
     r.resolve = null;
     if (r.queued) {

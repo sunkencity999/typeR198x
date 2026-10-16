@@ -312,7 +312,6 @@ Object.assign(Game.prototype, {
     this._sectorPrefetchKeys = [];
     this.updateSectorPrefetchBar();
     const keys = Assets.levelKeys(level);
-    Assets.gc([...keys, ...Assets.levelKeys(level + 1)]);
     this.applyThemeAccent(level);
     if (typeof this.warmPlateCache === "function") this.warmPlateCache(level);
     if (this.degradedAssets && this.toastOnce && !this.toastOnce.has("degraded") && typeof this.showToast === "function") {
@@ -322,7 +321,15 @@ Object.assign(Game.prototype, {
     const p = Assets.loadLevel(level).then(() => {
       if (this._assetsLevel !== level) return false;
       this.levelReady = true;
-      this.prepareLevelArt(level);
+      // The previous sector's art stays behind the warp-in card until this one is resident (no procedural frame
+      // on a direct jump); released here. bg / fg are prepared when loadLevel settles: upload them now, behind the
+      // card, instead of on the first gameplay frame; the boss art follows once re-prepared.
+      Assets.gc([...keys, ...Assets.levelKeys(level + 1)]);
+      this.warmSector(level);
+      const bossPrep = this.prepareLevelArt(level);
+      if (bossPrep && typeof bossPrep.then === "function") {
+        bossPrep.then(() => { if (this._assetsLevel === level) this.warmSector(level); }).catch(() => {});
+      }
       return true;
     });
     this.levelAssetsPromise = p;
@@ -341,19 +348,22 @@ Object.assign(Game.prototype, {
     return hex;
   },
 
-  // Boss art at the pre-D6 draw box; the tenth foreground as the cover-width finale vista.
+  // Boss art at the pre-D6 draw box; the tenth foreground as the cover-width finale vista. Returns a promise that
+  // settles when every re-prepare has finished (null when nothing had to be re-prepared).
   prepareLevelArt(i) {
     const level = i + 1;
+    const jobs = [];
     const box = typeof this.bossArtBox === "function" ? this.bossArtBox(level) : null;
     if (box) {
       const s = Assets.sprite(box.key, box.artW);
-      if (s.w > 0 && s.h > 0) Assets.prepare(box.key, { w: Math.round(s.w), h: Math.round(s.h) });
+      if (s.w > 0 && s.h > 0) jobs.push(Assets.prepare(box.key, { w: Math.round(s.w), h: Math.round(s.h) }));
     }
     const theme = typeof getThemeForLevel === "function" ? getThemeForLevel(i) : null;
     if (theme && theme.tileFg === false && typeof this.vistaBox === "function") {
       const v = this.vistaBox(theme);
-      if (v) Assets.prepare("fg/" + theme.art, { w: Math.round(v.w), h: Math.round(v.h) });
+      if (v) jobs.push(Assets.prepare("fg/" + theme.art, { w: Math.round(v.w), h: Math.round(v.h) }));
     }
+    return jobs.length ? Promise.all(jobs) : null;
   },
 
   // Safety net: the first playing frame on a new sector loads its art even if startLevel did not call loadLevelAssets.
@@ -389,24 +399,41 @@ Object.assign(Game.prototype, {
     this.updateSectorPrefetchBar();
   },
 
-  // Level Complete is a still screen: draw the next sector's resident bitmaps once at 1 px so their GPU upload
-  // happens here instead of on the sector's first gameplay frame. Idempotent per sector; waits until resident.
+  // Draw a sector's resident bitmaps once at 1 px (alpha .01) so their GPU upload happens behind a still screen
+  // (Level Complete) or the warp-in card (loadLevelAssets) instead of on the first gameplay frame. Each drawable is
+  // warmed once; a re-prepared bitmap is a new object and gets its own upload. Returns true when every key was resident.
+  warmSector(i) {
+    const keys = Assets.levelKeys(i);
+    if (!keys.length) return true;
+    if (!this._warmedDrawables) this._warmedDrawables = new WeakSet();
+    const ctx = this.ctx;
+    let all = true;
+    let drew = false;
+    for (const k of keys) {
+      const d = Assets.get(k);
+      if (!d) { all = false; continue; }
+      if (this._warmedDrawables.has(d)) continue;
+      if (!drew) {
+        drew = true;
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.globalAlpha = 0.01;
+      }
+      try {
+        ctx.drawImage(d, 0, 0, 1, 1);
+        this._warmedDrawables.add(d);
+        this.debug.warmDraws = (this.debug.warmDraws | 0) + 1;
+      } catch (e) { /* closed meanwhile */ }
+    }
+    if (drew) ctx.restore();
+    return all;
+  },
+
+  // Level Complete path: the next sector's bitmaps, once they are resident. Idempotent per sector.
   warmNextSector() {
     const i = this.levelIndex + 1;
     if (this._warmedSector === i) return;
-    const keys = Assets.levelKeys(i);
-    if (!keys.length) { this._warmedSector = i; return; }
-    const drawables = keys.map((k) => Assets.get(k));
-    if (drawables.some((d) => !d)) return;
-    const ctx = this.ctx;
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.globalAlpha = 0.01;
-    for (const d of drawables) {
-      try { ctx.drawImage(d, 0, 0, 1, 1); } catch (e) { /* closed meanwhile */ }
-    }
-    ctx.restore();
-    this._warmedSector = i;
+    if (this.warmSector(i)) this._warmedSector = i;
   },
 
   updateSectorPrefetchBar() {

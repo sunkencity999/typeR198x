@@ -115,11 +115,9 @@ Object.assign(Game.prototype, {
     this.startLevel(this.levelIndex, { fromMenu: true, restoredRun: r });
   },
 
-  // startLevel(levelIndex, { fromMenu, restoredRun, fresh }). A boolean second argument still means
-  // { fromMenu } with the restored run third (B-5 shim for the current harness; dropped in E2).
+  // startLevel(levelIndex, { fromMenu, restoredRun, fresh }); the options object is the only form (B-5 shim gone).
   // fresh: a fresh sector entry — combo/power/shield reset, level stats zeroed, retries 0, level checkpoint taken.
-  startLevel(levelIndex, opts = {}, legacyRestoredRun = null) {
-    if (typeof opts === "boolean") opts = { fromMenu: opts, restoredRun: legacyRestoredRun };
+  startLevel(levelIndex, opts = {}) {
     const fromMenu = !!(opts && opts.fromMenu);
     const restoredRun = (opts && opts.restoredRun) || null;
     const fresh = !!(opts && opts.fresh);
@@ -186,7 +184,6 @@ Object.assign(Game.prototype, {
     this.spawnAcc = restoredRun?.spawnAcc ?? 0;
     this.powerAcc = restoredRun?.powerAcc ?? 0;
     this.minionAcc = restoredRun?.minionAcc ?? 0;
-    this.hazardAcc = restoredRun?.hazardAcc ?? 0;
     this.waveKills = 0;
 
     if (restoredRun && restoredRun.inBoss) {

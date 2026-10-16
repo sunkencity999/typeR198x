@@ -671,8 +671,6 @@ try {
     }, null, { timeout: 120000 });
   } catch { report.notes.push("loading overlay never hid within 120s"); }
   report.timings.assetsReadyMs = Date.now() - navEpoch;
-  const kb = page.locator("#btnKeyboardHint");
-  if (await kb.isVisible().catch(() => false)) await kb.click();
   await shot("menu");
   await measureScene("menu", 1500);
 
@@ -695,8 +693,14 @@ try {
   report.timings.startToPlayingMs = Date.now() - tStart;
   await checkFixture();
 
+  // Idle layout hygiene (PLAN A11 / E2): forced layouts over the first 5 s of play with no typing
+  // (sector card + wave 1 start), the same CDP LayoutCount delta as the typing figure below.
+  const mi0 = await cdpMetrics();
   await sleep(2500);
   await shot("gameplay-early");
+  await sleep(2500);
+  const mi1 = await cdpMetrics();
+  if (mi0 && mi1 && mi1.t > mi0.t) report.layoutCountPer5sIdle = Math.round((mi1.layout - mi0.layout) / (mi1.t - mi0.t) * 5000 * 10) / 10;
   const m0 = await cdpMetrics();
   await probeMark();
   const typed1 = await autoType(SECONDS);
@@ -710,6 +714,10 @@ try {
   report.perf.typing = await probeSnapshot();
   report.typedWave = typed1;
   report.stateAfterWave = await state();
+  // 05-gameplay-mid should show plates (it feeds the store screenshot): wait up to 4 s for >= 3 enemies in case the
+  // wave just ended in a drain / banner beat.
+  await page.waitForFunction(() => { const g = (typeof game !== "undefined" && game) || window.game; return !!(g && g.enemies && g.enemies.length >= 3); }, null, { timeout: 4000 })
+    .catch(() => report.notes.push("gameplay-mid: fewer than 3 enemies on screen within 4 s (drain / banner beat)"));
   await shot("gameplay-mid");
   await measureScene("gameplay", 2000);
 
@@ -860,6 +868,7 @@ console.log(JSON.stringify({
   shadowBlurPerFrame: report.shadowBlurPerFrame ?? null,
   fullFrameFillMaxAlpha: report.fullFrameFillMaxAlpha ?? null,
   layoutCountPer5s: report.layoutCountPer5s ?? null,
+  layoutCountPer5sIdle: report.layoutCountPer5sIdle ?? null,
   networkMB: { toFirstKeystroke: mb(report.networkTotals.bytesFinishedBeforeFirstKeystroke), toFirstKeystrokeNonMedia: mb(report.networkTotals.bytesFinishedBeforeFirstKeystrokeNonMedia),
     media: mb(report.networkTotals.mediaBytes), overall: mb(report.networkTotals.overallBytes) },
   timings: report.timings,
