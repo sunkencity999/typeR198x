@@ -212,7 +212,8 @@ try {
       await page.evaluate(() => document.getElementById("rotateHint").classList.remove("hidden"));
       check("390x844 #rotateHint displays once un-hidden (coarse + portrait)", (await css(page, "#rotateHint", "display")) === "flex", await css(page, "#rotateHint", "display"));
       const tc = await page.evaluate(() => [...document.querySelectorAll(".topControls .btn-arcade")].map((b) => ({ id: b.id, w: b.getBoundingClientRect().width, h: b.getBoundingClientRect().height, label: b.querySelector(".btnLabel") ? b.querySelector(".btnLabel").offsetWidth : -1 })));
-      check("390 px top controls >= 44 px wide", tc.every((b) => b.w >= 44 && b.h >= 44), JSON.stringify(tc));
+      // Mode-aware top bar: Pause / Save & Quit are hidden on the menu, Settings while playing; judge the visible ones.
+      check("390 px top controls >= 44 px wide", tc.filter((b) => b.w > 0 || b.h > 0).every((b) => b.w >= 44 && b.h >= 44), JSON.stringify(tc));
     }
 
     // New regime: data-mode + is-active per screen
@@ -388,7 +389,7 @@ try {
   check("-webkit-backdrop-filter precedes every backdrop-filter", prefixedOk, `${decls.length} declarations`);
   check("source: <div id=\"loadingOverlay\" ... with no class attr", /<div id="loadingOverlay"(?![^>]*\sclass=)/.test(html), "regex");
   check("source: no bg/fg preloads, one font preload", (html.match(/rel="preload"/g) || []).length === 1 && /as="font"/.test(html), String((html.match(/rel="preload"/g) || []).length));
-  check("source: 17 external script tags unchanged order", (html.match(/<script src=/g) || []).length === 17 && html.indexOf("sfx.js?v=") < html.indexOf("00-util.js?v=") && html.indexOf("80-fx.js") < html.indexOf("99-boot.js"), String((html.match(/<script src=/g) || []).length));
+  check("source: 25 external script tags unchanged order", (html.match(/<script src=/g) || []).length === 25 && html.indexOf("sfx.js?v=") < html.indexOf("00-util.js?v=") && html.indexOf("80-fx.js") < html.indexOf("99-boot.js"), String((html.match(/<script src=/g) || []).length));
   await context.close();
 } catch (e) {
   results.errors.push(String(e && e.stack || e));

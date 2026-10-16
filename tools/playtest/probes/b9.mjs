@@ -17,7 +17,8 @@ const tStart = Date.now();
 const typed = await typeFor(P, 40, { wpm: 60, accuracy: 0.995, onTick: async (st) => { polledMax = Math.max(polledMax, st.combo || 0); } });
 const typedS = (Date.now() - tStart) / 1000;
 const hudWpm = await P.g(() => ({ hud: document.getElementById("hudWpm").textContent, live: window.game.liveWpm(), stats: { chars: window.game.stats.chars, timeMs: window.game.stats.timeMs, correct: window.game.stats.correct, total: window.game.stats.total, maxCombo: window.game.stats.maxCombo } }));
-P.check("#hudWpm non-zero after 5 s of typing (liveWpm = trailing 10 s chars x 6/5)", Number(hudWpm.hud) > 0 && hudWpm.live === Number(hudWpm.hud), hudWpm);
+// The HUD commits text at 5 Hz while liveWpm() is a sliding 10 s window, so allow the one-commit drift.
+P.check("#hudWpm non-zero after 5 s of typing and within 2 of liveWpm (5 Hz text commit)", Number(hudWpm.hud) > 0 && Math.abs(hudWpm.live - Number(hudWpm.hud)) <= 2, hudWpm);
 P.check("run.stats.maxCombo >= the polled max combo", hudWpm.stats.maxCombo >= polledMax, { maxCombo: hudWpm.stats.maxCombo, polledMax });
 const results = await P.g(() => window.game.buildResults("level"));
 const typistCps = typed / typedS;
