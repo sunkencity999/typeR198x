@@ -535,7 +535,7 @@ Object.assign(Game.prototype, {
     const rows = (Array.isArray(this.save.highScores) ? this.save.highScores : [])
       .filter((h) => h && typeof h === "object")
       .slice()
-      .sort((a, b) => ((b.score | 0) - (a.score | 0)) || ((b.date | 0) - (a.date | 0)))
+      .sort(byScoreThenNewest)   // review R52
       .slice(0, 10);
     if (!rows.length) {
       tbody.innerHTML = '<tr class="hsRow hsEmpty"><td colspan="6">No runs recorded yet. Clear a sector to enter the hall.</td></tr>';

@@ -75,6 +75,12 @@ function clampPlayerHp(player) {
   player.hp = clamp(player.hp, 0, player.maxHp);
 }
 
+// Records order: score first, newest first on a tie. Dates are ms timestamps (above 2^31), so they are compared
+// as numbers, never `| 0` (review R52). Shared by migrateSave, upsertHighScore and the Records table.
+function byScoreThenNewest(a, b) {
+  return ((b.score | 0) - (a.score | 0)) || ((Number(b.date) || 0) - (Number(a.date) || 0));
+}
+
 // ----------------------------- Storage -----------------------------
 const LS_KEY = "typesmup198x.save.v1";
 const SAVE_SCHEMA = 2;
@@ -177,7 +183,7 @@ function normaliseSettings(s) {
 // Merge any stored blob over the defaults and normalise it to schema 2. Idempotent.
 function migrateSave(obj) {
   const base = defaultSave();
-  if (!obj || typeof obj !== "object") return base;
+  if (!obj || typeof obj !== "object") obj = {};   // review R51: non-object blobs land on the same fixed point as {}
   const save = { ...base, ...obj };
   save.settings = normaliseSettings({ ...base.settings, ...((obj.settings && typeof obj.settings === "object") ? obj.settings : {}) });
   save.tutorialSeen = { ...base.tutorialSeen, ...((obj.tutorialSeen && typeof obj.tutorialSeen === "object") ? obj.tutorialSeen : {}) };
@@ -199,7 +205,7 @@ function migrateSave(obj) {
     }
     save.legacySeeded = true;
   }
-  save.highScores.sort((a, b) => ((b.score | 0) - (a.score | 0)) || ((b.date | 0) - (a.date | 0)));
+  save.highScores.sort(byScoreThenNewest);
   if (save.highScores.length > 10) save.highScores.length = 10;
   save.schema = SAVE_SCHEMA;
   return save;

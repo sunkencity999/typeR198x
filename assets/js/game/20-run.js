@@ -746,7 +746,7 @@ Object.assign(Game.prototype, {
     } else {
       list.push(row);
     }
-    list.sort((a, b) => ((b.score | 0) - (a.score | 0)) || ((b.date | 0) - (a.date | 0)));
+    list.sort(byScoreThenNewest);   // review R52
     if (list.length > 10) list.length = 10;
     return true;
   },
