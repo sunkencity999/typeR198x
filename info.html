@@ -2,11 +2,33 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>About Type-R 198X</title>
-  <link rel="stylesheet" href="./assets/style/tokens.css" />
-  <link rel="stylesheet" href="./style.css" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>About — Type-R 198X</title>
+  <meta name="description" content="About Type-R 198X: a neon arcade typing shoot-'em-up. Type the first letter to lock on, finish the word to fire, and clear ten sectors of word-bosses. Free in your browser." />
+  <meta name="color-scheme" content="dark" />
+  <meta name="theme-color" content="#0B1030" />
+  <link rel="canonical" href="https://typer198x.com/info.html" />
+  <link rel="icon" href="./assets/ui/mark.svg" type="image/svg+xml" sizes="any" />
+  <link rel="icon" type="image/png" sizes="32x32" href="./assets/icons/generated/macos/Icon-App-32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="./assets/icons/generated/macos/Icon-App-16.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="./assets/ui/apple-touch-icon.png" />
+  <link rel="stylesheet" href="./assets/style/tokens.css?v=20251130a" />
+  <link rel="stylesheet" href="./style.css?v=20251130a" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Type-R 198X" />
+  <meta property="og:title" content="About Type-R 198X — neon typing shoot-'em-up" />
+  <meta property="og:description" content="Type the first letter to lock on, finish the word to fire, and clear ten sectors of word-bosses. Free in your browser." />
+  <meta property="og:url" content="https://typer198x.com/info.html" />
+  <meta property="og:image" content="https://typer198x.com/assets/ui/og-card.jpg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Type-R 198X gameplay: a neon ship firing at word enemies over a night city" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="About Type-R 198X — neon typing shoot-'em-up" />
+  <meta name="twitter:description" content="Type the first letter to lock on, finish the word to fire, and clear ten sectors of word-bosses. Free in your browser." />
+  <meta name="twitter:image" content="https://typer198x.com/assets/ui/og-card.jpg" />
   <style>
+    * { box-sizing: border-box; }
     body.info-page {
       min-height: 100vh;
       margin: 0;
@@ -17,6 +39,8 @@
       align-items: center;
       justify-content: center;
       padding: 40px 16px;
+      padding-left: max(16px, env(safe-area-inset-left));
+      padding-right: max(16px, env(safe-area-inset-right));
     }
 
     .info-shell {
@@ -26,6 +50,7 @@
       border-radius: 32px;
       padding: 48px;
       box-shadow: 0 40px 90px rgba(0, 0, 0, 0.45);
+      -webkit-backdrop-filter: blur(20px);
       backdrop-filter: blur(20px);
     }
 
@@ -34,6 +59,7 @@
       flex-wrap: wrap;
       gap: 24px;
       align-items: center;
+      justify-content: space-between;
       margin-bottom: 32px;
     }
 
@@ -46,7 +72,7 @@
     }
 
     .info-logo img {
-      width: 64px;
+      width: 180px;
       height: auto;
     }
 
@@ -79,7 +105,7 @@
       letter-spacing: 0.12em;
       font-size: 1rem;
       text-transform: uppercase;
-      color: #b2f5ff;
+      color: var(--neon-cyan, #b2f5ff);
     }
 
     .info-card ul {
@@ -87,6 +113,7 @@
       margin: 0;
       color: rgba(255, 255, 255, 0.8);
     }
+    .info-card p { color: rgba(255, 255, 255, 0.82); }
 
     .cta {
       display: flex;
@@ -96,12 +123,20 @@
       margin-top: 40px;
     }
 
-    .cta a {
+    .cta a.cta-primary {
       padding: 14px 28px;
       border-radius: 999px;
-      background: linear-gradient(90deg, #ff8bdc, #63f3ff);
+      background: linear-gradient(90deg, var(--neon-magenta, #ff8bdc), var(--neon-cyan, #63f3ff));
       color: #05070b;
       font-weight: 600;
+      text-decoration: none;
+      letter-spacing: 0.08em;
+    }
+    .cta a.cta-secondary {
+      padding: 14px 24px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: inherit;
       text-decoration: none;
       letter-spacing: 0.08em;
     }
@@ -109,6 +144,25 @@
     .cta small {
       opacity: 0.75;
     }
+
+    .back {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--font-mono);
+      font-size: var(--fs-sm, 0.85rem);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      text-decoration: none;
+      color: var(--neon-cyan);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: var(--r-md, 12px);
+      padding: 10px 14px;
+      min-height: 44px;
+    }
+    .back:hover { box-shadow: var(--glow-strong, 0 0 18px rgba(57,245,255,0.45)); }
+    .back--bottom { margin-top: 32px; }
+    :focus-visible { outline: 2px solid var(--neon-cyan); outline-offset: 3px; }
 
     @media (max-width: 720px) {
       .info-shell {
@@ -121,44 +175,43 @@
   <main class="info-shell">
     <header class="info-header">
       <div class="info-logo">
-        <img src="./assets/ui/logo.svg" alt="Type-R 198X" />
-        <span>TYPE-R 198X</span>
+        <img src="./assets/ui/logo.svg" alt="Type-R 198X" width="820" height="220" />
       </div>
       <span class="pill">Hyper-Typing Arcade</span>
+      <a class="back" href="./index.html">← Back to the game</a>
     </header>
 
     <section>
       <h1 class="neon-text" style="margin-bottom: 12px;">Arcade-grade typing thrills</h1>
       <p class="small" style="font-size:1.05rem; color:rgba(255,255,255,0.82);">
-        Type-R 198X turns deliberate practice into a neon space opera. Lock onto word-swarms, laser bosses by finishing their phrases,
-        and build accuracy and speed without staring at drills. Every keystroke is a shot fired.
+        Type-R 198X turns deliberate practice into a neon space opera. Type the first letter of a target to lock on, finish the
+        word to fire, and build accuracy and speed without staring at drills. Every keystroke is a shot fired.
       </p>
     </section>
 
     <section class="info-grid">
       <article class="info-card">
         <h3>Skill Builder</h3>
-        <p>Custom word pools, escalating speeds, and in-run accuracy tracking sharpen typing fluency while keeping the adrenaline high.</p>
+        <p>Graded letter sets and word pools, three announced waves per sector, live WPM and accuracy on the HUD, and a rank (S to D) on every results card that weighs accuracy, speed and hull.</p>
       </article>
       <article class="info-card">
-        <h3>Immersive Story</h3>
-        <p>Ten sectors of WordStorm chaos, animated boss encounters, and synthwave SFX keep motivation maxed out for seasoned typists and new pilots alike.</p>
+        <h3>Ten Sectors</h3>
+        <p>Ten sectors over seven hand-painted skylines, each ending in a three-phase word-boss with typable minions and a telegraphed Signal Surge you can counter. Storm passes, a finale vista and a typewriter ending.</p>
       </article>
       <article class="info-card">
         <h3>Seamless Progress</h3>
         <ul>
-          <li>Local saves remember ships, runs, and unlocks.</li>
-          <li>Pause or resume with a single keystroke.</li>
-          <li>Optimized for keyboard warriors on desktop and laptop.</li>
+          <li>Saves stay on your device: ships, runs, sector bests, records.</li>
+          <li>Checkpoints every sector; retry a boss from the phase you reached.</li>
+          <li>Sector select replays any sector you have unlocked.</li>
         </ul>
       </article>
     </section>
 
     <section class="info-grid" style="margin-top:32px;">
-      <article class="info-card" style="background:rgba(99,243,255,0.08); border-color:rgba(99,243,255,0.4);">
-        <h3>Available on macOS</h3>
-        <p style="font-size:1.2rem; font-weight:600;">Launch price: <span style="color:#63f3ff;">$7.99 USD</span></p>
-        <p>Download the notarized macOS edition to enjoy offline play, native keyboard focus, and silky frame pacing.</p>
+      <article class="info-card">
+        <h3>Powerups &amp; Combos</h3>
+        <p>SHIELD, MULTI, SPREAD, PIERCE, RAPID and HEAL capsules drift in; type their label to grab them. Combo tiers lift the multiplier up to ×5 (×7 with MULTI); a hard miss or hull damage resets it.</p>
       </article>
       <article class="info-card" style="display:flex; flex-direction:column; justify-content:center;">
         <h3>Perfect For</h3>
@@ -170,10 +223,25 @@
       </article>
     </section>
 
+    <section class="info-grid" style="margin-top:32px;">
+      <article class="info-card">
+        <h3>Plays Everywhere</h3>
+        <p>Free in the browser (Safari 14.1+, Chrome 87+, Firefox 103+), with a fullscreen mode, a CRT filter, music and sound sliders, a reduced-motion option and screen-reader announcements. Touch devices type through the on-screen keyboard; a hardware keyboard gives the best experience.</p>
+      </article>
+      <article class="info-card" style="background:rgba(99,243,255,0.08); border-color:rgba(99,243,255,0.4);">
+        <h3>Available on macOS</h3>
+        <p style="font-size:1.2rem; font-weight:600;">Launch price: <span style="color:var(--neon-cyan, #63f3ff);">$7.99 USD</span></p>
+        <p>The notarized macOS edition bundles the whole game for offline play with native keyboard focus.</p>
+      </article>
+    </section>
+
     <div class="cta">
-      <a href="./support.html">Need support?</a>
+      <a class="cta-primary" href="./index.html">Play now</a>
+      <a class="cta-secondary" href="./support.html">Need support?</a>
       <small>Questions about licensing, education bundles, or accessibility? Let us know.</small>
     </div>
+
+    <a class="back back--bottom" href="./index.html">← Back to the game</a>
   </main>
 </body>
 </html>
