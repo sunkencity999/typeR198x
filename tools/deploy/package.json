@@ -1,0 +1,14 @@
+{
+  "name": "typer198x-deploy",
+  "private": true,
+  "version": "1.0.0",
+  "description": "FTP/FTPS deploy script for typer198x.com (web build only)",
+  "type": "module",
+  "scripts": {
+    "deploy": "node deploy.mjs",
+    "dry-run": "node deploy.mjs --dry-run"
+  },
+  "dependencies": {
+    "basic-ftp": "^5.0.5"
+  }
+}

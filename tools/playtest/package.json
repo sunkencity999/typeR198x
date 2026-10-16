@@ -1,0 +1,16 @@
+{
+  "name": "typer198x-playtest",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Headless Playwright play-test harness for the Type-R 198X web build",
+  "type": "module",
+  "scripts": {
+    "smoke": "node play.mjs --root ../.. --out ./out/smoke --scenario smoke",
+    "all": "node play.mjs --root ../.. --out ./out/all --scenario all",
+    "hidpi": "node play.mjs --root ../.. --out ./out/hidpi --scenario all --dpr 2",
+    "mobile": "node play.mjs --root ../.. --out ./out/mobile --scenario smoke --mobile"
+  },
+  "dependencies": {
+    "playwright": "^1.58.2"
+  }
+}
