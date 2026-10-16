@@ -203,6 +203,7 @@ Extra one-off scripts live in `probes/` (shipped) or `out/` (ignored). They can 
 - `probes/e2-budget.mjs [--dpr 2] [--sector 10]` — combined budget: 14 plates, 3 chips, toast + banner, CRT on: fps >= 58, maxRenderMs <= 16, shadowBlur 0, composite sets <= 6. Run it alone (fps-sensitive).
 - `probes/e2-vision.mjs` — six scenes under normal / deuteranopia / achromatopsia vision (`Emulation.setEmulatedVisionDeficiency`), 15 PNGs under `out/e2-vision/`, plus DOM/state assertions on the shape cues.
 - `probes/e2-menu.mjs` — CRT top-bar toggle (label, aria-pressed, dot, data-crt), NEW RUN + confirm, Enter -> Continue, Escape restores focus.
+- `probes/review-runtime.mjs` — regression checks for the review-fix runtime track (~25 s): explosion sheet factor through a DPR 1 -> 2 flip and back (R1), `PALETTE.rgba` alpha quantisation (R12), dying plates under source-over (R13), the full 450 ms loading fade (R27), plate-cache re-warm after a mid-sector resize (R30), bounded spawn/leak telemetry logs and their reset on a new run (R31).
 
 ## Music loop points (`tools/measure-loops.sh`)
 
