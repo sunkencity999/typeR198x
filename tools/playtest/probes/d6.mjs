@@ -65,44 +65,54 @@ const killRes = await P.g(async () => {
   const tA = info.t, wA = performance.now();
   while (performance.now() - wA < 500) { await new Promise((r) => requestAnimationFrame(r)); enemiesMax = Math.max(enemiesMax, g.enemies.length); }
   const ratio2 = (info.t - tA) / ((performance.now() - wA) / 1000);
-  return { bossClear: !!info, ratio1: Math.round((t05 / wall05) * 100) / 100, ratio2: Math.round(ratio2 * 100) / 100, slowMo: typeof g.setSlowMo === "function", hitStop: typeof g.addHitStop === "function", artBefore, artStored: info && info.artRect, enemiesMax, dissolve: g.bossDissolve, whiteFlash: g.whiteFlash };
+  // reference centroid of the art as drawn right now (dissolve not started: alpha 1), shake zeroed for the diff
+  const ref = (() => {
+    const r = info.artRect, s = g.renderScale || 1;
+    const box = { x: Math.max(0, r.x - 40), y: Math.max(0, r.y - 40), w: Math.min(g.w, r.x + r.w + 40) - Math.max(0, r.x - 40), h: Math.min(g.h, r.y + r.h + 40) - Math.max(0, r.y - 40) };
+    const grab = () => g.ctx.getImageData(Math.round(box.x * s), Math.round(box.y * s), Math.round(box.w * s), Math.round(box.h * s)).data;
+    const tr = g.trauma; g.trauma = 0;
+    g.render(0); const a = grab(); const d = g.bossDissolve; g.bossDissolve = null; g.render(0); const b = grab(); g.bossDissolve = d; g.trauma = tr;
+    let sx = 0, sy = 0, n = 0; const W = Math.round(box.w * s);
+    for (let i = 0; i < a.length; i += 4) { const diff = Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]); if (diff > 48) { const p = i / 4; sx += p % W; sy += Math.floor(p / W); n++; } }
+    return n ? { x: Math.round(box.x + (sx / n) / s), y: Math.round(box.y + (sy / n) / s), n, t: info.t } : null;
+  })();
+  g._d6Ref = ref;
+  return { bossClear: !!info, ratio1: Math.round((t05 / wall05) * 100) / 100, ratio2: Math.round(ratio2 * 100) / 100, slowMo: typeof g.setSlowMo === "function", hitStop: typeof g.addHitStop === "function", artBefore, artStored: info && info.artRect, enemiesMax, dissolve: g.bossDissolve, whiteFlash: g.whiteFlash, ref };
 });
 if (killRes.slowMo) P.check("after the kill bossClear.t advances <= .4x wall for the first .5 s, then ~1x", killRes.ratio1 <= 0.45 && killRes.ratio2 > 0.8, killRes);
 else P.note("after the kill bossClear.t advances <= .4x wall for .5 s then ~1x", `setSlowMo() not defined yet (camera track); setSlowMo(.35,.6,.4) is called when it exists. ratios now: ${killRes.ratio1} / ${killRes.ratio2}`);
 P.check("kill: bossClear set with the art rect captured in place; enemies.length === 0 through the first second", killRes.bossClear && killRes.artStored && killRes.enemiesMax === 0, { artStored: killRes.artStored, enemiesMax: killRes.enemiesMax });
 
+// Boss-sized drawImage calls during one render (device-space transform applied): where the dissolve draws the art.
+const bossDrawsSrc = `(() => {
+  const g = window.game, info = g.bossClear, r = info.artRect, s = g.renderScale || 1;
+  const calls = []; const orig = g.ctx.drawImage;
+  g.ctx.drawImage = function (img, ...a) {
+    let dx, dy, dw, dh;
+    if (a.length >= 8) { dx = a[4]; dy = a[5]; dw = a[6]; dh = a[7]; } else if (a.length >= 4) { dx = a[0]; dy = a[1]; dw = a[2]; dh = a[3]; } else { dx = a[0]; dy = a[1]; dw = img.width; dh = img.height; }
+    const m = this.getTransform(); const cx = dx + dw / 2, cy = dy + dh / 2;
+    calls.push({ X: (m.a * cx + m.c * cy + m.e) / s, Y: (m.b * cx + m.d * cy + m.f) / s, W: dw * Math.hypot(m.a, m.b) / s, H: dh * Math.hypot(m.c, m.d) / s });
+    return orig.apply(this, arguments);
+  };
+  const tr = g.trauma; g.trauma = 0;
+  try { g.render(0); } finally { g.ctx.drawImage = orig; g.trauma = tr; }
+  const hits = calls.filter((c) => c.W >= r.w * 0.95 && c.W <= r.w * 1.15 && c.H >= r.h * 0.95 && c.H <= r.h * 1.15).map((c) => ({ x: Math.round(c.X), y: Math.round(c.Y), w: Math.round(c.W), h: Math.round(c.H) }));
+  return { t: info.t, hits, rect: { x: Math.round(r.x + r.w / 2), y: Math.round(r.y + r.h / 2), w: Math.round(r.w), h: Math.round(r.h) }, dissolve: g.bossDissolve };
+})()`;
 await page.waitForFunction(() => window.game.bossClear && window.game.bossClear.t >= 0.98, null, { timeout: 5000 }).catch(() => {});
-const centroid = await P.g(() => {
-  const g = window.game, info = g.bossClear, r = info.artRect;
-  const s = g.renderScale || 1;
-  const box = { x: Math.max(0, r.x - 40), y: Math.max(0, r.y - 40), w: Math.min(g.w, r.x + r.w + 40) - Math.max(0, r.x - 40), h: Math.min(g.h, r.y + r.h + 40) - Math.max(0, r.y - 40) };
-  const grab = () => g.ctx.getImageData(Math.round(box.x * s), Math.round(box.y * s), Math.round(box.w * s), Math.round(box.h * s)).data;
-  g.render(0); const withArt = grab();
-  const d = g.bossDissolve; g.bossDissolve = null; g.render(0); const without = grab(); g.bossDissolve = d;
-  let sx = 0, sy = 0, n = 0; const W = Math.round(box.w * s);
-  for (let i = 0; i < withArt.length; i += 4) {
-    const diff = Math.abs(withArt[i] - without[i]) + Math.abs(withArt[i + 1] - without[i + 1]) + Math.abs(withArt[i + 2] - without[i + 2]);
-    if (diff > 48) { const p = i / 4; sx += p % W; sy += Math.floor(p / W); n++; }
-  }
-  const cx = n ? box.x + (sx / n) / s : null, cy = n ? box.y + (sy / n) / s : null;
-  const slot = { x: r.x + r.w / 2, y: r.y + r.h / 2 };
-  return { t: info.t, n, centroid: cx !== null ? { x: Math.round(cx), y: Math.round(cy) } : null, slot, dist: cx !== null ? Math.round(Math.hypot(cx - slot.x, cy - slot.y)) : null, dissolve: g.bossDissolve };
-});
-P.check("at bossClear.t ~ 1.0 the dissolving art's centroid is within 60 px of its fight slot (no centre teleport)", centroid.n > 200 && centroid.dist !== null && centroid.dist <= 60, centroid);
+const at10 = await page.evaluate(bossDrawsSrc);
+const slotBefore = killRes.artBefore ? { x: killRes.artBefore.x + killRes.artBefore.w / 2, y: killRes.artBefore.y + killRes.artBefore.h / 2 } : null;
+const d10 = at10.hits.length ? Math.round(Math.hypot(at10.hits[0].x - at10.rect.x, at10.hits[0].y - at10.rect.y)) : null;
+const d10b = at10.hits.length && slotBefore ? Math.round(Math.hypot(at10.hits[0].x - slotBefore.x, at10.hits[0].y - slotBefore.y)) : null;
+P.check("at bossClear.t ~ 1.0 the dissolving art is drawn centred within 60 px of its kill-time rect and of its pre-kill fight slot (no centre teleport), scale <= 1.08", at10.hits.length >= 1 && d10 !== null && d10 <= 60 && d10b !== null && d10b <= 60 && at10.hits[0].w <= at10.rect.w * 1.09, { ...at10, slotBefore, d10, d10b });
 await P.shot("finale-1.0");
 await page.waitForFunction(() => window.game.bossClear && window.game.bossClear.t >= 1.7, null, { timeout: 5000 }).catch(() => {});
 const d17 = await P.g(() => ({ t: game.bossClear && game.bossClear.t, dissolve: game.bossDissolve }));
 P.check("bossDissolve === null once the dissolve (start .4 s + 1.2 s) is done (checked at t >= 1.7; PLAN says 1.3: see deviations)", d17.dissolve === null, d17);
 await page.waitForFunction(() => window.game.bossClear && window.game.bossClear.t >= 2.2, null, { timeout: 5000 }).catch(() => {});
-const gone = await P.g(() => {
-  const g = window.game, info = g.bossClear, r = info.artRect, s = g.renderScale || 1;
-  const grab = () => g.ctx.getImageData(Math.round(r.x * s), Math.round(r.y * s), Math.round(r.w * s), Math.round(r.h * s)).data;
-  g.render(0); const a = grab();
-  const d = g.bossDissolve; g.bossDissolve = { t: 0, dur: 1.2, start: 99 }; g.render(0); const b = grab(); g.bossDissolve = d;
-  let diff = 0; for (let i = 0; i < a.length; i += 4) diff += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]);
-  return { t: info.t, diffPerPx: Math.round(diff / (a.length / 4) * 100) / 100, enemies: g.enemies.length, skipHinted: info.skipHinted };
-});
-P.check("at bossClear.t ~ 2.2 no boss art pixels remain (frame identical with the dissolve disabled); enemies.length 0; SKIP hint armed from 2.0", gone.diffPerPx < 0.5 && gone.enemies === 0 && gone.skipHinted === true, gone);
+const at22 = await page.evaluate(bossDrawsSrc);
+const gone = await P.g(() => ({ enemies: game.enemies.length, skipHinted: game.bossClear && game.bossClear.skipHinted }));
+P.check("at bossClear.t ~ 2.2 no boss art is drawn (no boss-sized drawImage in the frame; bossDissolve null); enemies.length 0; SKIP hint armed from 2.0", at22.hits.length === 0 && at22.dissolve === null && gone.enemies === 0 && gone.skipHinted === true, { ...at22, ...gone });
 await P.shot("finale-2.2");
 await page.waitForFunction(() => window.game.mode !== "playing", null, { timeout: 20000 }).catch(() => {});
 

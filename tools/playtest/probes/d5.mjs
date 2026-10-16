@@ -6,9 +6,13 @@ const argDpr = Number((process.argv.find((a, i, arr) => arr[i - 1] === "--dpr"))
 const P = await openProbe("d5-dpr" + argDpr, { dpr: argDpr });
 const page = P.page;
 const AMBER = [0xFF, 0xC1, 0x4A], DANGER = [0xFF, 0x4D, 0x6D];
+// Samples read a frame rendered without the camera's L17 vignette and without the random shake offset, so the
+// plate / banner layers are measured on their own (the vignette darkens edges by up to 35 %).
 async function nearestIn(x, y, rx, ry, target) {
   return P.g(({ x, y, rx, ry, target }) => {
     const g = window.game; const s = g.renderScale || 1;
+    const dv = g.drawVignette, tr = g.trauma; g.drawVignette = function () {}; g.trauma = 0;
+    try { g.render(0); } finally { g.drawVignette = dv; g.trauma = tr; }
     const x0 = Math.max(0, Math.round((x - rx) * s)), y0 = Math.max(0, Math.round((y - ry) * s));
     const img = g.ctx.getImageData(x0, y0, Math.max(1, Math.round(2 * rx * s)), Math.max(1, Math.round(2 * ry * s))).data;
     let best = null, bd = Infinity;
@@ -93,7 +97,9 @@ const bar = await meanLuma(0, 720 - 50, 1280, 40);
 const warn1 = await nearestIn(160, 245 + 40, 110, 12, DANGER);
 await sleep(130);
 const warn2 = await nearestIn(160, 245 + 40, 110, 12, DANGER);
-const warnBest = Math.min(warn1.d, warn2.d);
+await sleep(70);
+const warn3 = await nearestIn(160, 245 + 40, 110, 12, DANGER);
+const warnBest = Math.min(warn1.d, warn2.d, warn3.d);   // the eyebrow blinks at 4 Hz (.35 / 1.0)
 await P.shot("boss-intro-1.2");
 P.check("07-style frame at intro t~1.2: bottom letterbox rows mean luminance < 24 and a WARNING eyebrow pixel within 40 of --danger", bar < 24 && warnBest <= 40, { bar, warn1, warn2 });
 const artPix = await P.g(() => {
@@ -122,13 +128,14 @@ pg.on("pageerror", (e) => rmErrors.push(String(e)));
 await ctx2.addInitScript((k) => { try { localStorage.removeItem(k); } catch {} }, "typesmup198x.save.v1");
 await pg.goto(P.base, { waitUntil: "load" });
 await pg.waitForFunction(() => { const el = document.getElementById("loadingOverlay"); return !el || el.classList.contains("hidden"); }, null, { timeout: 120000 });
-await pg.evaluate(() => { const g = window.game; if (typeof g.resolveMotion === "function") g.resolveMotion(); if (!g.reduceMotion) { g.reduceMotion = true; document.documentElement.classList.add("reduce-motion"); g._rmForcedByProbe = true; } });
+await pg.evaluate(() => { const g = window.game; if (g.save && g.save.settings) g.save.settings.reduceMotion = true; if (typeof g.resolveMotion === "function") g.resolveMotion(); else if (typeof g.ensureMotionFlag === "function") g.ensureMotionFlag(); if (!g.reduceMotion) { g.reduceMotion = true; document.documentElement.classList.add("reduce-motion"); } g._rmForcedByProbe = typeof g.resolveMotion !== "function"; });
 await pg.fill("#playerName", "RM").catch(() => {});
 await pg.click("#btnStart");
 try { const st = pg.locator("#btnStoryLaunch"); await st.waitFor({ state: "visible", timeout: 2500 }); await st.click(); } catch {}
 await pg.waitForFunction(() => window.game && window.game.mode === "playing" && window.game.banner, null, { timeout: 30000 });
 const rm = await pg.evaluate(async () => {
   const g = window.game;
+  if (g.save && g.save.settings) g.save.settings.reduceMotion = true;
   if (!g.reduceMotion) { g.reduceMotion = true; document.documentElement.classList.add("reduce-motion"); }
   const out = { forcedByProbe: !!g._rmForcedByProbe };
   while (g.banner && g.banner.t < 0.19) await new Promise((r) => requestAnimationFrame(r));

@@ -431,7 +431,7 @@ Object.assign(Game.prototype, {
     const w = this.w;
     let y = b.y != null ? b.y : preset.y(this);
     // A callout under an active wave banner sits one line lower so the two never overprint.
-    if (b.kind === "callout" && this.banner && this.banner !== b && this.banner.kind === "wave") y += 44;
+    if (b.kind === "callout" && this.banner && this.banner !== b && this.banner.kind === "wave") y += this.banner.sub ? 72 : 44;
     const kIn = clamp(t / 0.16, 0, 1);
     const alpha = Math.min(kIn, tOut);
     if (alpha <= 0) return null;

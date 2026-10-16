@@ -24,13 +24,15 @@ await P.g(() => {
 
 const COLORS = { cyan: [0x39, 0xF5, 0xFF], danger: [0xFF, 0x4D, 0x6D], violet: [0xB8, 0x6B, 0xFF], lime: [0xA8, 0xFF, 0x3A] };
 const dist = (a, b) => Math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2);
-// Pixel nearest to `target` in a small logical-px window around (x, y), read straight from the game canvas.
+// Samples read a frame rendered without the camera's L17 vignette and without the random shake offset, so the
+// plate / banner layers are measured on their own (the vignette darkens edges by up to 35 %).
 async function nearestIn(x, y, rx, ry, target) {
   return P.g(({ x, y, rx, ry, target }) => {
     const g = window.game; const s = g.renderScale || 1;
+    const dv = g.drawVignette, tr = g.trauma; g.drawVignette = function () {}; g.trauma = 0;
+    try { g.render(0); } finally { g.drawVignette = dv; g.trauma = tr; }
     const x0 = Math.max(0, Math.round((x - rx) * s)), y0 = Math.max(0, Math.round((y - ry) * s));
-    const w = Math.max(1, Math.round(2 * rx * s)), h = Math.max(1, Math.round(2 * ry * s));
-    const img = g.ctx.getImageData(x0, y0, w, h).data;
+    const img = g.ctx.getImageData(x0, y0, Math.max(1, Math.round(2 * rx * s)), Math.max(1, Math.round(2 * ry * s))).data;
     let best = null, bd = Infinity;
     for (let i = 0; i < img.length; i += 4) {
       const px = [img[i], img[i + 1], img[i + 2]];
@@ -62,8 +64,8 @@ P.check("shadowBlur sets inside render() === 0 over >= 180 frames with plates on
 await P.g(async () => {
   const g = window.game;
   for (const e of g.enemies) e.alive = false;
-  const xs = [900, 1000, 1100, 980, 1150];
-  for (let i = 0; i < xs.length; i++) { const e = g.spawnEnemy(); if (e) { e.x = xs[i]; e.speed = 0; e.age = 1; } }
+  const xs = [660, 1000, 1100, 980, 1150], ys = [388, 252, 456, 184, 524], words = ["zephyr", "k", "quartz", "v", "nimbus"];
+  for (let i = 0; i < xs.length; i++) { const e = g.spawnEnemy(); if (e) { e.x = xs[i]; e.y = ys[i]; e.lane = i; e.speed = 0; e.age = 1; e.text = words[i]; e.progress = 0; } }
   await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
 });
 const geo = await P.g(() => {
@@ -76,8 +78,8 @@ P.check("every enemy plate: plateW >= textW + 24 (chip = h for single letters)",
 // lock an enemy and confirm it is drawn last
 const lockCheck = await P.g(async () => {
   const g = window.game;
-  const en = g.enemies.filter((e) => e.alive && g.isTargetable(e)).sort((a, b) => a.x - b.x)[0];
-  if (!en) return { note: "no targetable enemy" };
+  const en = g.enemies.filter((e) => e.alive && g.isTargetable(e) && e.text.length > 1).sort((a, b) => a.x - b.x)[0];
+  if (!en) return { note: "no targetable word" };
   g.handleTyped(en.nextChar());
   await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
   return { locked: !!g.lock, last: g.lastPlateDrawn === (g.lock && g.lock.ref), railsDrawn: g.debug.railsDrawn, enemies: g.enemies.length };
@@ -88,11 +90,12 @@ P.check("locked plate is the last plate drawn (game.lastPlateDrawn === lock.ref)
 const idle = await P.g(() => {
   const g = window.game;
   const e = g.enemies.filter((e) => e.alive && !e.locked && g.enemyState(e) === "idle").sort((a, b) => a.x - b.x)[0];
+  if (e) { e.x = 700; e.y = 252; e.lane = 1; }   // a free lane near the centre (the locked word sits on lane 3)
   return e ? { x: e.x, y: e.y, w: e.plateW, h: e.plateH, text: e.text } : null;
 });
 if (idle) {
   const stroke = await nearestIn(idle.x, idle.y - idle.h / 2, 6, 2.5, COLORS.cyan);
-  const fill = await lumaAt(idle.x - idle.w / 2 + 8, idle.y);
+  const fill = await lumaAt(idle.x - idle.w / 2 + 8, idle.y);   // read after the vignette-free render above
   P.check("idle plate: stroke pixel within 12 of --neon-cyan, fill luminance <= 28/255 (8 px inside the edge)", stroke.d <= 12 && fill <= 28, { stroke, fill, plate: idle });
 } else P.note("idle plate colour sample", "no idle plate in the sample window");
 const dangerCheck = await P.g(async () => {
@@ -111,6 +114,8 @@ if (dangerCheck) {
 // ---- spawn pop: >= 5 % wider .15 s after spawn ----
 const pop = await P.g(async () => {
   const g = window.game;
+  for (const e of g.enemies) e.alive = false;   // clear the parked plates so the spawn cap cannot block
+  await new Promise((r) => requestAnimationFrame(r));
   const en = g.spawnEnemy();
   if (!en) return { note: "spawnEnemy returned null (cap)" };
   en.x = g.w - 200;   // on screen so the plate is drawn
@@ -143,7 +148,7 @@ const cap = await P.g(async () => {
   for (const p of g.powerups) p.alive = false;
   const p = g.spawnPowerup({ type: "SHIELD" });
   if (!p) return null;
-  p.x = g.w * 0.6; p.baseY = 320; p.age = 1; p.speed = 0;
+  p.x = 700; p.baseY = 320; p.age = 1; p.speed = 0;
   await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
   return { x: p.x, y: p.y, w: p.plateW, h: p.plateH, labelW: Math.round(p.labelW), ok: p.plateW >= p.labelW + 40 };
 });
@@ -188,7 +193,7 @@ await pg.fill("#playerName", "RM").catch(() => {});
 await pg.click("#btnStart");
 try { const st = pg.locator("#btnStoryLaunch"); await st.waitFor({ state: "visible", timeout: 2500 }); await st.click(); } catch {}
 await pg.waitForFunction(() => window.game && window.game.mode === "playing" && !window.game.levelIntro, null, { timeout: 30000 });
-await pg.evaluate(() => { const g = window.game; if (typeof g.resolveMotion === "function") g.resolveMotion(); if (!g.reduceMotion) { g.reduceMotion = true; document.documentElement.classList.add("reduce-motion"); g._rmForcedByProbe = true; } });
+await pg.evaluate(() => { const g = window.game; if (g.save && g.save.settings) g.save.settings.reduceMotion = true; if (typeof g.resolveMotion === "function") g.resolveMotion(); else if (typeof g.ensureMotionFlag === "function") g.ensureMotionFlag(); if (!g.reduceMotion) { g.reduceMotion = true; document.documentElement.classList.add("reduce-motion"); } g._rmForcedByProbe = typeof g.resolveMotion !== "function"; });
 await sleep(2500);
 const rm = await pg.evaluate(async () => {
   const g = window.game;

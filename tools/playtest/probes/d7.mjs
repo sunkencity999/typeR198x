@@ -22,8 +22,8 @@ await page.fill("#playerName", "D7").catch(() => {});
 await page.click("#btnStart");
 try { const st = page.locator("#btnStoryLaunch"); await st.waitFor({ state: "visible", timeout: 2500 }); await st.click(); } catch {}
 await page.waitForFunction(() => window.game && window.game.mode === "playing", null, { timeout: 30000 });
-const intro0 = await P.g(() => { const g = window.game; return { levelIntro: !!g.levelIntro, levelT: g.levelT, enemies: g.enemies.length, warp: g.parallaxWarp, total: g.stats.total }; });
-P.check("immediately after Start: levelIntro exists, levelT === 0, no enemies, parallaxWarp > 1", intro0.levelIntro && intro0.levelT === 0 && intro0.enemies === 0 && intro0.warp > 1, intro0);
+const intro0 = await P.g(async () => { const g = window.game; const first = { levelIntro: !!g.levelIntro, levelT: g.levelT, enemies: g.enemies.length, total: g.stats.total }; await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); return { ...first, warp: g.parallaxWarp, levelTAfterFrame: g.levelT }; });
+P.check("immediately after Start: levelIntro exists, levelT === 0 (still 0 a frame later), no enemies, parallaxWarp > 1", intro0.levelIntro && intro0.levelT === 0 && intro0.levelTAfterFrame === 0 && intro0.enemies === 0 && intro0.warp > 1, intro0);
 await page.keyboard.type("asd");
 const keys = await P.g(() => ({ total: game.stats.total, levelIntro: !!game.levelIntro }));
 P.check("keys during the sector card leave stats.total unchanged", keys.total === intro0.total && keys.levelIntro, keys);
@@ -94,7 +94,8 @@ const storm = await P.g(async () => {
   while ((g.debug.stormBolts | 0) === 0 && performance.now() - t0 < 4000) await new Promise((r) => requestAnimationFrame(r));
   out.boltsNormal = g.debug.stormBolts | 0;
   // reduce-motion: tint stays, no bolt, no full-field brightness jump
-  if (typeof g.resolveMotion === "function") g.resolveMotion();
+  if (g.save && g.save.settings) g.save.settings.reduceMotion = true;
+  if (typeof g.resolveMotion === "function") g.resolveMotion(); else if (typeof g.ensureMotionFlag === "function") g.ensureMotionFlag();
   g.reduceMotion = true; document.documentElement.classList.add("reduce-motion");
   g.stormNextBolt = 0.3; g.debug.stormBolts = 0;
   const s = g.renderScale || 1; const lum = [];
@@ -106,6 +107,7 @@ const storm = await P.g(async () => {
   }
   let maxJump = 0; for (let i = 1; i < lum.length; i++) maxJump = Math.max(maxJump, Math.abs(lum[i] - lum[i - 1]) / Math.max(1, lum[i - 1]));
   out.maxJumpPct = Math.round(maxJump * 1000) / 10; out.boltsRM = g.debug.stormBolts | 0; out.meanLum = Math.round(lum.reduce((a, b) => a + b, 0) / lum.length);
+  if (g.save && g.save.settings) g.save.settings.reduceMotion = null;
   g.reduceMotion = false; document.documentElement.classList.remove("reduce-motion");
   return out;
 });
@@ -116,18 +118,20 @@ const bad = requests.filter((u) => /(seventh|eighth|ninth)/.test(u));
 P.check("no request for seventh / eighth / ninth art", bad.length === 0, bad);
 
 // ---- Continue into a saved boss skips the card ----
+// (a page reload would re-run the 'fresh' fixture's storage wipe, so this takes the same path the menu button takes:
+// Save & quit, then Continue -> continueRun() -> startLevel(i, { restoredRun }) with run.inBoss.)
 await P.g(() => game.startLevel(0, { fromMenu: true, fresh: true }));
 await page.waitForFunction(() => !window.game.levelIntro, null, { timeout: 6000 }).catch(() => {});
 await P.g(() => { const g = window.game; g.levelT = LEVELS[g.levelIndex].duration + 0.01; });
 await page.waitForFunction(() => window.game.inBoss && !(window.game.bossIntro && window.game.bossIntro.locked), null, { timeout: 20000 });
-await P.g(() => game.saveRun(true));
-await page.reload({ waitUntil: "load" });
-await page.waitForFunction(() => { const el = document.getElementById("loadingOverlay"); return !el || el.classList.contains("hidden"); }, null, { timeout: 120000 });
-await page.click("#btnContinue").catch(() => {});
-try { const st = page.locator("#btnStoryLaunch"); await st.waitFor({ state: "visible", timeout: 1500 }); await st.click(); } catch {}
-await page.waitForFunction(() => window.game && window.game.mode === "playing", null, { timeout: 30000 });
-const cont = await P.g(() => ({ levelIntro: game.levelIntro, inBoss: game.inBoss, bossIntro: !!game.bossIntro, banner: game.banner && game.banner.kind }));
-P.check("Continue into an inBoss run: levelIntro === null and the boss intro runs instead", cont.levelIntro === null && cont.inBoss && cont.bossIntro && cont.banner === "bossIntro", cont);
+const saved = await P.g(() => { const g = window.game; g.stopToMenu(true); const run = g.save.run; return { mode: g.mode, inBoss: !!(run && run.inBoss), hasBoss: !!(run && run.boss), stored: !!JSON.parse(localStorage.getItem("typesmup198x.save.v1") || "null")?.run?.inBoss }; });
+const cont = await P.g(async () => {
+  const g = window.game;
+  g.continueRun();
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  return { mode: g.mode, levelIntro: g.levelIntro, inBoss: g.inBoss, bossIntro: !!g.bossIntro, locked: !!(g.bossIntro && g.bossIntro.locked), banner: g.banner && g.banner.kind, segIndex: g.boss && g.boss.segmentIndex };
+});
+P.check("Save & quit inside a boss, then Continue: levelIntro === null, inBoss, the (skippable) boss intro and its banner run instead of the sector card", saved.inBoss && saved.stored && cont.mode === "playing" && cont.levelIntro === null && cont.inBoss && cont.bossIntro && cont.banner === "bossIntro", { saved, cont });
 const errs = { pageErrors: P.errors.pageErrors.length, consoleErrors: P.errors.consoleErrors.length };
 P.check("no page / console errors during the D7 probe", errs.pageErrors === 0 && errs.consoleErrors === 0, errs);
 await P.finish();

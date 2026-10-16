@@ -171,6 +171,27 @@ Object.assign(Game.prototype, {
     watchDpr();
   },
 
+  // Reduce-motion fallback until the shell's resolveMotion() (C6) exists: an explicit settings.reduceMotion
+  // true/false wins, null follows the OS query (CONTRACT section 0). Inert the moment resolveMotion is defined.
+  ensureMotionFlag() {
+    if (typeof this.resolveMotion === "function") return;
+    const pref = this.save && this.save.settings ? this.save.settings.reduceMotion : null;
+    let want;
+    if (pref === true || pref === false) want = pref;
+    else {
+      if (this._rmQuery === undefined) {
+        this._rmQuery = null;
+        try { if (typeof matchMedia === "function") this._rmQuery = matchMedia("(prefers-reduced-motion: reduce)"); } catch (e) { this._rmQuery = null; }
+      }
+      want = !!(this._rmQuery && this._rmQuery.matches);
+    }
+    if (this.reduceMotion !== want) {
+      this.reduceMotion = want;
+      this._motionFallback = true;
+      try { document.documentElement.classList.toggle("reduce-motion", want); } catch (e) { /* no DOM */ }
+    }
+  },
+
   // Motion profile from the shell (C6) when it exists; the contract's reduce-motion values otherwise.
   motionProfile() {
     if (typeof this.motion === "function") {
@@ -1254,6 +1275,7 @@ Object.assign(Game.prototype, {
   render(dt) {
     const ctx = this.ctx;
     const s = this.renderScale || 1;
+    this.ensureMotionFlag();
     // Shake transform: D1 (80-fx.js) supplies shakeOffset() -> {x, y, rot}; until then the A2 integer random offset.
     const sh = (typeof this.shakeOffset === "function") ? this.shakeOffset() : null;
     const amp = 18 * this.trauma * this.trauma;
