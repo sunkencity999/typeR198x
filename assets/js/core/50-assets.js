@@ -43,7 +43,8 @@
 //   Assets.contentRect(key, targetOrigW) → {x,y,w,h}: the opaque content box in the same logical frame as sprite().
 //   Assets.meta(key)                the manifest entry (or null).
 //   Assets.sheetScale(key)          prepared-width / original-width (1 for the full explosion sheet, 0.5 for the x1 half
-//                                   sheet) → assign to ExplosionSprite.sheetScale.
+//                                   sheet) → boot assigns it to ExplosionSprite.sheetScale (fallback only: the sprite
+//                                   derives the same factor from the resident drawable on every draw, review R1).
 //   Assets.release(key)             close the bitmap, drop the Image, forget the memoised promise (ignores pins).
 //   Assets.gc(keepKeys)             release every key that is neither pinned nor in keepKeys (in-flight loads are kept).
 //   Assets.pin(key) / Assets.unpin(key)

@@ -125,9 +125,13 @@ class Bullet {
 
 // Sheet-animated explosion (A7 / JUICE-04). The sheet is owned by the Assets loader and read every frame through
 // ExplosionSprite.getSheet() (never cached across frames: a re-prepare closes the previous ImageBitmap).
-// ExplosionSprite.sheetScale multiplies the EXPLOSION_FRAMES source rects (1 for the full sheet, 0.5 for the x1
-// half sheet). Flash frames composite additively, the fireball/smoke frames source-over; the last two frames fade
-// out and grow a little so a blast dissipates instead of ending on a dot.
+// The EXPLOSION_FRAMES source rects are in the sheet's original pixel space; ExplosionSprite.scaleFor(sheet) maps
+// them onto whatever drawable is resident right now (drawable px / original px: 1 for the full sheet, 0.5 for the
+// x1 half sheet), so a re-prepare after a renderScale / variant flip or a sheet that lands after the loading
+// overlay was dismissed can never leave a stale factor behind (review R1). ExplosionSprite.sheetScale reads that
+// live factor; assigning it (boot) only sets the fallback used while the drawable's size is unknown. Flash frames
+// composite additively, the fireball/smoke frames source-over; the last two frames fade out and grow a little so a
+// blast dissipates instead of ending on a dot.
 class ExplosionSprite {
   constructor({ x, y, type = "small", sheet = null }) {
     this.x = x;
@@ -154,6 +158,27 @@ class ExplosionSprite {
     if (typeof HTMLImageElement !== "undefined" && sheet instanceof HTMLImageElement) return sheet.complete && sheet.naturalWidth > 0;
     return (sheet.width | 0) > 0;
   }
+  // Original sheet width in px, read once from the manifest record (Assets.meta); 0 until a manifest is known.
+  static sheetOrigWidth() {
+    if (ExplosionSprite._origW > 0) return ExplosionSprite._origW;
+    let w = 0;
+    try {
+      const meta = (typeof Assets !== "undefined" && Assets && typeof Assets.meta === "function") ? Assets.meta("fx/explosions") : null;
+      if (meta) w = Number((meta.orig && meta.orig.w) || meta.w) || 0;
+    } catch (e) { w = 0; }
+    if (w > 0) ExplosionSprite._origW = w;
+    return w;
+  }
+  // Source-rect factor for this drawable (review R1): its pixel width over the original sheet width, derived on
+  // every draw; falls back to the boot-assigned value when either width is unknown.
+  static scaleFor(sheet) {
+    const sw = sheet ? (Number(sheet.naturalWidth) || Number(sheet.width) || 0) : 0;
+    const ow = sw > 0 ? ExplosionSprite.sheetOrigWidth() : 0;
+    return sw > 0 && ow > 0 ? sw / ow : (ExplosionSprite._sheetScaleFallback || 1);
+  }
+  // The factor for the sheet resident right now; assignment only updates the fallback.
+  static get sheetScale() { return ExplosionSprite.scaleFor(ExplosionSprite.sheet); }
+  static set sheetScale(v) { ExplosionSprite._sheetScaleFallback = Number(v) > 0 ? Number(v) : 1; }
   currentSheet() {
     return this.sheet || ExplosionSprite.sheet;
   }
@@ -194,7 +219,7 @@ class ExplosionSprite {
     const fi = Math.min(this.frameIndex, this.frames.length - 1);
     const frame = EXPLOSION_FRAMES[this.frames[fi]];
     if (!frame) return;
-    const k = ExplosionSprite.sheetScale || 1;
+    const k = ExplosionSprite.scaleFor(sheet);
     const alpha = this.alphaFor(fi);
     if (alpha <= 0) return;
     const grow = alpha < 1 ? 1 + 0.15 * (1 - alpha) : 1;   // last two frames: fade 1 -> 0, scale 1 -> 1.15
@@ -215,7 +240,8 @@ class ExplosionSprite {
     if (blend !== prevComp) ctx.globalCompositeOperation = prevComp;
   }
 }
-ExplosionSprite.sheetScale = 1;
+ExplosionSprite._sheetScaleFallback = 1;   // boot assigns Assets.sheetScale("fx/explosions") through the setter
+ExplosionSprite._origW = 0;
 // Set by the boot code to () => Assets.get("fx/explosions"); a default that reads the loader when present.
 ExplosionSprite.getSheet = () => (typeof Assets !== "undefined" && Assets && typeof Assets.get === "function" ? Assets.get("fx/explosions") : null);
 

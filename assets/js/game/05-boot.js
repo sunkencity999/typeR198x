@@ -196,8 +196,9 @@ Object.assign(Game.prototype, {
   },
 
   onAssetsReady() {
-    if (this.loadingDismissed) return;
+    // review R1: the fallback factor is recorded even when Continue / the watchdog dismissed the overlay first.
     ExplosionSprite.sheetScale = Assets.sheetScale("fx/explosions");
+    if (this.loadingDismissed) return;
     this.assetsReady = true;
     if (this.criticalFailures().length) {
       // Hold the overlay for Retry / Continue (the hard watchdog still dismisses at 30 s).

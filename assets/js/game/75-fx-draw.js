@@ -372,7 +372,7 @@ Object.assign(Game.prototype, {
     const sheet = ExplosionSprite.sheet;
     const ready = ExplosionSprite.isReady(sheet);
     const frame = (typeof EXPLOSION_FRAMES !== "undefined" && EXPLOSION_FRAMES[16]) || null;
-    const k = ExplosionSprite.sheetScale || 1;
+    const k = ExplosionSprite.scaleFor(sheet);   // review R1: per-draw factor, never the cached field
     for (const d of this.debris) {
       const a = d.alpha();
       if (a <= 0) continue;
