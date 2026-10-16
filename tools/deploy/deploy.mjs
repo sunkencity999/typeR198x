@@ -42,7 +42,7 @@ if (!USER) { console.error("missing --user"); process.exit(2); }
 if (!PASSWORD && !DRY) { console.error("missing TYPER_FTP_PASSWORD (or --password-file)"); process.exit(2); }
 
 // ------------------------------------------------------------------ local file set
-const TOP_FILES = ["index.html", "game.js", "style.css", "privacy.html", "info.html", "support.html", "robots.txt", "sitemap.xml", "site.webmanifest"];
+const TOP_FILES = ["index.html", "game.js", "style.css", "privacy-policy.html", "privacy.html", "info.html", "support.html", "robots.txt", "sitemap.xml", "site.webmanifest"];
 const ASSET_DIRS = ["assets"];
 const SKIP_RE = /(^|\/)(\.DS_Store|Thumbs\.db|\.git)$/;
 function walk(dir, out = []) {
