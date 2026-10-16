@@ -18,8 +18,12 @@ const BOSS_INTRO_SKIP_S = 1.0;    // returning players may skip the boss intro f
 const BOSS_FINALE_S = 5.0;
 const BOSS_FINALE_SKIP_S = 2.0;
 const IFRAMES_S = 0.8;
-const HUNGRY_SPAWN_S = 1.5;       // fewer than HUNGRY_MIN_ALIVE enemies for this long -> spawn now
-const HUNGRY_MIN_ALIVE = 2;
+// Hungry spawner (B10): an EMPTY field for this long spawns now. CONTRACT 7 had "fewer than 2 alive for 1.5 s", which left an
+// 80 WPM typist idle for up to 2 s (the timer ran while the last plate was still being typed, then the new plate needed
+// 0.15-1.4 s to roll in) and, with a shorter timer, fed any typist faster than the stream 17-22 % above targetCps. With the
+// empty-field trigger the base stream paces every wave and the longest idle gap is 0.5 s + roll-in.
+const HUNGRY_SPAWN_S = 0.5;
+const HUNGRY_MIN_ALIVE = 1;
 const SPAWN_ACC_PRIME = 0.85;     // spawnAcc at wave start so the first enemy arrives quickly
 const GAME_SPEED_FACTOR = 1;      // the master table already carries the final numbers
 
@@ -62,7 +66,7 @@ const TARGETABLE_MARGIN = 4;                             // targetable = en.x - 
 
 // ----------------------------- Waves -----------------------------
 // Index w = 0..2 is the wave within a sector.
-const WAVE_SPAWN_MUL = [0.85, 1.0, 1.15];
+const WAVE_SPAWN_MUL = [0.9, 1.0, 1.1];      // B10: the characters per second each wave asks for, relative to targetCps
 const WAVE_SPEED_MUL = [0.92, 1.0, 1.10];
 const WAVE_LETTER_MUL = [1.15, 1.0, 0.75];
 const WAVE_MAX_ENEMIES_DELTA = [-1, 0, 1];
@@ -79,11 +83,27 @@ function waveIndex(wave) {
   return clamp(wave | 0, 0, 2);
 }
 
+// Characters per enemy a wave really delivers: its letter share (WAVE_LETTER_MUL) and its length window
+// (waveLengthWindow, 30-content.js; falls back to the sector mean before that file has loaded).
+function waveCharsPerEnemy(cfg, wave) {
+  const lr = waveLetterRatio(cfg, wave);
+  let avg = cfg.avgWordLen;
+  if (typeof waveLengthWindow === "function") {
+    const win = waveLengthWindow(cfg, wave);
+    avg = (win.min + win.max) / 2;
+  }
+  return lr + (1 - lr) * avg;
+}
+
+// Enemies per second so that the wave's stream carries targetCps x WAVE_SPAWN_MUL[w] characters per second
+// whatever its mix (B10: paced by cfg.spawnRate alone, wave 3's longer words made it 1.5-2x the target).
 function waveSpawnRate(cfg, wave, waveKills = 0) {
   const w = waveIndex(wave);
   const quota = cfg.quota[w] || 1;
   const ramp = lerp(WAVE_RAMP[0], WAVE_RAMP[1], clamp(waveKills / quota, 0, 1));
-  return cfg.spawnRate * WAVE_SPAWN_MUL[w] * ramp;
+  const nominalChars = cfg.letterRatio + (1 - cfg.letterRatio) * cfg.avgWordLen;
+  const mix = nominalChars / Math.max(1, waveCharsPerEnemy(cfg, wave));
+  return cfg.spawnRate * mix * WAVE_SPAWN_MUL[w] * ramp;
 }
 
 function waveSpeed(cfg, wave) {
@@ -206,21 +226,39 @@ const RANK = {
   accSpanPct: 18,
   wpmFloor: 20,
   wpmSpan: 40,
+  // Early sectors cap a typist's gross WPM near the incoming stream (targetCps x 12 = 14 / 20 / 28 WPM at L1-3),
+  // so the speed term there is measured against that nominal rate instead of the absolute 20..60 window (B10):
+  // s = 0 at speedFloorMul x nominal, s = 1 at (speedFloorMul + speedSpanMul) x nominal, never wider than the
+  // absolute window. From speedNormLevels + 1 on the absolute window applies unchanged.
+  speedNormLevels: 3,
+  speedFloorMul: 0.5,
+  speedSpanMul: 1.2,
   thresholds: [["S", 0.90], ["A", 0.75], ["B", 0.55], ["C", 0.35]],   // below the last one is D
   order: ["S", "A", "B", "C", "D"],
   colors: { S: "amber", A: "cyan", B: "violet", C: "text", D: "danger" }
 };
 
-function rankPoints(accPct, wpm, hpPts) {
+// { floor, span } of the speed term for a sector; no level (or a level past speedNormLevels) is the absolute window.
+function rankSpeedWindow(level) {
+  const L = level | 0;
+  const cfg = (L >= 1 && L <= RANK.speedNormLevels && typeof LEVELS !== "undefined") ? LEVELS[L - 1] : null;
+  if (!cfg) return { floor: RANK.wpmFloor, span: RANK.wpmSpan };
+  const nominal = cfg.targetCps * 12;
+  return { floor: Math.min(RANK.wpmFloor, nominal * RANK.speedFloorMul), span: Math.min(RANK.wpmSpan, nominal * RANK.speedSpanMul) };
+}
+
+function rankPoints(accPct, wpm, hpPts, level) {
+  const win = rankSpeedWindow(level);
   const a = clamp((accPct - RANK.accFloorPct) / RANK.accSpanPct, 0, 1);
-  const s = clamp((wpm - RANK.wpmFloor) / RANK.wpmSpan, 0, 1);
+  const s = clamp((wpm - win.floor) / win.span, 0, 1);
   const h = clamp(Number.isFinite(hpPts) ? hpPts : 1, 0, 1);
   return RANK.weights.acc * a + RANK.weights.speed * s + RANK.weights.hp * h;
 }
 
-// accPct is a percentage (0..100); hpPts is damageTaken === 0 ? 1 : clamp(1 - damageTaken / maxHp, 0, 1).
-function rankFor(accPct, wpm, hpPts) {
-  const r = rankPoints(accPct, wpm, hpPts);
+// accPct is a percentage (0..100); hpPts is damageTaken === 0 ? 1 : clamp(1 - damageTaken / maxHp, 0, 1);
+// level (1-based, optional) selects the sector's speed window — buildResults passes LEVELS[i].level.
+function rankFor(accPct, wpm, hpPts, level) {
+  const r = rankPoints(accPct, wpm, hpPts, level);
   for (const [grade, min] of RANK.thresholds) {
     if (r >= min) return grade;
   }

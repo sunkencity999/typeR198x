@@ -35,11 +35,11 @@ const AZ = /^[a-z]+$/;
 
 // ---- timing constants ----
 const timing = { LEVEL_INTRO_S: 1.6, LEVEL_INTRO_MAX_S: 2.5, WAVE_BANNER_S: 1.2, DRAIN_MAX_S: 6, BOSS_APPROACH_S: 3.0, BOSS_INTRO_S: 2.4,
-  BOSS_FINALE_S: 5.0, BOSS_FINALE_SKIP_S: 2.0, IFRAMES_S: 0.8, HUNGRY_SPAWN_S: 1.5, GAME_SPEED_FACTOR: 1, PLATE_H: 40, DANGER_X: 0.35 };
+  BOSS_FINALE_S: 5.0, BOSS_FINALE_SKIP_S: 2.0, IFRAMES_S: 0.8, HUNGRY_SPAWN_S: 0.5, HUNGRY_MIN_ALIVE: 1, GAME_SPEED_FACTOR: 1, PLATE_H: 40, DANGER_X: 0.35 };
 for (const [k, v] of Object.entries(timing)) check(`const ${k} === ${v}`, G(k) === v, G(k));
 check("LANE_YS", eq(G("LANE_YS"), [184, 252, 320, 388, 456, 524]), G("LANE_YS"));
 check("phone lane profile", eq(G("LANE_PROFILE_PHONE.laneYs"), [200, 300, 400, 500]) && G("LANE_PROFILE_PHONE.maxEnemiesDelta") === -2 && G("LANE_PROFILE_PHONE.cssScaleBelow") === 0.55);
-check("wave modifiers", eq(G("WAVE_SPAWN_MUL"), [0.85, 1.0, 1.15]) && eq(G("WAVE_SPEED_MUL"), [0.92, 1.0, 1.10]) && eq(G("WAVE_LETTER_MUL"), [1.15, 1.0, 0.75]) && eq(G("WAVE_MAX_ENEMIES_DELTA"), [-1, 0, 1]));
+check("wave modifiers", eq(G("WAVE_SPAWN_MUL"), [0.9, 1.0, 1.1]) && eq(G("WAVE_SPEED_MUL"), [0.92, 1.0, 1.10]) && eq(G("WAVE_LETTER_MUL"), [1.15, 1.0, 0.75]) && eq(G("WAVE_MAX_ENEMIES_DELTA"), [-1, 0, 1]));
 
 // ---- LEVELS master table (CONTRACT section 7) ----
 const TABLE = [
@@ -90,8 +90,8 @@ check("buildLevelWordPool clamps to 3..13", G("buildLevelWordPool(1,2).every(w =
 check("waveLengthWindow L10", eq(G("waveLengthWindow(LEVELS[9],0)"), { min: 7, max: 11 }) && eq(G("waveLengthWindow(LEVELS[9],2)"), { min: 9, max: 13 }) && eq(G("waveLengthWindow(LEVELS[9],1)"), { min: 7, max: 13 }));
 
 // ---- B4 DAMAGE ----
-// CONTRACT 7 formula: 12 + min(16, 2*len). (PLAN B4's "-36 for 12 letters" needs leakCap 24; flagged to the lead.)
-check("DAMAGE.leak(12) === 28 (contract cap 16)", G("DAMAGE.leak(12)") === 28 && G("DAMAGE.leak(8)") === 28 && G("DAMAGE.leakCap") === 16);
+// Leak = 12 + min(leakCap, 2*len) with leakCap 24 (PLAN B4 acceptance "-36 for 12 letters", probes/b4.mjs; B10 kept it).
+check("DAMAGE.leak(12) === 36 (leakCap 24)", G("DAMAGE.leak(12)") === 36 && G("DAMAGE.leak(8)") === 28 && G("DAMAGE.leakCap") === 24);
 check("DAMAGE.leak(5) === 22", G("DAMAGE.leak(5)") === 22);
 check("DAMAGE.leak(1) === 14", G("DAMAGE.leak(1)") === 14);
 check("DAMAGE.minion/surge/shieldCap/repair", G("DAMAGE.minion") === 10 && G("DAMAGE.surge(4)") === 16 && G("DAMAGE.shieldCap") === 15 && G("DAMAGE.repair") === 0.15 && G("DAMAGE.shieldHitCost") === 3);

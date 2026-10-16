@@ -79,6 +79,8 @@ const forcedPhase = await P.g(() => window.game.wavePhase);
 P.check("forceBoss (levelT = duration + .01) yields inBoss within 12 s via approach", okForce && forceS <= 12, { seconds: Math.round(forceS * 10) / 10, phase: forcedPhase });
 
 // ---- incomingCps at L5 wave 2 within +-15 % of 3.7 over 20 s (80 WPM typist keeps the field moving) ----
+// B10: the hungry rule now fires on an EMPTY field (HUNGRY_MIN_ALIVE 1, HUNGRY_SPAWN_S 0.5), so the base stream paces the
+// wave even for a typist faster than it; with "fewer than 2 alive for 1.0-1.5 s" this read +14 % to +22 %.
 await jumpTo(P, 4);
 await P.g(() => { const g = window.game; g.beginWave(1); g.levelT = LEVELS[4].cap; });
 const cpsSamples = [];
