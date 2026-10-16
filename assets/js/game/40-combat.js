@@ -39,7 +39,7 @@ Object.assign(Game.prototype, {
     if (Math.random() < (cfg.level <= 2 ? 0.55 : 0.72)) {
       const types = ["SPREAD","PIERCE","RAPID","SHIELD","MULTI"];
       const type = choice(types);
-      const label = (type === "SHIELD") ? "shield" : (type === "MULTI" ? "x2" : type.toLowerCase());
+      const label = type.toLowerCase(); // SPREAD/PIERCE/RAPID/SHIELD -> spread/pierce/rapid/shield, MULTI -> multi (G003)
       const y = rand(210, this.h - 220);
       const x = this.w + rand(80, 380);
       const speed = cfg.baseSpeed * 0.70;

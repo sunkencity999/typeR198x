@@ -12,7 +12,7 @@ game.refreshMenu();
 window.TypeRDebug = {
   LEVELS,
   normalizeKey,
-  foldLatin: (typeof foldLatin === "function") ? foldLatin : null,
+  foldLatin,
   buildBossSegments,
   stats: () => game.debugStats()
 };

@@ -140,33 +140,8 @@ Object.assign(Game.prototype, {
       });
     });
 
-    // Keyboard
-    window.addEventListener("keydown", async (e) => {
-      if (e.repeat) return;
-
-      const target = e.target;
-      const tag = (target && target.tagName) ? target.tagName.toLowerCase() : "";
-      const isEditable =
-        tag === "input" ||
-        tag === "textarea" ||
-        (target && target.isContentEditable) ||
-        (document.activeElement && document.activeElement.isContentEditable);
-      if (isEditable) return;
-
-      if (e.key === "Escape") {
-        e.preventDefault();
-        if (this.mode === "playing" || this.mode === "paused") this.togglePause();
-        return;
-      }
-
-      if (this.mode !== "playing") return;
-      const ch = normalizeKey(e);
-      if (!ch) return;
-
-      e.preventDefault();
-      await this.ensureAudio();
-      this.handleTyped(ch);
-    });
+    // Keyboard (routing order lives in 30-input.js onKeyDown)
+    window.addEventListener("keydown", (e) => this.onKeyDown(e));
 
     this.bindLifecycle();
   },
@@ -214,15 +189,105 @@ Object.assign(Game.prototype, {
     this.setMode("paused");
   },
 
-  async ensureAudio() {
-    if (this.audioUnavailable) return;
-    try {
-      await this.sfx.unlock();
-      this.sfx.setMuted(this.save.settings.muted);
-    } catch (err) {
-      console.warn("Audio init failed; continuing without sound", err);
-      this.audioUnavailable = true;
+  // Unlock audio once (memoised while in flight). Resolves immediately after the first success, so
+  // keystrokes never wait on it (A4).
+  ensureAudio() {
+    if (this.audioReady || this.audioUnavailable) return Promise.resolve();
+    if (this._audioPromise) return this._audioPromise;
+    this._audioPromise = (async () => {
+      try {
+        await this.sfx.unlock();
+        this.sfx.setMuted(this.save.settings.muted);
+        this.audioReady = true;
+      } catch (err) {
+        console.warn("Audio init failed; continuing without sound", err);
+        this.audioUnavailable = true;
+      } finally {
+        this._audioPromise = null;
+      }
+    })();
+    return this._audioPromise;
+  },
+
+  // ------------------------- Toasts (primitive; C8 adds the tutorial kinds) -------------------------
+  // #toastStack lives in #main (created here when index.html lacks it); the CSS below is the fallback
+  // until style.css carries .toastStack/.toast (see HANDOFF.md).
+  ensureToastStack() {
+    if (this.toastStack && this.toastStack.isConnected) return this.toastStack;
+    let el = document.getElementById("toastStack");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "toastStack";
+      el.className = "toastStack";
+      el.setAttribute("aria-hidden", "true");
+      (document.getElementById("main") || document.body).appendChild(el);
     }
+    if (!document.getElementById("toastStyles")) {
+      const style = document.createElement("style");
+      style.id = "toastStyles";
+      style.textContent = [
+        ".toastStack{position:absolute;left:50%;bottom:19%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:8px;z-index:15;pointer-events:none;max-width:92%}",
+        ".toast{font-family:var(--font-mono);font-size:13px;letter-spacing:.12em;text-transform:uppercase;padding:8px 14px;border-radius:999px;background:var(--glass1);border:1px solid var(--border);color:rgba(255,255,255,.92);white-space:nowrap;opacity:0;transform:translateY(12px);transition:opacity 160ms ease,transform 160ms ease}",
+        ".toast.is-in{opacity:1;transform:none}",
+        ".toast.is-out{opacity:0;transition:opacity 200ms ease}",
+        ".toast--tip{border-color:var(--neon-amber);border-color:color-mix(in srgb,var(--neon-amber) 60%,transparent)}",
+        ".toast--warn{border-color:var(--danger);border-color:color-mix(in srgb,var(--danger) 70%,transparent)}",
+        ".toast--success{border-color:var(--neon-lime);border-color:color-mix(in srgb,var(--neon-lime) 60%,transparent)}",
+        ":root.reduce-motion .toast{transform:none;transition:opacity 120ms ease}",
+        "@media (max-width:640px){.toast{font-size:12px;white-space:normal;text-align:center}}"
+      ].join("\n");
+      document.head.appendChild(style);
+    }
+    this.toastStack = el;
+    this.toasts = this.toasts || [];
+    return el;
+  },
+
+  showToast(text, opts = {}) {
+    const TOAST_MS = { info: 3200, tip: 4000, warn: 4200, success: 2400 };
+    const kind = opts.kind || "info";
+    const ms = (typeof opts.ms === "number") ? opts.ms : (TOAST_MS[kind] || 3200);
+    const key = opts.key ?? null;
+    const stack = this.ensureToastStack();
+    let entry = key ? this.toasts.find(t => t.key === key) : null;
+    if (entry) {
+      // same key: replace in place and restart the timer
+      clearTimeout(entry.timer);
+      entry.el.textContent = text;
+      entry.el.className = `toast toast--${kind} is-in`;
+      entry.el.dataset.kind = kind;
+    } else {
+      const el = document.createElement("div");
+      el.className = `toast toast--${kind}`;
+      el.dataset.kind = kind;
+      if (key) el.dataset.key = key;
+      el.textContent = text;
+      stack.appendChild(el);
+      entry = { el, key, timer: null };
+      this.toasts.push(entry);
+      while (this.toasts.length > 2) this.removeToast(this.toasts[0], true);
+      void el.offsetWidth; // commit the start state so the enter transition runs
+      el.classList.add("is-in");
+    }
+    entry.timer = setTimeout(() => this.removeToast(entry), ms);
+    if (typeof this.announce === "function") this.announce(text);
+    return entry.el;
+  },
+
+  removeToast(entry, immediate = false) {
+    if (!entry || !this.toasts) return;
+    const i = this.toasts.indexOf(entry);
+    if (i >= 0) this.toasts.splice(i, 1);
+    clearTimeout(entry.timer);
+    if (immediate) { entry.el.remove(); return; }
+    entry.el.classList.remove("is-in");
+    entry.el.classList.add("is-out");
+    setTimeout(() => entry.el.remove(), 220);
+  },
+
+  dismissToast(key) {
+    const entry = (this.toasts || []).find(t => t.key === key);
+    if (entry) this.removeToast(entry);
   },
 
   applySettings() {
