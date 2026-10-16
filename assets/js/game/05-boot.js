@@ -69,6 +69,8 @@ Object.assign(Game.prototype, {
     };
     if (this.bootEls.retry) this.bootEls.retry.addEventListener("click", () => this.retryFailedAssets());
     if (this.bootEls.cont) this.bootEls.cont.addEventListener("click", () => { this.degradedAssets = !this.assetsReady || this.failedAssets.length > 0; this.finishLoading("continue"); });
+    // The page behind the overlay is inert until finishLoading (keyboard sweep): nothing behind it takes focus or clicks.
+    if (typeof this.syncInert === "function") this.syncInert();
 
     Assets.init({ renderScale: this.renderScale || 1 });
     ExplosionSprite.getSheet = () => Assets.get("fx/explosions");
@@ -213,9 +215,16 @@ Object.assign(Game.prototype, {
 
   // .is-dismissed fades the overlay (450 ms); .hidden lands on the overlay's own opacity transitionend (or the timeout
   // fallback) so the native sed/harness state stays valid.
+  // True while the loading overlay is the page's only interactive surface (syncInert and the keydown router read it).
+  loadingBlocksPage() {
+    const overlay = (this.bootEls && this.bootEls.overlay) || this.loadingOverlay;
+    return !this.loadingDismissed && !!overlay && !overlay.classList.contains("hidden");
+  },
+
   finishLoading(reason = "ready") {
     if (this.loadingDismissed) return;
     this.loadingDismissed = true;
+    if (typeof this.syncInert === "function") this.syncInert();   // release the page before focus moves back to it
     this.bootReason = reason;
     clearTimeout(this._bootSoftTimer);
     clearTimeout(this._bootHardTimer);
@@ -235,6 +244,9 @@ Object.assign(Game.prototype, {
     };
     overlay.addEventListener("transitionend", hide);
     overlay.classList.add("is-dismissed");
+    // Keyboard sweep: Continue anyway / Retry activated from the keyboard (or a bare <body>) hands focus to the mode's primary.
+    const a = document.activeElement;
+    if ((!a || a === document.body || overlay.contains(a)) && typeof this.focusPrimary === "function") this.focusPrimary(this.mode);
     setTimeout(hide, LOADING_FADE_MS + 100);
     if (reason !== "ready") this.degradedAssets = this.degradedAssets || !this.assetsReady;
   },

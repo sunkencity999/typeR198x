@@ -15,7 +15,7 @@ function defaultStats() {
 }
 
 function defaultLevelStats() {
-  return { kills: 0, words: 0, chars: 0, correct: 0, total: 0, maxCombo: 0, timeMs: 0, bossTimeMs: 0, damageTaken: 0, waveDamage: 0, bossDamage: 0, surgesCancelled: 0, perfectWaves: 0, retries: 0, levelScore: 0 };
+  return { kills: 0, words: 0, chars: 0, correct: 0, total: 0, maxCombo: 0, timeMs: 0, bossTimeMs: 0, damageTaken: 0, waveDamage: 0, bossDamage: 0, surgesCancelled: 0, perfectWaves: 0, perfectWaveBonus: 0, retries: 0, levelScore: 0 };
 }
 
 // Every stats field a checkpoint carries (all of them except the live combo/mult).

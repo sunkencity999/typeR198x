@@ -250,6 +250,7 @@ Object.assign(Game.prototype, {
     if ((this.waveDmg || 0) === 0 && this.waveKills > 0) {
       this.levelStats.perfectWaves = (this.levelStats.perfectWaves | 0) + 1;
       const bonus = Math.round(SCORE.perfectWave(cfg.level) * SCORE.retryMul(this.levelStats.retries | 0));
+      this.levelStats.perfectWaveBonus = (this.levelStats.perfectWaveBonus | 0) + bonus;   // what the results card lists as banked
       this.addScore(bonus, { kind: "bonus", x: this.w / 2, y: this.hudSafeTop + 96 });
       this.showBanner({ kind: "callout", title: "PERFECT WAVE", sub: `+${formatInt(bonus)}`, color: "amber" });
     }

@@ -281,6 +281,9 @@ Object.assign(Game.prototype, {
     if (!Number.isInteger(cp.levelIndex)) cp.levelIndex = clamp(run.levelIndex | 0, 0, 9);   // review R21
     this.run = run;
     this.restoreCheckpoint(cp);
+    if (Number.isFinite(cp.perfectWaves)) this.levelStats.perfectWaves = cp.perfectWaves | 0;
+    if (Number.isFinite(cp.perfectWaveBonus)) this.levelStats.perfectWaveBonus = cp.perfectWaveBonus | 0;
+    if (Number.isFinite(cp.surgesCancelled)) this.levelStats.surgesCancelled = cp.surgesCancelled | 0;
     const phase = cp.bossPhase | 0;
     const starts = (Array.isArray(run.boss.phaseStarts) && run.boss.phaseStarts.length) ? run.boss.phaseStarts : [0];
     const start = starts[Math.min(phase, starts.length - 1)] | 0;
@@ -326,7 +329,9 @@ Object.assign(Game.prototype, {
   // ------------------------- Checkpoints -------------------------
   makeCheckpoint(kind, levelIndex = this.levelIndex) {
     const retries = this.run ? (this.run.retries | 0) : 0;
-    const extra = kind === "boss" ? { bossPhase: (this.boss ? this.boss.phase : 0) | 0 } : null;
+    const ls = this.levelStats || {};
+    // The live-banked counters the results card lists ride along so Retry boss keeps them (restoreCheckpoint resets levelStats).
+    const extra = kind === "boss" ? { bossPhase: (this.boss ? this.boss.phase : 0) | 0, perfectWaves: ls.perfectWaves | 0, perfectWaveBonus: ls.perfectWaveBonus | 0, surgesCancelled: ls.surgesCancelled | 0 } : null;
     return snapshotCheckpoint(kind, levelIndex, this.stats, this.player.maxHp, retries, extra);
   },
 
@@ -450,6 +455,8 @@ Object.assign(Game.prototype, {
       bankedLines.push({ label: "Surges countered", value: tally.surges | 0 });
     }
     // review R3: the badge means "beat the headline this run started against", not the live save.highScore.
+    // The second term keeps it off a Retry / Restart that ends above that baseline but below a record this same run
+    // already banked (a death or an autosave raised save.highScore): the menu headline would contradict the card.
     const baselineHigh = Number.isFinite(meta.baselineHigh) ? meta.baselineHigh : (this.save.highScore | 0);
     const title = scope === "run" ? "RUN COMPLETE" : scope === "over" ? "SIGNAL LOST" : `SECTOR ${L} CLEAR`;
     return {
@@ -467,7 +474,7 @@ Object.assign(Game.prototype, {
       kills: (level ? ls.kills : st.kills) | 0,
       timeMs,
       rank,
-      newHigh: !!(meta.startLevel === 1 || meta.legacy) && (st.score | 0) > baselineHigh,
+      newHigh: !!(meta.startLevel === 1 || meta.legacy) && (st.score | 0) > baselineHigh && (st.score | 0) >= (this.save.highScore | 0),
       newSectorBest: level && (!prevBest || levelScore > (prevBest.score | 0)),
       newWpm: wpm > (this.save.bestWpm | 0),
       retries: ls.retries | 0,
@@ -623,6 +630,8 @@ Object.assign(Game.prototype, {
     const tw = this.endingTw;
     this.endingTw = null;
     if (tw && typeof tw.cancel === "function") tw.cancel();
+    clearTimeout(this._endingFinishTimer);   // the 500 ms settle before the results (review R29)
+    this._endingFinishTimer = null;
   },
 
   resetEndingDialogue() {
@@ -672,7 +681,13 @@ Object.assign(Game.prototype, {
     const onDone = () => {
       this.endingTw = null;
       // The last line settles, then the results fade in under it.
-      if (isLast && !opts.instant && this.mode === "victory") setTimeout(() => this.finishEndingDialogue(), 500);
+      if (isLast && !opts.instant && this.mode === "victory") {
+        clearTimeout(this._endingFinishTimer);
+        this._endingFinishTimer = setTimeout(() => {
+          this._endingFinishTimer = null;
+          if (this.mode === "victory") this.finishEndingDialogue();   // review R29: Sector select inside the 500 ms wins
+        }, 500);
+      }
     };
     const rm = typeof screensReducedMotion === "function" ? screensReducedMotion(this) : !!this.reduceMotion;
     const canType = typeof this.typewrite === "function" && !opts.instant && !rm;
@@ -748,19 +763,30 @@ Object.assign(Game.prototype, {
     const meta = this.runMeta;
     if (!meta) return false;
     const score = this.stats.score | 0;
-    if (this._hsCommitted && this._hsCommitted.id === meta.id && this._hsCommitted.score === score && this._hsCommitted.victory === !!meta.victory) return false;
-    this._hsCommitted = { id: meta.id, score, victory: !!meta.victory };
+    // The sector reached is part of the key, so a save at the same score in a later sector still refreshes the row.
+    const reached = this.reachedSector(meta);
+    const c = this._hsCommitted;
+    if (c && c.id === meta.id && c.score === score && c.victory === !!meta.victory && c.reached === reached) return false;
+    this._hsCommitted = { id: meta.id, score, victory: !!meta.victory, reached };
     let changed = false;
     if ((meta.startLevel === 1 || meta.legacy) && score > (this.save.highScore || 0)) {
       this.save.highScore = score;
       changed = true;
     }
-    if (this.upsertHighScore()) changed = true;
+    if (this.upsertHighScore(reached)) changed = true;
     if (changed && opts.store !== false) storeSave(this.save);
     return changed;
   },
 
-  upsertHighScore() {
+  // The sector a run has reached, 1-based: 11 after the victory; otherwise the run record's levelIndex (which
+  // commitLevelClear advances before the next sector starts), falling back to the live level.
+  reachedSector(meta = this.runMeta) {
+    if (meta && meta.victory) return 11;
+    const run = this.run && meta && this.run.id === meta.id ? this.run : null;
+    return (run && Number.isFinite(run.levelIndex) ? run.levelIndex : this.levelIndex) + 1;
+  },
+
+  upsertHighScore(reached = this.reachedSector()) {
     const meta = this.runMeta;
     const score = this.stats.score | 0;
     if (!meta || score <= 0) return false;
@@ -770,7 +796,7 @@ Object.assign(Game.prototype, {
       runId: meta.id,
       name: this.save.playerName || meta.name || "PILOT",
       score,
-      levelReached: meta.victory ? 11 : this.levelIndex + 1,
+      levelReached: reached,
       startLevel: meta.startLevel,
       wpm: this.grossWpm(this.stats.chars | 0, this.stats.timeMs | 0),
       acc: this.getAccuracyPct(),

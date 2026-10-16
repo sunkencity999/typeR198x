@@ -38,7 +38,7 @@ while [[ $# -gt 0 ]]; do
     --dry-run) DRY=1; shift ;;
     --add-missing) ADD_MISSING=1; shift ;;
     --quiet) QUIET=1; shift ;;
-    -h|--help) sed -n '2,24p' "$0"; exit 0 ;;
+    -h|--help) awk 'NR > 1 && !/^#/ { exit } NR > 1 { print }' "$0"; exit 0 ;;
     --*) echo "unknown option: $1" >&2; exit 2 ;;
     *) if [[ -n "$TOKEN" ]]; then echo "unexpected argument: $1" >&2; exit 2; fi; TOKEN="$1"; shift ;;
   esac

@@ -19,6 +19,7 @@
 import { Client } from "basic-ftp";
 import fs from "node:fs";
 import path from "node:path";
+import net from "node:net";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 
@@ -76,7 +77,8 @@ async function connect() {
   const secure = SECURE !== "false";
   if (!secure) console.warn(`WARNING: --secure false: logging in to ${HOST}:${PORT} over PLAIN FTP, the password crosses the network in cleartext`);
   try {
-    await client.access({ host: HOST, user: USER, password: PASSWORD, port: PORT, secure, secureOptions: { servername: HOST } });
+    // SNI only for a hostname: Node refuses an IP literal as servername, which used to abort an FTPS run to an IP host.
+    await client.access({ host: HOST, user: USER, password: PASSWORD, port: PORT, secure, secureOptions: net.isIP(HOST) ? {} : { servername: HOST } });
   } catch (e) {
     client.close();
     if (secure) {

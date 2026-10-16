@@ -42,7 +42,7 @@ while [[ $# -gt 0 ]]; do
     --local) LOCAL=1; shift ;;
     --root) ROOT="$(cd "$2" && pwd)"; shift 2 ;;
     --unreferenced-out) UNREF_OUT="$2"; shift 2 ;;
-    -h|--help) sed -n '2,32p' "$0"; exit 0 ;;
+    -h|--help) awk 'NR > 1 && !/^#/ { exit } NR > 1 { print }' "$0"; exit 0 ;;
     --*) echo "unknown option: $1" >&2; exit 2 ;;
     *) URL="${1%/}"; shift ;;
   esac
@@ -90,7 +90,8 @@ if [[ -n "$URL" ]]; then
   st="$(fetch "$URL/" "$TMP/root.html")"
   cc="$(hdr "$TMP/root.html.h" cache-control)"
   if [[ "$st" == "200" ]]; then
-    if [[ "$cc" =~ no-cache|max-age=0 ]]; then pass "/ Cache-Control '$cc'"; else warn "/ Cache-Control '${cc:-<none>}' (should revalidate like index.html)"; fi
+    if [[ "$cc" =~ no-cache|max-age=0 ]]; then okcc=1; else okcc=0; fi
+    gate "$okcc" "/ Cache-Control '${cc:-<none>}' (needs no-cache or max-age=0, like index.html)"
   else warn "/ status $st"; fi
 
   # Parse the served shell

@@ -384,12 +384,13 @@ tools/deploy-check.sh https://typer198x.com --strict            # 5. go/no-go
   WOFF2 / MP3 MIME types. `tools/nginx-cache.conf` is the equivalent server-block include for an nginx host. If
   the host's own static cache still serves `.html` with a long `max-age`, exclude `.html` from it and
   purge it in the hosting panel.
-- **Go/no-go.** `tools/deploy-check.sh https://typer198x.com --strict` fails when `index.html` lacks
-  `no-cache`/`max-age=0`, when the served `?v=` tokens disagree, when a script, stylesheet, WebP, MP3 or the
-  font comes back with the wrong status or MIME type, when the served `game.js` has no `window.SFX` guard
-  or fails `node --check`, when `assets/opt/manifest.js` differs from the local one, when a ship-card `?v=`
-  differs from the served manifest version, or when the footer privacy target is missing. Without `--strict`
-  the cache-header findings are warnings.
+- **Go/no-go.** `tools/deploy-check.sh https://typer198x.com --strict` fails when `index.html` or `/` lacks
+  `no-cache`/`max-age=0`, when the served `?v=` tokens disagree, when a script, stylesheet, WebP or MP3 comes
+  back with the wrong status or MIME type (the font: wrong status or a non-font type), when the served
+  `game.js` fails `node --check` or no served script carries the `window.SFX` guard, when
+  `assets/opt/manifest.js` differs from the local one, when a ship-card `?v=` differs from the served manifest
+  version, or when the footer privacy target is missing. Without `--strict` the cache-header findings are
+  warnings; a font served as `application/octet-stream` stays a warning either way.
 
 ## Native wrappers
 

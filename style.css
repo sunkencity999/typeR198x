@@ -1081,8 +1081,11 @@ fieldset.shipGrid > legend {
   gap: 4px 18px;
   justify-content: center;
   margin-top: var(--sp-4);
-  padding-top: var(--sp-3);
+  padding: var(--sp-3) var(--sp-3) var(--sp-2);
   border-top: 1px solid var(--chrome0);
+  /* review R45: above 1600x900 the row sits over the attract scene's bright band; its own backing keeps Reset save >= 4.5:1 */
+  background: rgba(5, 6, 11, .55);
+  border-radius: 6px;
 }
 
 /* Cabinet states (screens track, C5): resume card moods, sector tile badges, saved marker, roving focus */

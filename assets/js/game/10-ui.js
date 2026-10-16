@@ -77,7 +77,19 @@ Object.assign(Game.prototype, {
   focusables(container) {
     if (!container) return [];
     // tabIndex >= 0 keeps a roving-tabindex group (the sector grid) to its single Tab stop (review R20).
-    return Array.from(container.querySelectorAll(MODAL_FOCUSABLE)).filter((el) => el.tabIndex >= 0 && this.isVisible(el) && !el.closest("[inert]"));
+    const list = Array.from(container.querySelectorAll(MODAL_FOCUSABLE)).filter((el) => el.tabIndex >= 0 && this.isVisible(el) && !el.closest("[inert]"));
+    // A named radio group is one Tab stop, as in native sequential focus: its checked radio (or the focused one while
+    // the user is inside the group), so Shift+Tab from Records lands on the selected ship, not the last card.
+    const isRadio = (el) => el.tagName === "INPUT" && el.type === "radio" && !!el.name;
+    if (!list.some(isRadio)) return list;
+    const active = document.activeElement;
+    const keep = new Map();
+    for (const el of list) {
+      if (!isRadio(el)) continue;
+      const cur = keep.get(el.name);
+      if (!cur || el === active || (el.checked && cur !== active)) keep.set(el.name, el);
+    }
+    return list.filter((el) => !isRadio(el) || keep.get(el.name) === el);
   },
 
   // Canvas normally; #typeInput on touch devices while playing (the soft keyboard needs a real text field).
@@ -524,10 +536,12 @@ Object.assign(Game.prototype, {
   // Everything behind the top modal is inert: page chrome, the playfield (with its active screen) and lower modals.
   syncInert() {
     const top = this.topModal();
+    // The loading overlay counts as a modal until finishLoading (05-boot.js loadingBlocksPage).
+    const blocked = !!top || (typeof this.loadingBlocksPage === "function" && this.loadingBlocksPage());
     const parts = [this.$("topBar"), this.mainEl || this.$("main"), document.querySelector(".footer"), this.$("rotateHint")];
     for (const el of parts) {
       if (!el) continue;
-      if (top) el.setAttribute("inert", ""); else el.removeAttribute("inert");
+      if (blocked) el.setAttribute("inert", ""); else el.removeAttribute("inert");
     }
     for (const m of this.modalStack) {
       if (m === top) m.el.removeAttribute("inert"); else m.el.setAttribute("inert", "");
@@ -641,7 +655,11 @@ Object.assign(Game.prototype, {
     if (i < 0) next = e.shiftKey ? list[n - 1] : list[0];
     else next = list[(i + (e.shiftKey ? -1 : 1) + n) % n];
     e.preventDefault();
-    try { next.focus({ preventScroll: true }); } catch (_) {}
+    try {
+      next.focus({ preventScroll: true });
+      // review R5: a control inside a scrolling modal body (the help summaries) stays visible once focused.
+      if (next.closest(".modalBody")) next.scrollIntoView({ block: "nearest" });
+    } catch (_) {}
   },
 
   // confirm({ eyebrow, title, body, okLabel, cancelLabel, danger }) -> Promise<boolean>
@@ -834,12 +852,15 @@ Object.assign(Game.prototype, {
     requestAnimationFrame(apply);
   },
 
-  // Top-bar buttons never keep focus: blur after the action and hand focus back to the playfield while playing.
+  // Top-bar buttons do not keep pointer focus: blur after a pointer activation and hand focus back to the playfield
+  // while playing. A keyboard activation (click detail 0) outside play leaves focus on the button, so the next Tab
+  // continues from it instead of restarting at the document (keyboard sweep).
   topBtn(fn) {
     return (e) => {
       const result = fn(e);
       const btn = e && e.currentTarget;
-      if (btn && typeof btn.blur === "function" && document.activeElement === btn) btn.blur();
+      const pointer = !!(e && e.detail > 0);
+      if (btn && typeof btn.blur === "function" && document.activeElement === btn && (pointer || this.mode === "playing")) btn.blur();
       if (this.mode === "playing") this.focusGameCanvas();
       return result;
     };

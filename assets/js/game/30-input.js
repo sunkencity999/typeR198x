@@ -52,6 +52,19 @@ Object.assign(Game.prototype, {
       }
     }
 
+    // 3b. While the loading overlay is up it is the only modal (keyboard sweep): Tab wraps inside it and Enter / Space
+    //     act only on its own buttons, never on the menu primary that setMode focused behind it.
+    const overlay = (typeof this.loadingBlocksPage === "function" && this.loadingBlocksPage()) ? this.bootEls.overlay : null;
+    if (overlay) {
+      if (e.key === "Tab") { this.trapFocus(overlay, e); return; }
+      if (e.key === "Enter" || e.key === "NumpadEnter" || e.key === " ") {
+        const a = document.activeElement;
+        if (a && overlay.contains(a) && /^(button|a)$/i.test(a.tagName)) return;   // native activation
+        e.preventDefault();
+        return;
+      }
+    }
+
     // 4. Tab outside play wraps inside the active screen (plus the top bar); in play it stays native.
     if (e.key === "Tab" && this.mode !== "playing") {
       const screen = document.querySelector(".screen.is-active");
