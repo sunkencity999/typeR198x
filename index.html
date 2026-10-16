@@ -2,234 +2,581 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>Type-R 198X</title>
-  <link rel="stylesheet" href="./assets/style/tokens.css" />
-  <link rel="stylesheet" href="./style.css" />
-  <link rel="icon" type="image/svg+xml" href="./assets/ui/logo.svg" />
+  <meta name="description" content="Neon arcade typing shoot-'em-up. Type the first letter to lock on, finish the word to fire, and clear ten sectors of word-bosses. Free in your browser." />
+  <meta name="color-scheme" content="dark" />
+  <meta name="theme-color" content="#0B1030" />
+  <meta name="asset-version" content="20251130a" />
+  <link rel="canonical" href="https://typer198x.com/" />
+  <link rel="icon" href="./assets/ui/mark.svg" type="image/svg+xml" sizes="any" />
+  <link rel="icon" type="image/png" sizes="32x32" href="./assets/icons/generated/macos/Icon-App-32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="./assets/icons/generated/macos/Icon-App-16.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="./assets/icons/generated/ios/Icon-App-60@3x.png" />
+  <link rel="preload" as="font" type="font/woff2" href="./assets/fonts/Orbitron-Variable.woff2" crossorigin />
+  <link rel="stylesheet" href="./assets/style/tokens.css?v=20251130a" />
+  <link rel="stylesheet" href="./style.css?v=20251130a" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Type-R 198X" />
+  <meta property="og:title" content="Type-R 198X — neon typing shoot-'em-up" />
+  <meta property="og:description" content="Neon arcade typing shoot-'em-up. Type the first letter to lock on, finish the word to fire, and clear ten sectors of word-bosses. Free in your browser." />
+  <meta property="og:url" content="https://typer198x.com/" />
+  <meta property="og:image" content="https://typer198x.com/assets/ui/og-card.jpg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Type-R 198X gameplay: a neon ship firing at word enemies over a night city" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Type-R 198X — neon typing shoot-'em-up" />
+  <meta name="twitter:description" content="Type the first letter to lock on, finish the word to fire, and clear ten sectors of word-bosses. Free in your browser." />
+  <meta name="twitter:image" content="https://typer198x.com/assets/ui/og-card.jpg" />
 </head>
 
 <body>
   <div id="app">
-    <div id="loadingOverlay" aria-live="polite" aria-label="Loading assets">
-      <div class="loadingInner">
-        <img src="./assets/ui/logo.svg" alt="Type-R 198X" class="loadingLogo" />
-        <div class="loadingSpinner"></div>
-        <p class="loadingText">Loading assets..spooling hyperspace lanes…</p>
-      </div>
-    </div>
-
-    <div
-      id="storyModal"
-      class="modalOverlay hidden"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="storyTitle"
-    >
-      <div class="modalInner">
-        <p class="modalEyebrow">Mission Briefing</p>
-        <h2 id="storyTitle" class="neon-text">WordStorm Protocol</h2>
-        <div class="modalBody">
-          <p>In 198X, the world’s neon skyways are protected by the TypeGrid—an arcade-era defense network that keeps the city’s air-lanes stable by continuously “spelling” the right commands into reality.</p>
-          <p>Then the WordStorm hits. Letters break loose. Words mutate into swarms. Boss-ships the size of buildings roll in like floating billboards, monorails, and glitching arcade cabinets—each broadcasting corrupted phrases that rewrite the sky into chaos.</p>
-          <p>You are a rookie pilot plugged into the last working TypeGrid interceptor: the Keystream. Your weapon isn’t ammo—it’s accuracy. Every correct keystroke fires a laser. Every completed word shatters enemy code. Every boss is a living headline you have to type back into submission.</p>
-          <p>Clear 10 sectors, reclaim the High Score, and punch through the final signal: the Electromancer Empress, source of the WordStorm, who’s trying to overwrite the world with a single unstoppable message.</p>
-          <p><strong>Type fast. Type clean. Save the city—one letter at a time.</strong></p>
-        </div>
-        <button id="btnStoryLaunch" class="btn-arcade primary">Launch the Keystream</button>
-      </div>
-    </div>
-
-    <div
-      id="keyboardHint"
-      class="modalOverlay hidden"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="keyboardHintTitle"
-    >
-      <div class="modalInner compact">
-        <p class="modalEyebrow">Mobile Tip</p>
-        <h2 id="keyboardHintTitle" class="neon-text">Connect a Keyboard</h2>
-        <div class="modalBody">
-          <p>Type-R 198X was built for fast, accurate keystrokes. For the best experience on tablets or phones, connect a Bluetooth or USB keyboard before diving into hyperspace.</p>
-        </div>
-        <button id="btnKeyboardHint" class="btn-arcade">Got it</button>
-      </div>
-    </div>
+    <div id="srAnnounce" class="srOnly" role="status" aria-live="polite" aria-atomic="true"></div>
 
     <header id="topBar" class="neon-panel">
       <div class="brand">
-        <img src="./assets/ui/logo.svg" alt="Type-R 198X" />
+        <img src="./assets/ui/logo.svg" alt="Type-R 198X" width="820" height="220" />
       </div>
 
       <div class="topControls">
-        <button id="btnMute" class="btn-arcade" title="Toggle audio">Mute</button>
-        <button id="btnCRT" class="btn-arcade" title="Toggle CRT overlay">CRT</button>
-        <button id="btnPause" class="btn-arcade" title="Pause / open menu">Pause</button>
-        <button id="btnStop" class="btn-arcade" title="Stop & return to menu">Stop</button>
+        <button id="btnMute" class="btn-arcade" type="button" aria-pressed="true" title="Toggle sound"><span class="btnLabel">Sound</span><i class="dot" aria-hidden="true"></i></button>
+        <button id="btnCRT" class="btn-arcade" type="button" aria-pressed="true" title="Toggle the CRT filter"><span class="btnLabel">CRT</span><i class="dot" aria-hidden="true"></i></button>
+        <button id="btnFullscreen" class="btn-arcade" type="button" aria-pressed="false" title="Toggle fullscreen (Alt+Enter)"><span class="btnLabel">Fullscreen</span><i class="dot" aria-hidden="true"></i></button>
+        <button id="btnSettings" class="btn-arcade" type="button" title="Settings"><span class="btnLabel">Settings</span></button>
+        <button id="btnPause" class="btn-arcade" type="button" aria-pressed="false" title="Pause (Esc)"><span class="btnLabel">Pause</span></button>
+        <button id="btnStop" class="btn-arcade" type="button" title="Save the run and return to the menu"><span class="btnLabel">Save &amp; quit</span></button>
       </div>
     </header>
 
     <main id="main">
-      <canvas id="game" width="1280" height="720" aria-label="TypeR Game Canvas"></canvas>
+      <canvas id="game" width="1280" height="720" tabindex="0" aria-label="Type-R 198X playfield"></canvas>
+      <input id="typeInput" class="typeInput" type="text" inputmode="text" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="go" aria-label="Type to fire" tabindex="-1" />
+      <div id="tapToType" class="tapToType hidden" aria-hidden="true">Tap the playfield to type</div>
 
-      <section id="hud" class="neon-panel">
-        <div class="hudRow">
-          <div><span class="label">Pilot</span> <span id="hudName" class="mono"></span></div>
-          <div><span class="label">Level</span> <span id="hudLevel" class="mono"></span></div>
-          <div><span class="label">Score</span> <span id="hudScore" class="mono"></span></div>
-          <div><span class="label">Combo</span> <span id="hudCombo" class="mono"></span></div>
-          <div><span class="label">Acc</span> <span id="hudAcc" class="mono"></span></div>
-          <div><span class="label">HP</span> <span id="hudHP" class="mono"></span></div>
+      <section id="hud" class="neon-panel" data-hp="ok">
+        <div id="stageBar" class="stageBar" aria-hidden="true">
+          <div class="stageSeg" data-wave="0"><div class="stageFill"></div></div>
+          <div class="stageSeg" data-wave="1"><div class="stageFill"></div></div>
+          <div class="stageSeg" data-wave="2"><div class="stageFill"></div></div>
+          <div class="stageSeg stageSeg--boss"><div class="stageFill"></div></div>
         </div>
+        <div class="hudRow">
+          <div class="hudCell hudCell--pilot"><span class="label">Pilot</span> <span id="hudName" class="mono"></span></div>
+          <div class="hudCell"><span class="label">Sector</span> <span id="hudLevel" class="mono"></span></div>
+          <div class="hudCell"><span class="label">Score</span> <span id="hudScore" class="mono"></span></div>
+          <div class="hudCell"><span class="label">Combo</span> <span id="hudCombo" class="mono"></span> <span id="hudMult" class="multBadge" data-tier="1">x1</span></div>
+          <div class="hudCell"><span class="label">Acc</span> <span id="hudAcc" class="mono"></span></div>
+          <div class="hudCell hudCell--wpm"><span class="label">WPM</span> <span id="hudWpm" class="mono">0</span></div>
+          <div class="hudCell hudCell--hull">
+            <span class="label">Hull</span>
+            <div id="hudHPMeter" class="meter" role="meter" aria-label="Hull" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><div id="hudHPGhost"></div><div id="hudHPFill"></div></div>
+            <span id="hudHP" class="mono"></span>
+          </div>
+          <button id="hudPause" class="hudPause" type="button" aria-label="Pause"></button>
+        </div>
+        <div id="hudChips" class="hudChips"></div>
         <div id="bossBar" class="bossBar hidden">
           <div class="bossTitle">
-            <span class="label">BOSS</span>
+            <span class="label">Boss</span>
             <span id="bossName" class="mono"></span>
+            <span id="bossPhase" class="mono small"></span>
             <span id="bossSegment" class="mono small"></span>
           </div>
-          <div class="bossMeter">
+          <div id="bossMeter" class="bossMeter" role="progressbar" aria-label="Boss integrity" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100" data-state="ok" style="--segments:6">
             <div id="bossFill"></div>
+            <i class="bossPhaseTick" aria-hidden="true"></i>
+            <i class="bossPhaseTick" aria-hidden="true"></i>
           </div>
         </div>
       </section>
 
       <!-- Screens -->
-      <section id="screenMenu" class="screen neon-panel">
-        <div class="screenInner">
-          <h1 class="neon-text">Type-R 198X</h1>
-          <p class="small">Type to fire. Lock-on by typing the first letter of an enemy. Finish its string to destroy it.</p>
+      <section id="screenMenu" class="screen screen--menu neon-panel" role="dialog" aria-modal="false" aria-labelledby="menuTitle">
+        <div class="screenInner menuInner">
+          <form id="menuForm" novalidate>
+            <div class="menuCol menuCol--left">
+              <p class="screenEyebrow">Neon typing shmup // 198X</p>
+              <h1 id="menuTitle" class="wordmark" aria-label="Type-R 198X"><span>TYPE-R</span> <span class="wordmarkYear">198X</span></h1>
+              <p class="tagline">Type to lock on. Finish the word to fire.</p>
+              <p id="pressStart" class="pressStart"><span class="pressStart__kbd">Press Enter to start</span><span class="pressStart__tap">Tap start</span></p>
 
-          <div class="formRow">
-            <label class="label" for="playerName">Pilot Name</label>
-            <input id="playerName" class="input" placeholder="Your name" maxlength="24" autocomplete="off" />
-          </div>
-
-          <div class="formRow">
-            <label class="label">Select Your Ship</label>
-            <div class="shipGrid" role="radiogroup" aria-label="Ship selection">
-              <label class="shipCard">
-                <input type="radio" name="shipChoice" value="coconut" />
-                <div class="shipCardInner">
-                  <img data-ship-id="coconut" src="./assets/ships/S_S_Coconut.png" alt="The S.S. Coconut" />
-                  <span class="shipName">The S.S. Coconut</span>
+              <section id="resumeCard" class="resumeCard hidden" aria-label="Saved run">
+                <img id="resumeShip" alt="" width="64" height="48" />
+                <div class="resumeMeta">
+                  <p class="label">Saved run</p>
+                  <p id="resumeTitle" class="resumeTitle"></p>
+                  <p id="resumeStats" class="small"></p>
                 </div>
-              </label>
+                <button id="btnContinue" class="btn-arcade primary" type="button">Continue</button>
+              </section>
 
-              <label class="shipCard">
-                <input type="radio" name="shipChoice" value="little-dark-one" />
-                <div class="shipCardInner">
-                  <img data-ship-id="little-dark-one" src="./assets/ships/S_S_littledarkone.png" alt="The S.S. Little Dark One" />
-                  <span class="shipName">The S.S. Little Dark One</span>
-                </div>
-              </label>
+              <button id="btnStart" class="btn-arcade primary" type="submit">Start new run</button>
 
-              <label class="shipCard">
-                <input type="radio" name="shipChoice" value="sofrito" />
-                <div class="shipCardInner">
-                  <img data-ship-id="sofrito" src="./assets/ships/S_S_Sofrito.png" alt="The S.S. Sofrito" />
-                  <span class="shipName">The S.S. Sofrito</span>
+              <section id="sectorSelect" aria-labelledby="sectorTitle">
+                <h3 id="sectorTitle" class="label">Sector select</h3>
+                <div id="sectorGrid" class="sectorGrid" role="group" aria-label="Sectors">
+                  <button class="sectorCard is-current" type="button" data-level="1"><span class="sectorNum">01</span><span class="sectorBoss">Signal Wraith</span><span class="sectorStatus">Next</span></button>
+                  <button class="sectorCard is-locked" type="button" data-level="2" disabled aria-disabled="true"><span class="sectorNum">02</span><span class="sectorBoss">Vector Ogre</span><span class="sectorStatus"></span></button>
+                  <button class="sectorCard is-locked" type="button" data-level="3" disabled aria-disabled="true"><span class="sectorNum">03</span><span class="sectorBoss">Plasma Shogun</span><span class="sectorStatus"></span></button>
+                  <button class="sectorCard is-locked" type="button" data-level="4" disabled aria-disabled="true"><span class="sectorNum">04</span><span class="sectorBoss">Holo Titan</span><span class="sectorStatus"></span></button>
+                  <button class="sectorCard is-locked" type="button" data-level="5" disabled aria-disabled="true"><span class="sectorNum">05</span><span class="sectorBoss">Chrome Monolith</span><span class="sectorStatus"></span></button>
+                  <button class="sectorCard is-locked" type="button" data-level="6" disabled aria-disabled="true"><span class="sectorNum">06</span><span class="sectorBoss">Sync Leviathan</span><span class="sectorStatus"></span></button>
+                  <button class="sectorCard is-locked" type="button" data-level="7" disabled aria-disabled="true"><span class="sectorNum">07</span><span class="sectorBoss">Static Empress</span><span class="sectorStatus"></span></button>
+                  <button class="sectorCard is-locked" type="button" data-level="8" disabled aria-disabled="true"><span class="sectorNum">08</span><span class="sectorBoss">Logic Dragon</span><span class="sectorStatus"></span></button>
+                  <button class="sectorCard is-locked" type="button" data-level="9" disabled aria-disabled="true"><span class="sectorNum">09</span><span class="sectorBoss">Night Engine</span><span class="sectorStatus"></span></button>
+                  <button class="sectorCard is-locked" type="button" data-level="10" disabled aria-disabled="true"><span class="sectorNum">10</span><span class="sectorBoss">Final Electromancer</span><span class="sectorStatus"></span></button>
                 </div>
-              </label>
-
-              <label class="shipCard">
-                <input type="radio" name="shipChoice" value="honeybee" />
-                <div class="shipCardInner">
-                  <img data-ship-id="honeybee" src="./assets/ships/S_S_honeyBee.png" alt="The S.S. HoneyBee" />
-                  <span class="shipName">The S.S. HoneyBee</span>
-                </div>
-              </label>
+              </section>
             </div>
-          </div>
 
-          <div class="grid2">
-            <button id="btnStart" class="btn-arcade">Start New Run</button>
-            <button id="btnContinue" class="btn-arcade">Continue</button>
-            <button id="btnResetSave" class="btn-arcade danger">Reset Save</button>
-            <div class="stats neon-panel">
-              <div class="statRow"><span class="label">High Score</span> <span id="statHigh" class="mono"></span></div>
-              <div class="statRow"><span class="label">Unlocked</span> <span id="statUnlocked" class="mono"></span></div>
-              <div class="statRow"><span class="label">Tips</span> <span class="mono small">Esc opens pause menu</span></div>
+            <div class="menuCol menuCol--right">
+              <div class="formRow">
+                <label class="label" for="playerName">Pilot name</label>
+                <input id="playerName" class="input" placeholder="Your name" maxlength="24" autocomplete="off" />
+              </div>
+
+              <fieldset class="shipGrid">
+                <legend class="label">Select your ship</legend>
+                <label class="shipCard">
+                  <input type="radio" name="shipChoice" value="coconut" />
+                  <div class="shipCardInner">
+                    <img data-ship-id="coconut" src="./assets/ships/S_S_Coconut.png" alt="The S.S. Coconut" width="2816" height="1536" decoding="async" fetchpriority="low" />
+                    <span class="shipName">The S.S. Coconut</span>
+                  </div>
+                </label>
+                <label class="shipCard">
+                  <input type="radio" name="shipChoice" value="little-dark-one" />
+                  <div class="shipCardInner">
+                    <img data-ship-id="little-dark-one" src="./assets/ships/S_S_littledarkone.png" alt="The S.S. Little Dark One" width="2816" height="1536" decoding="async" fetchpriority="low" />
+                    <span class="shipName">The S.S. Little Dark One</span>
+                  </div>
+                </label>
+                <label class="shipCard">
+                  <input type="radio" name="shipChoice" value="sofrito" />
+                  <div class="shipCardInner">
+                    <img data-ship-id="sofrito" src="./assets/ships/S_S_Sofrito.png" alt="The S.S. Sofrito" width="2816" height="1536" decoding="async" fetchpriority="low" />
+                    <span class="shipName">The S.S. Sofrito</span>
+                  </div>
+                </label>
+                <label class="shipCard">
+                  <input type="radio" name="shipChoice" value="honeybee" />
+                  <div class="shipCardInner">
+                    <img data-ship-id="honeybee" src="./assets/ships/S_S_honeyBee.png" alt="The S.S. HoneyBee" width="2816" height="1536" decoding="async" fetchpriority="low" />
+                    <span class="shipName">The S.S. HoneyBee</span>
+                  </div>
+                </label>
+              </fieldset>
+
+              <div class="stats neon-panel">
+                <div class="statRow"><span class="label">High score</span> <span id="statHigh" class="mono"></span></div>
+                <div class="statRow"><span class="label">Sectors cleared</span> <span id="statUnlocked" class="mono"></span></div>
+              </div>
             </div>
-          </div>
+          </form>
 
-          <details class="help">
-            <summary>How it works</summary>
-            <ul>
-              <li>Enemies are letters and words. Type to shoot.</li>
-              <li>If you type the first character of an enemy, you lock-on.</li>
-              <li>Keep typing to complete that enemy’s string.</li>
-              <li>Powerups float in—type their label to collect.</li>
-              <li>Each level ends with a boss made of word segments.</li>
-            </ul>
-          </details>
-        </div>
-      </section>
-
-      <section id="screenPaused" class="screen neon-panel hidden">
-        <div class="screenInner">
-          <h2 class="neon-text">Paused</h2>
-          <p class="small">Press Esc to toggle the menu or resume.</p>
-          <div class="grid2">
-            <button id="btnResume" class="btn-arcade">Resume</button>
-            <button id="btnRestart" class="btn-arcade">Restart Level</button>
+          <div class="menuFooterRow">
+            <button id="btnRecords" class="btn-link" type="button">Records</button>
+            <button id="btnBriefing" class="btn-link" type="button">Re-read briefing</button>
+            <button id="btnHelp" class="btn-link" type="button">How to play</button>
+            <button id="btnMenuSettings" class="btn-link" type="button">Settings</button>
+            <button id="btnResetSave" class="btn-link danger" type="button">Reset save</button>
           </div>
         </div>
       </section>
 
-      <section id="screenLevelComplete" class="screen neon-panel hidden">
+      <section id="screenPaused" class="screen screen--pause neon-panel" role="dialog" aria-modal="false" aria-labelledby="pausedTitle">
         <div class="screenInner">
-          <h2 class="neon-text">Level Complete</h2>
-          <p class="small" id="levelCompleteText"></p>
-          <div class="grid2">
-            <button id="btnNextLevel" class="btn-arcade">Next Level</button>
-            <button id="btnBackToMenu1" class="btn-arcade">Back to Menu</button>
+          <p id="pauseEyebrow" class="screenEyebrow">Paused // run suspended</p>
+          <h2 id="pausedTitle" class="screenTitle">Paused</h2>
+          <p id="pauseReason" class="small">Press Esc or Enter to resume.</p>
+          <div class="pauseMeta">
+            <div class="metaTile"><span class="label">Sector</span><span id="pauseSector" class="mono">—</span></div>
+            <div class="metaTile"><span class="label">Wave</span><span id="pauseWave" class="mono">—</span></div>
+            <div class="metaTile"><span class="label">Score</span><span id="pauseScore" class="mono">—</span></div>
+            <div class="metaTile"><span class="label">Accuracy</span><span id="pauseAcc" class="mono">—</span></div>
+          </div>
+          <div class="pauseActions">
+            <button id="btnResume" class="btn-arcade primary" type="button">Resume</button>
+            <button id="btnRestart" class="btn-arcade" type="button">Restart sector</button>
+            <button id="btnPauseQuit" class="btn-arcade" type="button">Save &amp; quit</button>
+          </div>
+          <div id="pauseSettingsHost">
+            <form id="settingsPanel" class="settingsPanel" aria-labelledby="settingsTitle">
+              <h3 id="settingsTitle" class="label">Settings</h3>
+              <div class="settingsRow">
+                <label for="setMusic">Music</label>
+                <input id="setMusic" class="rangeNeon" type="range" min="0" max="100" step="5" value="70" />
+                <output id="setMusicOut" for="setMusic">70%</output>
+              </div>
+              <div class="settingsRow">
+                <label for="setSfx">Sound FX</label>
+                <input id="setSfx" class="rangeNeon" type="range" min="0" max="100" step="5" value="80" />
+                <output id="setSfxOut" for="setSfx">80%</output>
+              </div>
+              <div class="settingsRow">
+                <label for="setMute">Mute all</label>
+                <input id="setMute" class="toggleNeon" type="checkbox" role="switch" />
+              </div>
+              <div class="settingsRow">
+                <label for="setCRT">CRT filter</label>
+                <input id="setCRT" class="toggleNeon" type="checkbox" role="switch" checked />
+              </div>
+              <div class="settingsRow">
+                <label for="setCRTIntensity">CRT intensity</label>
+                <input id="setCRTIntensity" class="rangeNeon" type="range" min="25" max="100" step="25" value="75" />
+                <output id="setCRTIntensityOut" for="setCRTIntensity">75%</output>
+              </div>
+              <div class="settingsRow">
+                <label for="setMotion">Motion</label>
+                <select id="setMotion" class="selectNeon">
+                  <option value="system">Follow system</option>
+                  <option value="reduced">Reduced</option>
+                  <option value="full">Full</option>
+                </select>
+              </div>
+              <div class="settingsRow">
+                <label for="btnFullscreen2">Fullscreen</label>
+                <button id="btnFullscreen2" class="btn-arcade" type="button" aria-pressed="false">Enter fullscreen</button>
+              </div>
+            </form>
+          </div>
+          <p class="pauseHelp small">Esc resume · Alt+Enter fullscreen · M mute · <button id="btnPauseHelp" class="btn-link" type="button">Help</button></p>
+        </div>
+      </section>
+
+      <section id="screenLevelComplete" class="screen screen--clear neon-panel" role="dialog" aria-modal="false" aria-labelledby="levelCompleteTitle">
+        <div class="screenInner">
+          <p id="levelCompleteEyebrow" class="screenEyebrow">Sector clear</p>
+          <h2 id="levelCompleteTitle" class="screenTitle">Sector clear</h2>
+          <p id="levelCompleteText" class="resultsSub small"></p>
+          <div id="resultsLevel" class="resultsCard">
+            <div class="resultsHead">
+              <span class="rankBadge rankBadge--lg" data-rank=""></span>
+              <div><p class="resultsTitle">Sector report</p><p class="resultsSub small"></p></div>
+              <span class="newBest hidden">Sector best</span>
+              <span class="newHigh hidden">New high score</span>
+              <span class="newWpm hidden">Best WPM</span>
+            </div>
+            <div class="statGrid">
+              <div class="statTile"><span class="statTile__label">WPM</span><span class="statTile__value" data-stat="wpm">—</span></div>
+              <div class="statTile"><span class="statTile__label">Acc</span><span class="statTile__value" data-stat="acc">—</span></div>
+              <div class="statTile"><span class="statTile__label">Combo</span><span class="statTile__value" data-stat="maxCombo">—</span></div>
+              <div class="statTile"><span class="statTile__label">Words</span><span class="statTile__value" data-stat="words">—</span></div>
+              <div class="statTile"><span class="statTile__label">Time</span><span class="statTile__value" data-stat="time">—</span></div>
+              <div class="statTile"><span class="statTile__label">Bonus</span><span class="statTile__value" data-stat="bonus">—</span></div>
+            </div>
+            <ul class="bonusList"></ul>
+          </div>
+          <div id="sectorPrefetch" class="loadingBar loadingBar--slim hidden" role="progressbar" aria-label="Warping to the next sector" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="loadingBarFill"></div></div>
+          <div class="screenActions">
+            <button id="btnNextLevel" class="btn-arcade primary" type="button">Next sector</button>
+            <button id="btnBackToMenu1" class="btn-arcade" type="button">Sector select</button>
           </div>
         </div>
       </section>
 
-      <section id="screenGameOver" class="screen neon-panel hidden">
+      <section id="screenGameOver" class="screen screen--over neon-panel" role="dialog" aria-modal="false" aria-labelledby="gameOverTitle">
         <div class="screenInner">
-          <h2 class="neon-text">Game Over</h2>
-          <p class="small" id="gameOverText"></p>
-          <div class="grid2">
-            <button id="btnTryAgain" class="btn-arcade">Try Again</button>
-            <button id="btnBackToMenu2" class="btn-arcade">Back to Menu</button>
+          <p class="screenEyebrow">Signal lost</p>
+          <h2 id="gameOverTitle" class="screenTitle">Game over</h2>
+          <p id="gameOverText" class="resultsSub small"></p>
+          <div id="resultsOver" class="resultsCard">
+            <div class="resultsHead">
+              <span class="rankBadge rankBadge--lg" data-rank=""></span>
+              <div><p class="resultsTitle">Run report</p><p class="resultsSub small"></p></div>
+              <span class="newBest hidden">Sector best</span>
+              <span class="newHigh hidden">New high score</span>
+              <span class="newWpm hidden">Best WPM</span>
+            </div>
+            <div class="statGrid">
+              <div class="statTile"><span class="statTile__label">WPM</span><span class="statTile__value" data-stat="wpm">—</span></div>
+              <div class="statTile"><span class="statTile__label">Acc</span><span class="statTile__value" data-stat="acc">—</span></div>
+              <div class="statTile"><span class="statTile__label">Combo</span><span class="statTile__value" data-stat="maxCombo">—</span></div>
+              <div class="statTile"><span class="statTile__label">Words</span><span class="statTile__value" data-stat="words">—</span></div>
+              <div class="statTile"><span class="statTile__label">Time</span><span class="statTile__value" data-stat="time">—</span></div>
+              <div class="statTile"><span class="statTile__label">Score</span><span class="statTile__value" data-stat="score">—</span></div>
+            </div>
+            <ul class="bonusList"></ul>
           </div>
+          <div class="screenActions">
+            <button id="btnTryAgain" class="btn-arcade primary" type="button">Retry sector</button>
+            <button id="btnRetryBoss" class="btn-arcade hidden" type="button">Retry boss</button>
+            <button id="btnBackToMenu2" class="btn-arcade" type="button">Sector select</button>
+          </div>
+          <p id="retryNote" class="small"></p>
         </div>
       </section>
 
-      <section id="screenVictory" class="screen neon-panel hidden">
+      <section id="screenVictory" class="screen screen--victory neon-panel" role="dialog" aria-modal="false" aria-labelledby="victoryTitle">
         <div class="screenInner">
-          <h2 class="neon-text">Victory</h2>
+          <p class="screenEyebrow">TypeGrid online</p>
+          <h2 id="victoryTitle" class="screenTitle">Victory</h2>
           <p id="endingStage" class="endingStage hidden"></p>
-          <div class="dialogueWindow">
+          <div class="dialogueWindow" data-speaker="typegrid">
             <div class="dialogueHeader">
               <span id="endingSpeaker" class="dialogueLabel hidden"></span>
+              <span id="endingProgress" class="small"></span>
             </div>
             <p id="endingLine" class="dialogueLine"></p>
           </div>
-          <p class="small" id="victoryText"></p>
+          <div id="resultsRun" class="resultsCard hidden">
+            <div class="resultsHead">
+              <span class="rankBadge rankBadge--lg" data-rank=""></span>
+              <div><p class="resultsTitle">Legend status granted</p><p class="resultsSub small"></p></div>
+              <span class="newBest hidden">Sector best</span>
+              <span class="newHigh hidden">New high score</span>
+              <span class="newWpm hidden">Best WPM</span>
+            </div>
+            <div class="statGrid">
+              <div class="statTile"><span class="statTile__label">WPM</span><span class="statTile__value" data-stat="wpm">—</span></div>
+              <div class="statTile"><span class="statTile__label">Acc</span><span class="statTile__value" data-stat="acc">—</span></div>
+              <div class="statTile"><span class="statTile__label">Combo</span><span class="statTile__value" data-stat="maxCombo">—</span></div>
+              <div class="statTile"><span class="statTile__label">Words</span><span class="statTile__value" data-stat="words">—</span></div>
+              <div class="statTile"><span class="statTile__label">Time</span><span class="statTile__value" data-stat="time">—</span></div>
+              <div class="statTile"><span class="statTile__label">Score</span><span class="statTile__value" data-stat="score">—</span></div>
+            </div>
+            <ul class="bonusList"></ul>
+          </div>
+          <p id="victoryText" class="small"></p>
           <p id="creditsLine" class="creditsText hidden">Thank you from Christopher Bradford for work well done!</p>
           <div class="endingActions">
-            <button id="btnEndingNext" class="btn-arcade">Advance Dialogue</button>
-            <button id="btnNewRun" class="btn-arcade hidden">Play Again</button>
-            <button id="btnBackToMenu3" class="btn-arcade">Back to Menu</button>
+            <button id="btnEndingNext" class="btn-arcade primary" type="button">Next</button>
+            <button id="btnEndingSkip" class="btn-arcade" type="button">Skip</button>
+            <button id="btnNewRun" class="btn-arcade primary hidden" type="button">Play again</button>
+            <button id="btnBackToMenu3" class="btn-arcade" type="button">Sector select</button>
           </div>
         </div>
       </section>
 
-      <!-- CRT overlay -->
-      <div id="crtOverlay">
+      <div id="toastStack" class="toastStack" aria-hidden="true"></div>
+
+      <div id="crtOverlay" aria-hidden="true">
+        <div id="crtShade"></div>
+        <div id="crtLines"></div>
         <div id="crtNoise"></div>
       </div>
     </main>
 
+    <div id="rotateHint" class="rotateHint hidden" role="note">
+      <span>Rotate to landscape for the full playfield</span>
+      <button class="rotateHintClose" type="button" aria-label="Dismiss">×</button>
+    </div>
+
     <footer class="footer small">
-      <a href="./privacy.html" target="_blank" rel="noopener">Privacy Policy</a>
+      <a href="./privacy-policy.html" target="_blank" rel="noopener">Privacy Policy</a>
+      <span aria-hidden="true">·</span>
+      <a href="./support.html" target="_blank" rel="noopener">Support</a>
     </footer>
+
+    <div id="loadingOverlay" role="status" aria-live="polite" aria-busy="true">
+      <div class="loadingInner">
+        <img src="./assets/ui/logo.svg" alt="Type-R 198X" class="loadingLogo" width="820" height="220" />
+        <div id="loadingBar" class="loadingBar" role="progressbar" aria-label="Loading" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div id="loadingBarFill" class="loadingBarFill"></div>
+        </div>
+        <p id="loadingLabel" class="loadingText">Spooling hyperspace lanes…</p>
+        <p id="loadingDetail" class="loadingDetail small"></p>
+        <div id="loadingError" class="loadingError hidden">
+          <p id="loadingErrorText"></p>
+          <div class="modalActions">
+            <button id="btnLoadingRetry" class="btn-arcade" type="button">Retry</button>
+            <button id="btnLoadingContinue" class="btn-arcade" type="button">Continue anyway</button>
+          </div>
+        </div>
+        <noscript><p class="loadingText">Type-R 198X needs JavaScript.</p></noscript>
+      </div>
+    </div>
+
+    <!-- Modals -->
+    <div id="storyModal" class="modalOverlay hidden" role="dialog" aria-modal="true" aria-labelledby="storyTitle">
+      <div class="modalInner">
+        <p class="modalEyebrow">Mission briefing</p>
+        <h2 id="storyTitle" class="neon-text">WordStorm Protocol</h2>
+        <div class="modalScroll">
+          <div class="modalBody">
+            <p>In 198X, the world’s neon skyways are protected by the TypeGrid—an arcade-era defense network that keeps the city’s air-lanes stable by continuously “spelling” the right commands into reality.</p>
+            <p>Then the WordStorm hits. Letters break loose. Words mutate into swarms. Boss-ships the size of buildings roll in like floating billboards, monorails, and glitching arcade cabinets—each broadcasting corrupted phrases that rewrite the sky into chaos.</p>
+            <p>You are a rookie pilot plugged into the last working TypeGrid interceptor: the Keystream. Your weapon isn’t ammo—it’s accuracy. Every correct keystroke fires a laser. Every completed word shatters enemy code. Every boss is a living headline you have to type back into submission.</p>
+            <p>Clear 10 sectors, reclaim the High Score, and punch through the final signal: the Electromancer Empress, source of the WordStorm, who’s trying to overwrite the world with a single unstoppable message.</p>
+            <p><strong>Type fast. Type clean. Save the city—one letter at a time.</strong></p>
+          </div>
+          <span class="modalScrollHint" aria-hidden="true">scroll</span>
+        </div>
+        <div class="modalActions">
+          <button id="btnStoryBack" class="btn-arcade" type="button">Back</button>
+          <button id="btnStoryLaunch" class="btn-arcade primary" type="button">Launch the Keystream</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="confirmModal" class="modalOverlay is-dismissed" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle" aria-describedby="confirmBody">
+      <div class="modalInner compact">
+        <p id="confirmEyebrow" class="modalEyebrow">Confirm</p>
+        <h2 id="confirmTitle" class="neon-text"></h2>
+        <div id="confirmBody" class="modalBody"></div>
+        <div class="modalActions">
+          <button id="btnConfirmCancel" class="btn-arcade" type="button">Cancel</button>
+          <button id="btnConfirmOk" class="btn-arcade" type="button">OK</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="settingsModal" class="modalOverlay is-dismissed" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <div class="modalInner compact">
+        <div id="menuSettingsHost"></div>
+        <div class="modalActions">
+          <button id="btnSettingsClose" class="btn-arcade" type="button">Done</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="helpModal" class="modalOverlay is-dismissed" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+      <div class="modalInner">
+        <p class="modalEyebrow">Pilot manual</p>
+        <h2 id="helpTitle" class="neon-text">How to play</h2>
+        <div class="modalScroll">
+          <div class="modalBody helpBody">
+            <details class="helpSection" open>
+              <summary>Controls</summary>
+              <ul>
+                <li>Type the first letter of a target to lock on, then keep typing to finish it. Enemies win over powerups when they share a first letter.</li>
+                <li><kbd>Space</kbd> or <kbd>Backspace</kbd> releases your lock. Three misses on a locked target also drop it. Wrong keys never cost points, but a hard miss breaks your combo.</li>
+                <li><kbd>Enter</kbd> advances screens. <kbd>Esc</kbd> pauses or backs out. <kbd>Alt</kbd>+<kbd>Enter</kbd> (<kbd>Cmd</kbd>+<kbd>Enter</kbd> on a Mac) or <kbd>F11</kbd> toggles fullscreen. <kbd>M</kbd> mutes on the title and pause screens. <kbd>?</kbd> or <kbd>F1</kbd> opens this manual.</li>
+                <li>Keep typing through hit-stop and slow motion; input is never dropped while the playfield is live.</li>
+              </ul>
+            </details>
+            <details class="helpSection" open>
+              <summary>Scoring</summary>
+              <ul>
+                <li>Letters pay 50 pts, words 60 + 12 per letter, and a word typed without a miss pays ×1.2. Minions pay 40, pickups 100, boss letters 10 and a boss segment 30 per letter.</li>
+                <li>Combo tiers: ×2 at 10, ×3 at 25, ×4 at 50, ×5 at 100. MULTI adds two tiers (cap ×7). A hard miss or real hull damage resets the combo.</li>
+                <li>Sector clear pays 1,500 + 350 × sector, plus bonuses for time under par, accuracy (90 / 95 / 98%), perfect waves, a flawless boss and countered surges. Retrying a sector scales those bonuses down by 25% per retry.</li>
+                <li>Your rank (S, A, B, C, D) weighs accuracy 50%, speed 30% and hull 20%.</li>
+              </ul>
+            </details>
+            <details class="helpSection" open>
+              <summary>Powerups</summary>
+              <ul>
+                <li>Six capsules drift in. Type a capsule’s label to grab it; enemies win ties on the first letter.</li>
+                <li><strong>SHIELD</strong> (9 s) absorbs hits fully; each hit costs 3 s of shield.</li>
+                <li><strong>MULTI</strong> (12 s) adds two combo tiers.</li>
+                <li><strong>SPREAD</strong> (9 s): finishing a word also destroys enemies within 160 px.</li>
+                <li><strong>PIERCE</strong> (9 s): each correct key also damages the enemy behind your target in the same lane.</li>
+                <li><strong>RAPID</strong> (9 s): each correct key also hits every visible enemy whose next letter matches.</li>
+                <li><strong>HEAL</strong>: instantly repairs 15% of your hull.</li>
+              </ul>
+            </details>
+            <details class="helpSection" open>
+              <summary>Bosses</summary>
+              <ul>
+                <li>Each sector ends with a boss made of word segments in three phases (four for the finale). Type the highlighted segment; the lock is automatic.</li>
+                <li>Minions are typable. Their letters count for combo and score, not for wave quotas. A minion that reaches you costs 10 hull.</li>
+                <li>Signal Surge: the boss charges a visible attack. Finish the current segment before the charge completes to counter it for a bonus; otherwise it hits for 8 + 2 × sector.</li>
+                <li>Clearing a phase grants 3 s of shield. Once the finale starts, <kbd>Enter</kbd> skips the rest after the first burst.</li>
+              </ul>
+            </details>
+            <details class="helpSection" open>
+              <summary>Saving &amp; sectors</summary>
+              <ul>
+                <li>Progress is saved on this device only. Every sector clear writes a checkpoint; dying returns your score to that checkpoint.</li>
+                <li><strong>Resume</strong> continues a saved run. <strong>Replay</strong> restarts the sector you died in from its checkpoint. <strong>Retry boss</strong> restarts the boss from the phase you reached.</li>
+                <li>Sector select replays any unlocked sector. Only runs started from Sector 1 can set the high score; replays record a sector best instead.</li>
+                <li>Reset save on the title screen erases everything after a confirmation.</li>
+              </ul>
+            </details>
+            <details class="helpSection" open>
+              <summary>Playing on touch</summary>
+              <ul>
+                <li>Tap the playfield to open the on-screen keyboard; letters fire as you type. A Bluetooth or USB keyboard gives the best experience.</li>
+                <li>Rotate to landscape for the full playfield. The Fullscreen button hides browser chrome where the browser allows it.</li>
+                <li>Non-Latin keyboard layouts and IME composition are not recognised. Switch to a Latin (QWERTY-style) layout or direct input.</li>
+              </ul>
+            </details>
+            <details class="helpSection" open>
+              <summary>Accessibility</summary>
+              <ul>
+                <li>Settings (title screen or pause) hold music and sound sliders, mute, the CRT filter and its intensity, a motion option (follow system, reduced, full) and fullscreen.</li>
+                <li>Reduced motion removes shake, flashes, scanline roll and noise; screen changes become fades and count-ups land instantly.</li>
+                <li>Pauses, sector clears, deaths and boss arrivals are announced to screen readers. Every control shows a cyan focus ring.</li>
+              </ul>
+            </details>
+          </div>
+          <span class="modalScrollHint" aria-hidden="true">scroll</span>
+        </div>
+        <div class="modalActions">
+          <button id="btnHelpClose" class="btn-arcade" type="button">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="recordsModal" class="modalOverlay is-dismissed" role="dialog" aria-modal="true" aria-labelledby="recordsTitle">
+      <div class="modalInner">
+        <p class="modalEyebrow">Hall of pilots</p>
+        <h2 id="recordsTitle" class="neon-text">Records</h2>
+        <div class="modalScroll">
+          <div class="modalBody">
+            <table id="highScoreTable" class="hsTable">
+              <thead>
+                <tr><th scope="col">#</th><th scope="col">Pilot</th><th scope="col">Score</th><th scope="col">Sector</th><th scope="col">WPM</th><th scope="col">Run</th></tr>
+              </thead>
+              <tbody>
+                <tr class="hsRow hsEmpty"><td colspan="6">No runs recorded yet. Clear a sector to enter the hall.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="modalActions">
+          <button id="btnRecordsClose" class="btn-arcade" type="button">Close</button>
+        </div>
+      </div>
+    </div>
   </div>
 
+  <script>
+  // Boot guard (ES5 on purpose): browser-floor message, "Failed to start" surface, and form safety net.
+  (function () {
+    function $(id) { return document.getElementById(id); }
+    var overlay = $("loadingOverlay"), label = $("loadingLabel"), detail = $("loadingDetail");
+    var bar = $("loadingBar"), err = $("loadingError"), errText = $("loadingErrorText");
+    var retry = $("btnLoadingRetry"), cont = $("btnLoadingContinue");
+
+    var floorOk = true;
+    try { new Function("var o = {}; o.x ??= 1; return (null ?? 0) + (o?.x || 0);"); } catch (e) { floorOk = false; }
+    if (!floorOk) {
+      if (label) label.textContent = "Type-R 198X needs Safari 14.1+, Chrome 87+ or Firefox 103+.";
+      if (detail) detail.textContent = "This browser cannot run the game.";
+      if (bar) bar.classList.add("hidden");
+      if (overlay) overlay.setAttribute("aria-busy", "false");
+      return;
+    }
+
+    function dismissed() {
+      return !overlay || overlay.classList.contains("hidden") || overlay.classList.contains("is-dismissed");
+    }
+    function fail(msg) {
+      if (dismissed()) return;
+      if (label) label.textContent = "Failed to start";
+      if (detail) detail.textContent = String(msg || "Unknown error").slice(0, 160);
+      if (errText) errText.textContent = "The game hit an error while starting. Reload to try again.";
+      if (cont) cont.classList.add("hidden");
+      if (err) err.classList.remove("hidden");
+      if (overlay) { overlay.classList.add("isError"); overlay.setAttribute("aria-busy", "false"); }
+      if (retry) retry.onclick = function () { location.reload(); };
+    }
+    window.addEventListener("error", function (e) { fail(e && (e.message || (e.error && e.error.message))); });
+    window.addEventListener("unhandledrejection", function (e) {
+      var r = e && e.reason; fail(r && (r.message || r));
+    });
+
+    // Never navigate on a form submit: the menu and settings forms are handled by the game scripts.
+    document.addEventListener("submit", function (e) {
+      var f = e.target;
+      if (f && (f.id === "menuForm" || f.id === "settingsPanel")) e.preventDefault();
+    });
+  })();
+  </script>
   <script src="./assets/audio/sfx.js?v=20251130a"></script>
   <script src="./assets/js/core/00-util.js?v=20251130a"></script>
   <script src="./assets/js/core/20-constants.js?v=20251130a"></script>
