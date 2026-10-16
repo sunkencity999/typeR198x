@@ -592,7 +592,7 @@ Object.assign(Game.prototype, {
     const target = el || (top && top.el);
     if (!target) return;
     if (target === this.$("confirmModal")) { this.resolveConfirm(false); return; }
-    if (target === this.$("settingsModal")) { this.closeSettingsModal(); return; }
+    if (target === this.$("settingsModal")) { this.closeSettingsModal("cancel"); return; }
     if (typeof this.closeHelp === "function" && target === this.$("helpModal") && this.isModalOpen(target)) {
       this.closeHelp();
       if (this.isModalOpen(target)) this.closeModal(target, { result: "cancel" });
@@ -965,9 +965,9 @@ Object.assign(Game.prototype, {
     });
   },
 
-  closeSettingsModal() {
+  closeSettingsModal(result = "ok") {
     const s = this.settingsEls();
-    if (s.modal) this.closeModal(s.modal, { result: "ok" });
+    if (s.modal) this.closeModal(s.modal, { result });
   },
 
   setSetting(key, value) {
