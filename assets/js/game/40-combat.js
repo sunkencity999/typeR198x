@@ -284,7 +284,7 @@ Object.assign(Game.prototype, {
 
     const len = en.text.length;
     const minion = en.kind === "bossMinion";
-    const mult = this.stats.mult | 0 || 1;
+    const mult = this.scoringMult();
     let base = minion ? SCORE.minion : (len <= 1 ? SCORE.letter : SCORE.word(len));
     if (secondary) base *= SCORE.secondaryMul;
     else if (!minion && len > 1 && en.cleanSoFar) base *= SCORE.cleanMul;
@@ -512,7 +512,7 @@ Object.assign(Game.prototype, {
     p.dying = true;
     if (this.lock && this.lock.ref === p) { this.lock = null; this.lockMisses = 0; }
     const def = POWERUP_TYPES[p.type] || POWERUP_TYPES.SHIELD;
-    const mult = this.stats.mult | 0 || 1;
+    const mult = this.scoringMult();
     this.sfx.pickup(p.type);
     this.addExplosion(p.x, p.y, 22);
     this.addExplosionSprite(p.x, p.y, "small");

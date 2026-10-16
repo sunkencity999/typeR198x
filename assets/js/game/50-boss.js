@@ -212,7 +212,7 @@ Object.assign(Game.prototype, {
     this.fireLaserTo(aim.x, aim.y, "cyan");
     this.sfx.zap(clamp((boss.progress + 1) / segLen, 0, 1));
     this.addSparks(aim.x, aim.y + rand(-40, 40), 10);
-    const mult = this.stats.mult | 0 || 1;
+    const mult = this.scoringMult();
     const slab = boss.slabRect;
     const r = boss.advance();
     this.addScore(SCORE.bossChar * mult);

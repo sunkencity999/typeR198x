@@ -206,7 +206,21 @@ Object.assign(Game.prototype, {
       if (this.bossIntro && this.bossIntro.locked) this.skipBossIntro();
       return;
     }
+    // Everything this key scores uses the multiplier in effect when it arrived; a tier reached by this key
+    // pays from the next one.
+    this.keyMult = this.stats.mult | 0 || 1;
+    try {
+      this.handleTypedInner(ch);
+    } finally {
+      this.keyMult = null;
+    }
+  },
 
+  scoringMult() {
+    return this.keyMult || (this.stats.mult | 0) || 1;
+  },
+
+  handleTypedInner(ch) {
     if (this.inBoss && this.boss) {
       this.handleBossTyped(ch);
       return;
