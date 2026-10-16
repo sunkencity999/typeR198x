@@ -574,7 +574,9 @@ Object.assign(Game.prototype, {
     this.resetEndingDialogue();
     this.advanceEndingDialogue();
     if (typeof this.announce === "function") {
-      this.announce(`Victory. All ten sectors cleared. Score ${formatInt(this.stats.score)}. Rank ${r.rank}.`);
+      // One message (review R49): the summary, then the first line advanceEndingDialogue() just showed (announce() keeps only its last write).
+      const first = this.endingScript[0];
+      this.announce(`Victory. All ten sectors cleared. Score ${formatInt(this.stats.score)}. Rank ${r.rank}.${first ? ` ${this.endingLineSpeech(first)}` : ""}`);
     }
   },
 
@@ -592,6 +594,11 @@ Object.assign(Game.prototype, {
 
   endingTickVariant(key) {
     return key === "empress" ? "empress" : key === "typegrid" ? "typegrid" : undefined;
+  },
+
+  // Screen-reader text for one transmission line (review R49): #endingLine is not a live region.
+  endingLineSpeech(line) {
+    return `${line && line.speaker ? `${line.speaker}: ` : ""}${(line && line.text) || ""}`;
   },
 
   cancelEndingTypewriter() {
@@ -641,6 +648,7 @@ Object.assign(Game.prototype, {
     this.cancelEndingTypewriter();
     if (!u.endingLine) return;
     const text = line.text || "";
+    if (typeof this.announce === "function") this.announce(this.endingLineSpeech(line)); // review R49
     const isLast = i >= n - 1;
     const onDone = () => {
       this.endingTw = null;

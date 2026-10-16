@@ -1034,7 +1034,7 @@ Object.assign(Game.prototype, {
     caret.setAttribute("aria-hidden", "true");
     el.textContent = "";
     el.append(textNode, caret);
-    el.setAttribute("aria-label", full);
+    // review R49: no aria-label on the paragraph (prohibited on that role); the text node carries the line and announce() the speech.
     let shown = 0, acc = 0, typed = 0, last = null, raf = 0;
     const tick = () => {
       const sfx = this.sfx;
