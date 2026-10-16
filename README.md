@@ -323,7 +323,7 @@ bash run-matrix.sh [--quick] [--only dpr1,dpr2]       # the standard matrix, sum
 ```
 
 Flags: `--scenario all|smoke`, `--seconds N`, `--dpr 1|2`, `--mobile`, `--reduced-motion`,
-`--ua native|"<string>"`, `--cpu N`, `--wpm N`, `--accuracy A`, `--fixture <fresh|legacy-midwave|legacy-inboss|legacy-postvictory|legacy-levelcomplete>`,
+`--ua native|"<string>"`, `--cpu N`, `--wpm N`, `--accuracy A`, `--fixture <fresh|legacy-midwave|legacy-inboss|legacy-postvictory|legacy-levelcomplete|legacy-gameover>`,
 `--entry auto|start|continue`, `--fail-webp`, `--delay-opt <ms>`, `--expect-resource-errors`,
 `--ignore-errors <regex>`, `--no-music`, `--file`, `--headed`. Matrix rows: `dpr1`, `dpr2`,
 `reduced-motion`, `mobile`, `native-ua`, `no-music` and one `fixture-*` row per fixture. Report
