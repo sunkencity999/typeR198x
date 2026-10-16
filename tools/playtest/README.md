@@ -141,6 +141,7 @@ legacy key (none carries `schema`, `run.id` or `run.checkpoint`):
 | `legacy-inboss` | run on sector 2 with `inBoss:true`, levelT past duration, no `run.boss` | Continue → `inBoss` within 6 s (amendment B-10) |
 | `legacy-postvictory` | `run:null`, `lastUnlockedLevel 10`, `highScore 4200`, muted, CRT off | Continue / sector 10 card → levelIndex 9 |
 | `legacy-levelcomplete` | today's F003 shape: sector 3 run with `levelT 119.6 > 114` | Continue → wave play, levelT clamped below duration, not in boss for 3 s |
+| `legacy-gameover` | main's `onGameOver` stub (`buildResumeRun`): sector 5 run with `levelT 0`, `score 0`, full HP, `highScore 20000` | resume card shown; Continue → levelIndex 4 as a legacy (headline-eligible) run |
 
 `expect` keys: `levelIndex`, `scoreMin`, `highScore`, `lastUnlockedLevel`, `playerName`,
 `levelTBelowDuration`, `inBossWithinS`, `notInBossForS`. A failed check is printed and stored but
@@ -150,7 +151,7 @@ does not change the exit code (the owning task's acceptance decides).
 
 Rows: `dpr1`, `dpr2`, `reduced-motion` (`all` at DPR 2 with `prefers-reduced-motion: reduce`),
 `mobile` (smoke), `native-ua` (the WKWebView user agent served over HTTP, `all`), `no-music` (smoke,
-DPR 2, media transport stubbed: the perf-only row) and `fixture-<name>` (smoke) for the five fixtures.
+DPR 2, media transport stubbed: the perf-only row) and `fixture-<name>` (smoke) for the six fixtures.
 Output goes to `out/matrix/<name>/` with a log beside each folder and a `summary.tsv`; the table
 printed at the end has exit codes, error counts, `reqFail`/`mediaAbort`, fps, `maxRenderMs`,
 `shadowBlurPerFrame`, `fullFrameFillMaxAlpha`, `layoutCountPer5s`, the non-media MB before the first

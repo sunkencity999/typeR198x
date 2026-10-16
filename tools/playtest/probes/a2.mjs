@@ -71,7 +71,7 @@ await P.autoType(240, { accuracy: 0.995, until: (s) => s.bossClear || s.mode !==
 await P.page.waitForFunction(() => window.game.mode === "victory", null, { timeout: 30000 }).catch(() => {});
 await sleep(500);
 const v1 = await P.g(() => ({ mode: window.game.mode, score: window.game.stats.score, highScore: window.game.save.highScore, stage: document.getElementById("endingStage").textContent, newRunVisible: !document.getElementById("btnNewRun").classList.contains("hidden") }));
-P.check("victory reached, dialogue shows TRANSMISSION 1/n, high score banked", v1.mode === "victory" && /TRANSMISSION 1\//.test(v1.stage) && v1.highScore === v1.score && v1.score > 0, v1);
+P.check("victory reached, dialogue stage reads INCOMING TRANSMISSION, high score banked", v1.mode === "victory" && v1.stage === "INCOMING TRANSMISSION" && v1.highScore === v1.score && v1.score > 0, v1);
 await P.shot("victory");
 const next = P.page.locator("#btnEndingNext");
 let clicks = 0;

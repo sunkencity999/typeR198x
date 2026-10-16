@@ -1,0 +1,29 @@
+{
+  "description": "Pre-overhaul save written by main's onGameOver (buildResumeRun stub): sector 5 run with levelT 0, score 0, full HP, no schema, no run.id, no run.checkpoint. Continue must resume sector 5 as a legacy (headline-eligible) run; the resume card must show for it (review R10).",
+  "entry": "continue",
+  "expect": { "levelIndex": 4, "highScore": 20000, "lastUnlockedLevel": 5, "playerName": "ACE" },
+  "save": {
+    "playerName": "ACE",
+    "selectedShip": "honeybee",
+    "highScore": 20000,
+    "lastUnlockedLevel": 5,
+    "storySeen": true,
+    "keyboardHintSeen": true,
+    "settings": { "muted": false, "crt": true },
+    "run": {
+      "levelIndex": 4,
+      "levelT": 0,
+      "inBoss": false,
+      "hp": 600,
+      "maxHp": 600,
+      "shield": 0,
+      "power": { "spread": 0, "pierce": 0, "rapid": 0, "multiplier": 0 },
+      "stats": { "score": 0, "combo": 0, "mult": 1, "correct": 0, "total": 0 },
+      "spawnAcc": 0,
+      "powerAcc": 0,
+      "minionAcc": 0,
+      "hazardAcc": 0,
+      "shipId": "honeybee"
+    }
+  }
+}

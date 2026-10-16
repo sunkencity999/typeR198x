@@ -60,6 +60,13 @@ export const FIXTURES = {
     settings: { muted: true, crt: true },
     run: { levelIndex: 0, levelT: 130, inBoss: false, hp: 300, maxHp: 300, shield: 0, power: { spread: 0, pierce: 0, rapid: 0, multiplier: 0 },
       stats: { score: 3400, combo: 2, mult: 1, correct: 50, total: 52 }, shipId: "coconut", spawnAcc: 0, powerAcc: 0, hazardAcc: 0 }
+  },
+  // main's onGameOver() -> buildResumeRun(4, 600, "honeybee"): a zero-progress stub for the sector the pilot died in (review R10).
+  "legacy-gameover": {
+    playerName: "ACE", selectedShip: "honeybee", highScore: 20000, lastUnlockedLevel: 5, storySeen: true, keyboardHintSeen: true,
+    settings: { muted: true, crt: true },
+    run: { levelIndex: 4, levelT: 0, inBoss: false, hp: 600, maxHp: 600, shield: 0, power: { spread: 0, pierce: 0, rapid: 0, multiplier: 0 },
+      stats: { score: 0, combo: 0, mult: 1, correct: 0, total: 0 }, shipId: "honeybee", spawnAcc: 0, powerAcc: 0, minionAcc: 0, hazardAcc: 0 }
   }
 };
 

@@ -6,7 +6,7 @@
 #
 # Rows: dpr1, dpr2, reduced-motion (DPR 2), mobile, native-ua (the WKWebView UA served over HTTP),
 #       no-music (perf-only, media transport stubbed), fixture-fresh, fixture-legacy-midwave,
-#       fixture-legacy-inboss, fixture-legacy-postvictory, fixture-legacy-levelcomplete
+#       fixture-legacy-inboss, fixture-legacy-postvictory, fixture-legacy-levelcomplete, fixture-legacy-gameover
 # --quick  runs every row with --scenario smoke (minutes instead of tens of minutes)
 # --only   comma-separated row names to run
 # Extra environment: PLAY_ARGS="..." is appended to every row (e.g. PLAY_ARGS="--wpm 60 --cpu 4").
@@ -47,6 +47,7 @@ ROWS=(
   "fixture-legacy-inboss|--scenario smoke --fixture legacy-inboss"
   "fixture-legacy-postvictory|--scenario smoke --fixture legacy-postvictory"
   "fixture-legacy-levelcomplete|--scenario smoke --fixture legacy-levelcomplete"
+  "fixture-legacy-gameover|--scenario smoke --fixture legacy-gameover"
 )
 
 selected() { [[ -z "$ONLY" ]] && return 0; [[ ",$ONLY," == *",$1,"* ]]; }

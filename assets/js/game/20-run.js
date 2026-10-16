@@ -30,6 +30,9 @@ Object.assign(Game.prototype, {
       shipId: this.player.shipId || this.getSelectedShipId(),
       difficulty: "standard",
       retries: 0,
+      // review R3: the headline before this run. newHigh (results cards) compares against this snapshot, never
+      // the live save.highScore, which the autosave and the sector-10 clear raise before the card is built.
+      baselineHigh: this.save.highScore | 0,
       checkpoint: null,
       bossCheckpoint: null,
       boss: null,
@@ -47,6 +50,7 @@ Object.assign(Game.prototype, {
       ship: run.shipId,
       name: this.save.playerName || "",
       legacy: !!run.legacy,
+      baselineHigh: Number.isFinite(run.baselineHigh) ? run.baselineHigh : (this.save.highScore | 0),   // review R3
       victory: false
     };
   },
@@ -72,7 +76,7 @@ Object.assign(Game.prototype, {
   beginRunAt(levelIndex) {
     const i = clamp(levelIndex | 0, 0, 9);
     const L = i + 1;
-    this.commitHighScore(); // bank whatever run is being abandoned (F009)
+    this.bankAbandonedRun(); // bank whatever run is being abandoned (F009), stored or live (review R22)
     this.setPlayerShip(this.getSelectedShipId());
     this.levelIndex = i;
     this.stats = defaultStats();
@@ -257,6 +261,7 @@ Object.assign(Game.prototype, {
       this.startLevel(this.levelIndex, { fromMenu: true, fresh: true });
       return;
     }
+    if (!Number.isInteger(cp.levelIndex)) cp.levelIndex = clamp(run.levelIndex | 0, 0, 9);   // review R21
     this.run = run;
     this.restoreCheckpoint(cp);
     run.boss = null;
@@ -273,6 +278,7 @@ Object.assign(Game.prototype, {
       this.restartLevel();
       return;
     }
+    if (!Number.isInteger(cp.levelIndex)) cp.levelIndex = clamp(run.levelIndex | 0, 0, 9);   // review R21
     this.run = run;
     this.restoreCheckpoint(cp);
     const phase = cp.bossPhase | 0;
@@ -425,17 +431,25 @@ Object.assign(Game.prototype, {
     const meta = this.runMeta || {};
     const prevBest = (this.save.sectorBests || {})[String(L)];
     const tally = level ? (this.lastTally || null) : null;
+    // review R2: bonusLines are exactly the components of tally.total (the Bonus tile and the finale banner), so
+    // they add up to it; the Clear row absorbs the per-row rounding under a retry multiplier. Money banked live
+    // during the sector (perfect waves, boss phases, countered surges) is listed apart in bankedLines.
     const bonusLines = [];
+    const bankedLines = [];
     if (tally) {
       const m = tally.retryMul;
-      bonusLines.push({ label: "Clear", value: Math.round(tally.clear * m) });
-      bonusLines.push({ label: "Time", value: Math.round(tally.time * m) });
-      bonusLines.push({ label: "Accuracy", value: Math.round(tally.accuracy * m) });
-      bonusLines.push({ label: "Perfect waves", value: tally.perfectWaves | 0 });
-      bonusLines.push({ label: "Flawless boss", value: Math.round(tally.flawless * m) });
-      bonusLines.push({ label: "Surges countered", value: tally.surges | 0 });
+      const time = Math.round(tally.time * m), accuracy = Math.round(tally.accuracy * m), flawless = Math.round(tally.flawless * m);
+      bonusLines.push({ label: "Clear", value: (tally.total | 0) - time - accuracy - flawless });
+      bonusLines.push({ label: "Time", value: time });
+      bonusLines.push({ label: "Accuracy", value: accuracy });
+      bonusLines.push({ label: "Flawless boss", value: flawless });
       if ((tally.retries | 0) > 0) bonusLines.push({ label: "Retry penalty", value: `x${m}` });
+      bankedLines.push({ label: "Perfect waves", value: tally.perfectWaves | 0 });
+      bankedLines.push({ label: "Boss phases", value: tally.phases | 0 });
+      bankedLines.push({ label: "Surges countered", value: tally.surges | 0 });
     }
+    // review R3: the badge means "beat the headline this run started against", not the live save.highScore.
+    const baselineHigh = Number.isFinite(meta.baselineHigh) ? meta.baselineHigh : (this.save.highScore | 0);
     const title = scope === "run" ? "RUN COMPLETE" : scope === "over" ? "SIGNAL LOST" : `SECTOR ${L} CLEAR`;
     return {
       title,
@@ -444,6 +458,7 @@ Object.assign(Game.prototype, {
       score: st.score | 0,
       levelScore,
       bonusLines,
+      bankedLines,
       wpm,
       acc,
       maxCombo: (level ? ls.maxCombo : st.maxCombo) | 0,
@@ -451,7 +466,7 @@ Object.assign(Game.prototype, {
       kills: (level ? ls.kills : st.kills) | 0,
       timeMs,
       rank,
-      newHigh: !!(meta.startLevel === 1 || meta.legacy) && (st.score | 0) > (this.save.highScore | 0),
+      newHigh: !!(meta.startLevel === 1 || meta.legacy) && (st.score | 0) > baselineHigh,
       newSectorBest: level && (!prevBest || levelScore > (prevBest.score | 0)),
       newWpm: wpm > (this.save.bestWpm | 0),
       retries: ls.retries | 0,
@@ -630,7 +645,8 @@ Object.assign(Game.prototype, {
     if (!line) return;
     const u = this.ui;
     const key = this.endingSpeakerKey(line.speaker);
-    if (u.endingStage) { u.endingStage.textContent = `TRANSMISSION ${i + 1}/${n}`; u.endingStage.classList.remove("hidden"); }
+    // The counter lives in the window header (#endingProgress); the stage line is the channel label (review R35).
+    if (u.endingStage) { u.endingStage.textContent = "INCOMING TRANSMISSION"; u.endingStage.classList.remove("hidden"); }
     if (u.endingSpeaker) {
       u.endingSpeaker.textContent = line.speaker || "";
       u.endingSpeaker.dataset.speaker = key;
@@ -704,6 +720,19 @@ Object.assign(Game.prototype, {
   },
 
   // ------------------------- High scores -------------------------
+  // New run / sector tile over a stored run this session never set up (a reload, then New run instead of
+  // Continue): commitHighScore() reads only runMeta, so the stored record is loaded as the run first (F009,
+  // review R22). The caller resets stats / levelIndex for the new run right after.
+  bankAbandonedRun() {
+    const stored = this.save.run;
+    if (stored && (!this.runMeta || this.runMeta.id !== stored.id)) {
+      this.setRunMeta(stored);
+      this.stats = { ...defaultStats(), ...((stored.stats && typeof stored.stats === "object") ? stored.stats : {}) };
+      this.levelIndex = clamp(stored.levelIndex | 0, 0, 9);
+    }
+    return this.commitHighScore();
+  },
+
   // Headline high score only for runs that started at sector 1 (or were migrated from v1); the top-10 table
   // gets one row per run. Idempotent per (run id, score).
   commitHighScore(opts = {}) {
@@ -748,7 +777,7 @@ Object.assign(Game.prototype, {
     } else {
       list.push(row);
     }
-    list.sort((a, b) => ((b.score | 0) - (a.score | 0)) || ((b.date | 0) - (a.date | 0)));
+    list.sort(byScoreThenNewest);   // review R52
     if (list.length > 10) list.length = 10;
     return true;
   },

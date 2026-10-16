@@ -341,7 +341,10 @@ Object.assign(Game.prototype, {
     if (!run) return false;
     const dead = (Number.isFinite(run.hp) ? run.hp : 1) <= 0;
     const score = (run.stats && run.stats.score) | 0;
-    return dead || (run.levelT || 0) > 0 || !!run.inBoss || score > 0 || (run.levelIndex | 0) > ((run.startLevel | 0) - 1);
+    // review R10: a v1 Game Over stub (main's buildResumeRun: levelT 0, score 0, full HP) is still the player's
+    // saved sector; main offered Continue on it and its score counted toward the headline (E-3).
+    const legacySector = !!run.legacy && (run.levelIndex | 0) > 0;
+    return dead || (run.levelT || 0) > 0 || !!run.inBoss || score > 0 || (run.levelIndex | 0) > ((run.startLevel | 0) - 1) || legacySector;
   },
 
   // ------------------------- Sector grid -------------------------
@@ -450,7 +453,7 @@ Object.assign(Game.prototype, {
       if (typeof this.ensureAudio === "function") await this.ensureAudio();
       // A fresh pilot's first sector goes through the briefing like Start does.
       if (i === 0 && !this.save.storySeen && this.storyModal && typeof this.showStoryModal === "function") {
-        this.commitHighScore();
+        if (typeof this.bankAbandonedRun === "function") this.bankAbandonedRun(); else this.commitHighScore();   // review R22
         this.save.run = null;
         this.run = null;
         storeSave(this.save);
@@ -535,10 +538,10 @@ Object.assign(Game.prototype, {
     const rows = (Array.isArray(this.save.highScores) ? this.save.highScores : [])
       .filter((h) => h && typeof h === "object")
       .slice()
-      .sort((a, b) => ((b.score | 0) - (a.score | 0)) || ((b.date | 0) - (a.date | 0)))
+      .sort(byScoreThenNewest)   // review R52
       .slice(0, 10);
     if (!rows.length) {
-      tbody.innerHTML = '<tr class="hsRow hsEmpty"><td colspan="6">No runs recorded yet. Clear a sector to enter the hall.</td></tr>';
+      tbody.innerHTML = '<tr class="hsRow hsEmpty"><td colspan="6">No runs recorded yet. Score in a run to enter the hall.</td></tr>';
       return;
     }
     tbody.innerHTML = rows.map((h, i) => {
@@ -818,9 +821,10 @@ Object.assign(Game.prototype, {
     if (list) {
       list.textContent = "";
       const lines = level && Array.isArray(results.bonusLines) ? results.bonusLines : [];
-      for (const row of lines) {
+      const banked = level && Array.isArray(results.bankedLines) ? results.bankedLines : [];
+      const addRow = (row, mod) => {
         const li = document.createElement("li");
-        li.className = "bonusRow";
+        li.className = mod ? `bonusRow ${mod}` : "bonusRow";
         const label = document.createElement("span");
         label.className = "bonusLabel";
         label.textContent = row.label;
@@ -830,6 +834,15 @@ Object.assign(Game.prototype, {
         else { value.textContent = String(row.value); li.classList.add("bonusRow--penalty"); }
         li.append(label, value);
         list.appendChild(li);
+      };
+      for (const row of lines) addRow(row);
+      // review R2: the rows above add up to the Bonus tile; money banked live during the sector sits under its own caption.
+      if (banked.length) {
+        const cap = document.createElement("li");
+        cap.className = "bonusCaption";
+        cap.textContent = "Banked during the sector";
+        list.appendChild(cap);
+        for (const row of banked) addRow(row, "bonusRow--banked");
       }
     }
 
