@@ -30,6 +30,26 @@ function getHpBonusForLevel(levelNumber) {
   return BASE_PLAYER_HP + Math.max(0, (levelNumber - 1)) * LEVEL_HP_BONUS;
 }
 
+// DAMAGE: everything that can hurt the player, before diff().damage. Shield absorbs a hit fully at a cost in seconds.
+// Leak = leakBase + min(leakCap, leakPerChar * len) per CONTRACT 7 (letter 14, 5 letters 22, 8+ letters 28).
+// NOTE for the lead: PLAN B4's acceptance ("12-letter leak -> hp -36") only holds with leakCap 24; the contract
+// formula is kept here and the cap is a single constant so either reading is a one-number change.
+const DAMAGE = {
+  leakBase: 12,
+  leakPerChar: 2,
+  leakCap: 16,
+  leak: (len) => DAMAGE.leakBase + Math.min(DAMAGE.leakCap, DAMAGE.leakPerChar * len),
+  minion: 10,                                  // boss minion leak
+  surge: (level) => 8 + 2 * level,             // Signal Surge that was not countered (L3 14 ... L10 28)
+  shieldHitCost: 3,                            // seconds of shield removed per absorbed hit
+  shieldCap: 15,                               // seconds, when stacking pickups / phase bonuses
+  phaseClearShield: 3,                         // seconds granted at a boss phase boundary
+  repair: 0.15,                                // REPAIR heals this fraction of maxHp
+  iframes: IFRAMES_S,
+  warnHp: 0.5,                                 // #hud[data-hp] warn below this fraction
+  lowHp: 0.25                                  // crit below this fraction (SFX.lowHp, danger vignette)
+};
+
 // ----------------------------- Playfield geometry -----------------------------
 const LANE_YS = [184, 252, 320, 388, 456, 524];        // pitch 68
 const LANE_PROFILE_PHONE = { cssScaleBelow: 0.55, laneYs: [200, 300, 400, 500], maxEnemiesDelta: -2 };
@@ -95,6 +115,115 @@ function bossSegmentCount(level) {
 
 function surgeDuration(remainingChars) {
   return SURGE_BASE_S + SURGE_PER_CHAR_S * Math.max(0, remainingChars | 0);
+}
+
+// ----------------------------- Scoring -----------------------------
+const COMBO_TIERS = [[0, 1], [10, 2], [25, 3], [50, 4], [100, 5]];
+const MULT_CAP = 7;
+const MULTI_TIER_BONUS = 2;                    // MULTI powerup adds this many tiers
+
+function comboTier(combo) {
+  let tier = 1;
+  for (const [atCombo, mult] of COMBO_TIERS) {
+    if (combo >= atCombo) tier = mult;
+  }
+  return tier;
+}
+
+// Base values; the caller multiplies by stats.mult and then by diff().score. No negative score events exist.
+const SCORE = {
+  letter: 50,
+  word: (len) => 60 + 12 * len,
+  cleanMul: 1.2,                               // no hard miss between lock and kill
+  secondaryMul: 0.5,                           // spread / pierce / rapid kills, never clean
+  minion: 40,
+  pickup: 100,
+  bossChar: 10,
+  segment: (len) => len * 30,
+  phase: (level) => 300 * level,
+  bossClear: (level) => 1500 + 350 * level,
+  parDivisor: 3,                               // boss par seconds = totalChars / parDivisor
+  timeBonus: (parS, elapsedS, level) => Math.max(0, parS - elapsedS) * 25 * level,
+  flawless: (level) => 500 * level,            // bossDamage === 0
+  surgeCountered: (level) => 150 * level,
+  perfectWave: (level) => 250 * level,         // waveDamage === 0
+  accuracy: (accPct, level) => (accPct >= 98 ? 800 : accPct >= 95 ? 400 : accPct >= 90 ? 150 : 0) * level,
+  retryMul: (retries) => Math.max(0.25, 1 - 0.25 * retries)
+};
+
+// ----------------------------- Powerups -----------------------------
+// powerKey is the game.power / player field the timer lives in (REPAIR is instant).
+const POWERUP_TYPES = {
+  SPREAD: { id: "SPREAD", label: "spread", duration: 9, powerKey: "spread", radius: 160 },
+  PIERCE: { id: "PIERCE", label: "pierce", duration: 9, powerKey: "pierce" },
+  RAPID:  { id: "RAPID",  label: "rapid",  duration: 9, powerKey: "rapid" },
+  SHIELD: { id: "SHIELD", label: "shield", duration: 9, powerKey: "shield" },
+  MULTI:  { id: "MULTI",  label: "multi",  duration: 12, powerKey: "multiplier" },
+  REPAIR: { id: "REPAIR", label: "heal",   duration: 0, powerKey: null, instant: true }
+};
+const POWERUP_ORDER = ["SPREAD", "PIERCE", "RAPID", "SHIELD", "MULTI", "REPAIR"];
+const POWERUP_CHIP_ORDER = ["SHIELD", "MULTI", "SPREAD", "PIERCE", "RAPID"];   // #hudChips order; no chip for REPAIR
+const POWER_ACCENT = { SPREAD: "magenta", PIERCE: "violet", RAPID: "cyan", SHIELD: "violet", MULTI: "amber", REPAIR: "text" };
+
+const POWERUP_DROP = {
+  wordMinLen: 4,                               // words shorter than this roll the letter chance
+  pWordMin: 0.12,
+  pWordMax: 0.22,
+  pWord: (level) => lerp(0.12, 0.22, (level - 1) / 9),
+  pLetter: 0.04,
+  pMinion: 0.10,
+  floorEveryS: 14,                             // guaranteed spawn cadence while none is alive
+  bossFloorEveryS: 18,
+  maxAlive: 2,
+  lifetimeS: 14,
+  homingSpeedMul: 0.55
+};
+
+// Weight rows sum to 100 so a share reads directly as a percentage. Pity rows kick in below the hp fractions.
+const POWERUP_WEIGHTS = {
+  base:   { SPREAD: 18, PIERCE: 14, RAPID: 14, SHIELD: 18, MULTI: 22, REPAIR: 14 },
+  lowHp:  { SPREAD: 10, PIERCE: 8,  RAPID: 8,  SHIELD: 28, MULTI: 12, REPAIR: 34 },   // hp < .4
+  critHp: { SPREAD: 6,  PIERCE: 5,  RAPID: 5,  SHIELD: 28, MULTI: 11, REPAIR: 45 }    // hp < .25
+};
+const POWERUP_WEIGHT_THRESHOLDS = { lowHp: 0.4, critHp: 0.25 };
+const POWERUP_BOSS_OVERRIDE = { SPREAD: 0, PIERCE: 0, RAPID: 10 };               // nothing to chain in a boss but minions
+const POWERUP_BOSS_WEIGHTS = {
+  base: { ...POWERUP_WEIGHTS.base, ...POWERUP_BOSS_OVERRIDE },
+  lowHp: { ...POWERUP_WEIGHTS.lowHp, ...POWERUP_BOSS_OVERRIDE },
+  critHp: { ...POWERUP_WEIGHTS.critHp, ...POWERUP_BOSS_OVERRIDE }
+};
+
+function powerupWeightsFor(hpFrac, inBoss = false) {
+  const row = hpFrac < POWERUP_WEIGHT_THRESHOLDS.critHp ? "critHp" : hpFrac < POWERUP_WEIGHT_THRESHOLDS.lowHp ? "lowHp" : "base";
+  return { ...(inBoss ? POWERUP_BOSS_WEIGHTS : POWERUP_WEIGHTS)[row] };
+}
+
+// ----------------------------- Rank -----------------------------
+const RANK = {
+  weights: { acc: 0.5, speed: 0.3, hp: 0.2 },
+  accFloorPct: 80,
+  accSpanPct: 18,
+  wpmFloor: 20,
+  wpmSpan: 40,
+  thresholds: [["S", 0.90], ["A", 0.75], ["B", 0.55], ["C", 0.35]],   // below the last one is D
+  order: ["S", "A", "B", "C", "D"],
+  colors: { S: "amber", A: "cyan", B: "violet", C: "text", D: "danger" }
+};
+
+function rankPoints(accPct, wpm, hpPts) {
+  const a = clamp((accPct - RANK.accFloorPct) / RANK.accSpanPct, 0, 1);
+  const s = clamp((wpm - RANK.wpmFloor) / RANK.wpmSpan, 0, 1);
+  const h = clamp(Number.isFinite(hpPts) ? hpPts : 1, 0, 1);
+  return RANK.weights.acc * a + RANK.weights.speed * s + RANK.weights.hp * h;
+}
+
+// accPct is a percentage (0..100); hpPts is damageTaken === 0 ? 1 : clamp(1 - damageTaken / maxHp, 0, 1).
+function rankFor(accPct, wpm, hpPts) {
+  const r = rankPoints(accPct, wpm, hpPts);
+  for (const [grade, min] of RANK.thresholds) {
+    if (r >= min) return grade;
+  }
+  return "D";
 }
 
 // ----------------------------- Effects budgets -----------------------------
