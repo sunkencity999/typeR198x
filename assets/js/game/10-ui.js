@@ -728,7 +728,7 @@ Object.assign(Game.prototype, {
       // same key: replace in place and restart the timer
       clearTimeout(entry.timer);
       entry.el.textContent = text;
-      entry.el.className = `toast toast--${kind} is-in`;
+      entry.el.className = `toast toast--${kind}`;
       entry.el.dataset.kind = kind;
     } else {
       const el = document.createElement("div");
@@ -740,8 +740,7 @@ Object.assign(Game.prototype, {
       entry = { el, key, timer: null };
       this.toasts.push(entry);
       while (this.toasts.length > 2) this.removeToast(this.toasts[0], true);
-      void el.offsetWidth; // commit the start state so the enter transition runs
-      el.classList.add("is-in");
+      // toastIn runs on insertion: no forced layout / is-in class needed (review R32)
     }
     entry.timer = setTimeout(() => this.removeToast(entry), ms);
     this.announce(text);
@@ -754,7 +753,6 @@ Object.assign(Game.prototype, {
     if (i >= 0) this.toasts.splice(i, 1);
     clearTimeout(entry.timer);
     if (immediate) { entry.el.remove(); return; }
-    entry.el.classList.remove("is-in");
     entry.el.classList.add("is-out", "is-leaving");
     setTimeout(() => entry.el.remove(), 220);
   },
@@ -765,13 +763,17 @@ Object.assign(Game.prototype, {
   },
 
   // ------------------------- Announcer -------------------------
-  // Clear, then write 30 ms later, so a repeated message is re-announced by the live region.
+  // #srAnnounce holds two live regions that take turns (review R32): one write per announce (the old clear-then-write
+  // 30 ms later cost a second layout), and a repeated message still lands in a region whose text changed, so it is
+  // re-announced. #srAnnounce.textContent is always the latest message (the other slot is emptied in the same task).
   announce(text) {
-    const el = this.srAnnounce || this.$("srAnnounce");
-    if (!el) return;
-    clearTimeout(this._announceTimer);
-    el.textContent = "";
-    this._announceTimer = setTimeout(() => { el.textContent = String(text || ""); }, 30);
+    const wrap = this.srAnnounce || this.$("srAnnounce");
+    if (!wrap) return;
+    const slots = wrap.querySelectorAll(".srAnnounceSlot");
+    if (slots.length < 2) { wrap.textContent = String(text || ""); return; }
+    const i = (this._announceSlot = 1 - (this._announceSlot | 0));
+    slots[1 - i].textContent = "";
+    slots[i].textContent = String(text || "");
   },
 
   announceMode(m, prev) {

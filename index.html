@@ -33,7 +33,8 @@
 
 <body>
   <div id="app">
-    <div id="srAnnounce" class="srOnly" role="status" aria-live="polite" aria-atomic="true"></div>
+    <!-- Two live regions take turns (10-ui.js announce, review R32): one write per message, repeats still re-announced. -->
+    <div id="srAnnounce" class="srOnly"><span class="srAnnounceSlot" role="status" aria-live="polite" aria-atomic="true"></span><span class="srAnnounceSlot" role="status" aria-live="polite" aria-atomic="true"></span></div>
 
     <header id="topBar" class="neon-panel">
       <div class="brand">
