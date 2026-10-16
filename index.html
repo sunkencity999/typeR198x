@@ -12,7 +12,7 @@
   <link rel="icon" href="./assets/ui/mark.svg" type="image/svg+xml" sizes="any" />
   <link rel="icon" type="image/png" sizes="32x32" href="./assets/icons/generated/macos/Icon-App-32.png" />
   <link rel="icon" type="image/png" sizes="16x16" href="./assets/icons/generated/macos/Icon-App-16.png" />
-  <link rel="apple-touch-icon" sizes="180x180" href="./assets/icons/generated/ios/Icon-App-60@3x.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="./assets/ui/apple-touch-icon.png" />
   <link rel="preload" as="font" type="font/woff2" href="./assets/fonts/Orbitron-Variable.woff2" crossorigin />
   <link rel="stylesheet" href="./assets/style/tokens.css?v=20251130a" />
   <link rel="stylesheet" href="./style.css?v=20251130a" />
@@ -190,7 +190,7 @@
         <div class="screenInner">
           <p id="pauseEyebrow" class="screenEyebrow">Paused // run suspended</p>
           <h2 id="pausedTitle" class="screenTitle">Paused</h2>
-          <p id="pauseReason" class="small">Press Esc or Enter to resume.</p>
+          <p id="pauseReason" class="small">Paused</p>
           <div class="pauseMeta">
             <div class="metaTile"><span class="label">Sector</span><span id="pauseSector" class="mono">—</span></div>
             <div class="metaTile"><span class="label">Wave</span><span id="pauseWave" class="mono">—</span></div>
@@ -390,7 +390,7 @@
     </div>
 
     <!-- Modals -->
-    <div id="storyModal" class="modalOverlay hidden" role="dialog" aria-modal="true" aria-labelledby="storyTitle">
+    <div id="storyModal" class="modalOverlay is-dismissed" role="dialog" aria-modal="true" aria-labelledby="storyTitle">
       <div class="modalInner">
         <p class="modalEyebrow">Mission briefing</p>
         <h2 id="storyTitle" class="neon-text">WordStorm Protocol</h2>

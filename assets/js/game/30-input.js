@@ -1,64 +1,115 @@
 // Type-R 198X — typing input, lock rules v2 (SYS-01), scoring hooks (SYS-07/SYS-09). Methods are mixed into Game.prototype; load order is defined in index.html.
 Object.assign(Game.prototype, {
   // ------------------------- Keydown routing (CONTRACT §10) -------------------------
-  // Steps 1, 4 (non-play screens) and 7 are owned by C1; their slots are kept in order so the routing survives when they land.
+  // Order follows CONTRACT section 10: modal stack, editable targets, fullscreen combos, Tab trap, Escape, Enter, repeat guard,
+  // non-play keys, release keys, modifier filter, diagnostics, normalise + type.
   isReleaseKey(e) {
     return e.key === " " || e.key === "Backspace";
   },
 
   onKeyDown(e) {
-    // 1. modal stack (C1): Escape cancels, Tab traps, Enter = primary.
-    if (this.modalStack && this.modalStack.length) return;
+    // 1. modal stack (C1): Escape cancels the top modal, Tab wraps inside it, Enter on a non-control clicks its
+    //    primary; every other key stays native (sliders, selects, text fields inside the modal keep working).
+    if (this.modalStack && this.modalStack.length) {
+      const top = this.modalStack[this.modalStack.length - 1];
+      if (e.key === "Escape") { e.preventDefault(); if (!e.repeat) this.cancelModal(top.el); return; }
+      if (e.key === "Tab") { this.trapFocus(top.el, e); return; }
+      if (e.key === "Enter" || e.key === "NumpadEnter") {
+        const a = document.activeElement;
+        const control = a && top.el.contains(a) && /^(button|input|select|textarea|a)$/i.test(a.tagName);
+        if (control) return; // native activation
+        const primary = this.modalPrimary(top);
+        e.preventDefault();
+        if (primary && !e.repeat) primary.click();
+      }
+      return;
+    }
 
     // 2. editable targets keep native behaviour; #typeInput (C7) only passes Escape/Enter/Tab here.
     const target = e.target;
     const tag = (target && target.tagName) ? target.tagName.toLowerCase() : "";
     const isTypeInput = !!(target && target.id === "typeInput");
     const isEditable = !isTypeInput && (
-      tag === "input" || tag === "textarea" ||
+      tag === "input" || tag === "textarea" || tag === "select" ||
       (target && target.isContentEditable) ||
       (document.activeElement && document.activeElement.isContentEditable));
-    if (e.isTrusted && /^(Key|Digit)/.test(e.code || "")) this.keyboardSeen = true;
+    if (e.isTrusted && /^(Key[A-Z]|Digit\d|Space)$/.test(e.code || "")) this.noteKeyboardEvidence();
     if (isEditable) return;
-    if (isTypeInput && !["Escape", "Enter", "NumpadEnter", "Tab"].includes(e.key)) return;
+    const fsCombo = ((e.key === "Enter" || e.key === "NumpadEnter") && (e.altKey || e.metaKey)) || e.key === "F11";
+    if (isTypeInput && !fsCombo && !["Escape", "Enter", "NumpadEnter", "Tab"].includes(e.key)) return;
 
     // 3. fullscreen combos (C2): Alt+Enter / Meta+Enter / F11.
-    if (((e.key === "Enter" || e.key === "NumpadEnter") && (e.altKey || e.metaKey)) || e.key === "F11") {
+    if (fsCombo) {
       if (typeof this.toggleFullscreen === "function") {
         e.preventDefault();
-        this.toggleFullscreen();
+        if (!e.repeat) this.toggleFullscreen();
         return;
       }
     }
 
-    // 4. Escape (C1 extends this to every screen).
+    // 4. Tab outside play wraps inside the active screen (plus the top bar); in play it stays native.
+    if (e.key === "Tab" && this.mode !== "playing") {
+      const screen = document.querySelector(".screen.is-active");
+      if (screen) { this.trapFocus([document.getElementById("topBar"), screen], e); return; }
+    }
+
+    // 5. Escape by mode.
     if (e.key === "Escape") {
-      if (e.repeat) return;
       e.preventDefault();
-      if (this.mode === "playing" || this.mode === "paused") this.togglePause();
+      if (e.repeat) return;
+      switch (this.mode) {
+        case "playing":
+        case "paused": this.togglePause(); break;
+        case "levelComplete":
+        case "gameOver": this.uiTick("back"); this.stopToMenu(true); break;
+        case "victory":
+          if (this.ui.endingNext && !this.ui.endingNext.classList.contains("hidden")) this.skipEndingDialogue();
+          else { this.uiTick("back"); this.stopToMenu(true); }
+          break;
+        default: break; // menu: modals are closed in step 1; nothing else to back out of
+      }
       return;
     }
 
-    // 5. Enter / NumpadEnter while playing: finale skip from 2.0 s, boss-intro skip for returning players;
-    //    otherwise ignored and never counted. Other modes: C1's primary action.
-    if ((e.key === "Enter" || e.key === "NumpadEnter") && this.mode === "playing") {
+    // 6. Enter / NumpadEnter. Playing: finale skip from 2.0 s, boss-intro skip for returning players; otherwise
+    //    ignored and never counted. Other modes: native when a control inside the active screen has focus, else
+    //    the mode's primary action.
+    if (e.key === "Enter" || e.key === "NumpadEnter") {
+      if (this.mode === "playing") {
+        e.preventDefault();
+        if (e.repeat) return;
+        if (this.bossClear) { this.skipFinale("enter"); return; }
+        if (this.bossIntro && this.bossIntro.locked) this.skipBossIntro();
+        return;
+      }
+      const a = document.activeElement;
+      const screen = document.querySelector(".screen.is-active");
+      const inScreen = a && (screen && screen.contains(a) || (a.closest && a.closest("#topBar")));
+      const control = inScreen && /^(button|input|select|textarea|a)$/i.test(a.tagName);
+      if (control) return;
       e.preventDefault();
       if (e.repeat) return;
-      if (this.bossClear) { this.skipFinale("enter"); return; }
-      if (this.bossIntro && this.bossIntro.locked) this.skipBossIntro();
+      const primary = this.primaryFor(this.mode);
+      if (primary && !primary.disabled && this.isVisible(primary)) primary.click();
       return;
     }
 
-    // 6. repeat guard: auto-repeat of a key the game owns is swallowed while playing (G007).
+    // 7. repeat guard: auto-repeat of a key the game owns is swallowed while playing (G007).
     if (e.repeat) {
       if (this.mode === "playing" && (normalizeKey(e) || this.isReleaseKey(e))) e.preventDefault();
       return;
     }
 
-    // 7. not playing (C1): ? / F1 help, m mute.
-    if (this.mode !== "playing") return;
+    // 8. not playing: ? / F1 help (menu, paused), m mute (menu, paused).
+    if (this.mode !== "playing") {
+      if (this.mode === "menu" || this.mode === "paused") {
+        if (e.key === "?" || e.key === "F1") { e.preventDefault(); this.showHelp(); return; }
+        if (e.key === "m" || e.key === "M") { e.preventDefault(); this.toggleMute(); return; }
+      }
+      return;
+    }
 
-    // 8. Space / Backspace: lock release (B1); during the finale they skip it. Never counted.
+    // 9. Space / Backspace: lock release (B1); during the finale they skip it. Never counted.
     if (this.isReleaseKey(e)) {
       e.preventDefault();
       if (this.bossClear) { this.skipFinale("space"); return; }
@@ -66,14 +117,14 @@ Object.assign(Game.prototype, {
       return;
     }
 
-    // 9. modifier filter: shortcuts stay with the browser and are never preventDefault'ed (F042).
+    // 10. modifier filter: shortcuts stay with the browser and are never preventDefault'ed (F042).
     const altGraph = typeof e.getModifierState === "function" && e.getModifierState("AltGraph");
     if ((e.ctrlKey || e.metaKey || e.altKey) && !altGraph && !(e.ctrlKey && e.altKey)) return;
 
-    // 10. layout / IME diagnostics (toast once per run per kind, never auto-pause).
+    // 11. layout / IME diagnostics (toast once per run per kind, never auto-pause).
     this.noteInputDiagnostic(e);
 
-    // 11. normalise and type.
+    // 12. normalise and type.
     const ch = normalizeKey(e);
     if (!ch) return;
     e.preventDefault();
@@ -204,6 +255,7 @@ Object.assign(Game.prototype, {
     if (this.mode !== "playing") return;
     if (this.inputLockedOut()) {
       if (this.bossIntro && this.bossIntro.locked) this.skipBossIntro();
+      else if (typeof this.canSkipLevelIntro === "function" && typeof this.skipLevelIntro === "function" && this.canSkipLevelIntro()) this.skipLevelIntro();
       return;
     }
     // Everything this key scores uses the multiplier in effect when it arrived; a tier reached by this key
@@ -262,6 +314,7 @@ Object.assign(Game.prototype, {
     this.sfx.zap(clamp(ref.progress / Math.max(1, len), 0, 1));
 
     const ch = ref.kind === "powerup" ? ref.label[ref.progress - 1] : ref.text[ref.progress - 1];
+    if (typeof this.onKeyFx === "function") this.onKeyFx(ref, ch); // camera track: recoil, heat, flinch, glyph eject
     if (ref.kind !== "powerup") {
       if (this.power.pierce > 0) this.applyPierce(ref, ch);
       if (this.power.rapid > 0) this.applyRapid(ref, ch);

@@ -72,7 +72,6 @@ Object.assign(Game.prototype, {
 
     Assets.init({ renderScale: this.renderScale || 1 });
     ExplosionSprite.getSheet = () => Assets.get("fx/explosions");
-    this.installAudioBusy();
 
     // Display font (B-3): cached text metrics measured before the swap are rebuilt through spriteEpoch.
     this.fontsReady = this.loadDisplayFont().then((ok) => {
@@ -283,22 +282,8 @@ Object.assign(Game.prototype, {
     Assets.prefetchLevel(clamp(i, 0, 9));
   },
 
-  // Start/Continue show "SPOOLING AUDIO…" (aria-busy) only while the one-shot unlock is pending (F014).
-  installAudioBusy() {
-    const proto = this.ensureAudio;
-    if (typeof proto !== "function" || this._audioBusyInstalled) return;
-    this._audioBusyInstalled = true;
-    this.ensureAudio = (...args) => {
-      const pending = !this.audioReady && !this.audioUnavailable;
-      const p = proto.apply(this, args);
-      if (pending && p && typeof p.then === "function") {
-        this.setAudioBusy(true);
-        p.then(() => this.setAudioBusy(false), () => this.setAudioBusy(false));
-      }
-      return p;
-    };
-  },
-
+  // Start/Continue show "SPOOLING AUDIO…" (aria-busy) while the one-shot unlock is pending (F014); the Start /
+  // Continue handlers in 10-ui.js call this around ensureAudio().
   setAudioBusy(on) {
     for (const btn of [this.btnStart, this.btnContinue]) {
       if (!btn) continue;

@@ -158,12 +158,28 @@ function migrateRun(run) {
   return r;
 }
 
+// Settings (CONTRACT section 9): old saves carry only { muted, crt }; the rest takes the defaults, numbers are clamped
+// and reduceMotion is the tri-state null | true | false.
+function normaliseSettings(s) {
+  const num = (v, d, lo, hi) => (Number.isFinite(Number(v)) && v !== null && v !== "" ? clamp(Number(v), lo, hi) : d);
+  return {
+    ...s,
+    muted: !!s.muted,
+    crt: s.crt !== false,
+    musicVolume: num(s.musicVolume, 0.7, 0, 1),
+    sfxVolume: num(s.sfxVolume, 0.8, 0, 1),
+    crtIntensity: num(s.crtIntensity, 0.75, 0.25, 1),
+    reduceMotion: s.reduceMotion === true ? true : s.reduceMotion === false ? false : null,
+    renderScaleCap: num(s.renderScaleCap, 2, 0.5, 2)
+  };
+}
+
 // Merge any stored blob over the defaults and normalise it to schema 2. Idempotent.
 function migrateSave(obj) {
   const base = defaultSave();
   if (!obj || typeof obj !== "object") return base;
   const save = { ...base, ...obj };
-  save.settings = { ...base.settings, ...((obj.settings && typeof obj.settings === "object") ? obj.settings : {}) };
+  save.settings = normaliseSettings({ ...base.settings, ...((obj.settings && typeof obj.settings === "object") ? obj.settings : {}) });
   save.tutorialSeen = { ...base.tutorialSeen, ...((obj.tutorialSeen && typeof obj.tutorialSeen === "object") ? obj.tutorialSeen : {}) };
   save.highScores = Array.isArray(obj.highScores) ? obj.highScores.filter(h => h && typeof h === "object") : [];
   save.sectorBests = (obj.sectorBests && typeof obj.sectorBests === "object") ? { ...obj.sectorBests } : {};
