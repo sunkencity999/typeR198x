@@ -443,7 +443,6 @@ Object.assign(Game.prototype, {
       if (ex.isFlash()) { flashes++; continue; }
       ex.drawFrame(ctx);
     }
-    if (this.dyingPlates && this.dyingPlates.length) this.drawDyingPlates(ctx);
     if (!this.needsAdditiveBatch(flashes)) return;
     this.openAdditive(ctx);
     if (flashes) for (const ex of list) if (!ex.done && ex.isFlash()) ex.drawFrame(ctx);
@@ -458,23 +457,6 @@ Object.assign(Game.prototype, {
       if (l && l.length) return true;
     }
     return typeof this.shipAdditiveActive === "function" && this.shipAdditiveActive();
-  },
-
-  // Impact frame (JUICE-02): the destroyed plate pops solid white, 1.25 -> 1.0 over 90 ms, no text.
-  drawDyingPlates(ctx) {
-    const rr = typeof roundRect === "function" ? roundRect : null;
-    for (const d of this.dyingPlates) {
-      const u = clamp(d.t / d.life, 0, 1);
-      const s = lerp(1.25, 1, easeOutCubic(u));
-      const w = d.w * s, h = d.h * s;
-      ctx.fillStyle = PALETTE.rgba("text", 0.95 - 0.3 * u);
-      if (rr) {
-        rr(ctx, d.x - w / 2, d.y - h / 2, w, h, d.chip ? 10 : h / 2);
-        ctx.fill();
-      } else {
-        ctx.fillRect(d.x - w / 2, d.y - h / 2, w, h);
-      }
-    }
   },
 
   drawParticles(ctx) {

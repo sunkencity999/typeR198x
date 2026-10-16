@@ -614,7 +614,7 @@ async function enterGame() {
   const story = page.locator("#btnStoryLaunch");
   const t0 = Date.now();
   while (Date.now() - t0 < 4000) {
-    if (await story.isVisible().catch(() => false)) { await shot("story"); await story.click(); break; }
+    if (await story.isVisible().catch(() => false)) { await sleep(400); await shot("story"); await story.click(); break; }
     const st = await state();
     if (st && st.mode === "playing") break;
     await sleep(100);
@@ -716,11 +716,13 @@ try {
   if (SCENARIO === "all") {
     await page.keyboard.press("Escape"); await sleep(400); await shot("paused"); await page.keyboard.press("Escape"); await sleep(300);
 
-    // Boss
-    await forceBoss();
-    await sleep(1200);
+    // Boss: capture the intro ceremony at ~1.2 s, then wait for the hand-off
+    await waitNoIntro();
+    await page.evaluate(() => { const g = window.game; const L = window.TypeRDebug.LEVELS; if (g && L && L[g.levelIndex]) g.levelT = L[g.levelIndex].duration + 0.01; });
+    await page.waitForFunction(() => { const g = window.game; return !!(g && g.inBoss && g.bossIntro && g.bossIntro.locked && g.bossIntro.t >= 1.1); }, null, { timeout: 15000 }).catch(() => {});
     await shot("boss-intro");
-    await sleep(1800);
+    await forceBoss();
+    await sleep(600);
     await shot("boss-fight");
     await measureScene("boss", 1500);
     await autoType(90, { until: (s) => s.bossClear || s.mode !== "playing" });

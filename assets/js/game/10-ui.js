@@ -119,6 +119,9 @@ Object.assign(Game.prototype, {
 
   // ------------------------- bindUI -------------------------
   bindUI() {
+    // Start-with-run and Reset Save confirm in their own handlers; the screens track's capture-phase guards step aside.
+    this.startHandlesConfirm = true;
+    this.resetHandlesConfirm = true;
     this.modalStack = this.modalStack || [];
     this.typeInput = this.$("typeInput");
     this.tapToType = this.$("tapToType");
@@ -1319,59 +1322,6 @@ Object.assign(Game.prototype, {
     clearTimeout(this._tapToTypeTimer);
     this._tapToTypeTimer = null;
     if (this.tapToType) this.tapToType.classList.add("hidden");
-  },
-
-  // ------------------------- Ending dialogue (victory) -------------------------
-  resetEndingDialogue() {
-    this.endingScript = getVictoryScript();
-    this.endingIndex = 0;
-    const u = this.ui;
-    if (u.endingStage) { u.endingStage.textContent = ""; u.endingStage.classList.add("hidden"); }
-    if (u.endingSpeaker) { u.endingSpeaker.textContent = ""; u.endingSpeaker.classList.add("hidden"); }
-    if (u.endingLine) u.endingLine.textContent = "";
-    if (u.creditsLine) u.creditsLine.classList.add("hidden");
-    if (this.btnNewRun) this.btnNewRun.classList.add("hidden");
-    if (u.endingNext) u.endingNext.classList.remove("hidden");
-    if (u.endingSkip) u.endingSkip.classList.remove("hidden");
-  },
-
-  showEndingLine(i) {
-    const n = this.endingScript.length;
-    const line = this.endingScript[i];
-    if (!line) return;
-    const u = this.ui;
-    if (u.endingStage) { u.endingStage.textContent = `TRANSMISSION ${i + 1}/${n}`; u.endingStage.classList.remove("hidden"); }
-    if (u.endingSpeaker) { u.endingSpeaker.textContent = line.speaker || ""; u.endingSpeaker.classList.remove("hidden"); }
-    if (u.endingLine) u.endingLine.textContent = line.text || "";
-    const win = u.endingLine ? u.endingLine.closest(".dialogueWindow") : null;
-    if (win) win.dataset.speaker = (line.speaker || "").toLowerCase().replace(/[^a-z]+/g, "-");
-  },
-
-  advanceEndingDialogue() {
-    const n = this.endingScript.length;
-    if (this.endingIndex >= n) { this.finishEndingDialogue(); return; }
-    this.showEndingLine(this.endingIndex);
-    this.endingIndex++;
-    if (this.endingIndex >= n) this.finishEndingDialogue();
-  },
-
-  skipEndingDialogue() {
-    const n = this.endingScript.length;
-    if (n) this.showEndingLine(n - 1);
-    this.endingIndex = n;
-    this.finishEndingDialogue();
-  },
-
-  // Last line shown: reveal Play again + credits, retire Next/Skip.
-  finishEndingDialogue() {
-    const u = this.ui;
-    if (u.creditsLine) u.creditsLine.classList.remove("hidden");
-    if (this.btnNewRun) this.btnNewRun.classList.remove("hidden");
-    if (u.endingNext) u.endingNext.classList.add("hidden");
-    if (u.endingSkip) u.endingSkip.classList.add("hidden");
-    if (this.btnNewRun && this.mode === "victory") {
-      try { this.btnNewRun.focus({ preventScroll: true }); } catch (_) {}
-    }
   },
 
   // ------------------------- Menu -------------------------

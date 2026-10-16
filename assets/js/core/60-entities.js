@@ -41,7 +41,7 @@ class Enemy {
     this.age += dt;
     this.flash = Math.max(0, this.flash - dt * 5);
     this.typoT = Math.max(0, this.typoT - dt);
-    this.flinch = Math.max(0, this.flinch - dt * 6);
+    this.flinch = Math.max(0, this.flinch - dt * 8);
   }
 }
 

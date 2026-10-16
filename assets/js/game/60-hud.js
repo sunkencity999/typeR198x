@@ -254,7 +254,11 @@ Object.assign(Game.prototype, {
     this.setText(el.bossSegment, `SEG ${Math.min(boss.segmentIndex + 1, n)}/${n}`);
     const frac = boss.hpFrac();
     if (this.setTransformScaleX(el.bossFill, frac)) {
-      this.setAttr(el.bossMeter, "aria-valuenow", Math.round(frac * 100));
+      const now = performance.now();
+      if (!this._bossAriaAt || now - this._bossAriaAt >= 500 || frac === 0) {   // 2 Hz (UX-01)
+        this._bossAriaAt = now;
+        this.setAttr(el.bossMeter, "aria-valuenow", Math.round(frac * 100));
+      }
     }
     // data-state = current phase (B-11), colour only: p1 magenta, p2 amber, p3 danger, p4 violet.
     this.setAttr(el.bossMeter, "data-state", `p${Math.min(boss.phase + 1, 4)}`);

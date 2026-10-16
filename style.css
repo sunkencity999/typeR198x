@@ -2593,3 +2593,13 @@ fieldset.shipGrid > legend {
   body[data-mode="playing"] #topBar,
   body[data-mode="paused"] #topBar { justify-content: center; }
 }
+
+/* Powerup label flight: capsule -> HUD chip (320 ms). JS positions it inside #main and sets the end transform. */
+.flyLabel {
+  position: absolute; z-index: var(--z-toast, 60);
+  font: 600 12px var(--font-mono); letter-spacing: .1em; text-transform: uppercase; white-space: nowrap;
+  color: var(--c-text); padding: 2px 8px; border: 1px solid var(--neon-violet); border-radius: var(--r-pill, 999px);
+  background: rgba(5, 6, 11, .92); pointer-events: none; will-change: transform, opacity;
+  transition: transform var(--dur-3, 320ms) var(--ease-out, ease-out), opacity var(--dur-3, 320ms) linear;
+}
+:root.reduce-motion .flyLabel { display: none; }

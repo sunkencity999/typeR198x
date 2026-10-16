@@ -68,7 +68,7 @@ Object.assign(Game.prototype, {
       crtOverlay: $("crtOverlay"), crtNoise: $("crtNoise")
     };
 
-    on(this.screenEls.hudPause, "click", () => { if (typeof this.togglePause === "function") this.togglePause(); });
+    // #hudPause and #btnPauseHelp are bound by the shell (bindUI).
 
     if (typeof this.initMenuScreens === "function") this.initMenuScreens();
     if (typeof this.initOnboarding === "function") this.initOnboarding();
@@ -282,7 +282,6 @@ Object.assign(Game.prototype, {
     on(E.btnRecords, "click", () => this.openRecords());
     on(E.btnRecordsClose, "click", () => this.closeRecords());
     on(E.btnHelp, "click", () => { if (typeof this.openHelp === "function") this.openHelp(); });
-    on(E.btnPauseHelp, "click", () => { if (typeof this.openHelp === "function") this.openHelp(); });
     on(E.btnHelpClose, "click", () => { if (typeof this.closeHelp === "function") this.closeHelp(); });
     on(E.btnBriefing, "click", () => this.openBriefing());
     on(E.btnMenuSettings, "click", () => this.openSettingsFromMenu());

@@ -64,6 +64,7 @@ Object.assign(Game.prototype, {
     this.refreshBossUI({ full: true });
     this.sfx.bossSiren(3);
     this.sfx.setMusicState("boss");
+    if (typeof this.announce === "function") this.announce(`Boss: ${boss.name}. Type the highlighted word.`);
     this.saveRun(true);
     return boss;
   },
@@ -219,6 +220,7 @@ Object.assign(Game.prototype, {
     this.countCorrect();
     const aim = this.bossAimPoint();
     this.fireLaserTo(aim.x, aim.y, "cyan");
+    if (typeof this.onKeyFx === "function") this.onKeyFx(boss, boss.nextChar);   // recoil + heat on boss typing
     this.sfx.zap(clamp((boss.progress + 1) / segLen, 0, 1));
     this.addSparks(aim.x, aim.y + rand(-40, 40), 10);
     const mult = this.scoringMult();

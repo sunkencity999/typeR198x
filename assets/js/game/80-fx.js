@@ -244,7 +244,6 @@ Object.assign(Game.prototype, {
       g.vy += 420 * wdt;
       return g.t < g.life;
     });
-    compactInPlace(this.dyingPlates, (d) => (d.t += wdt, d.t < d.life));
     compactInPlace(this.muzzles, (mz) => (mz.t += dt, mz.t < mz.life));
     compactInPlace(this.typoGlyphs, (g) => (g.t += dt, g.t < g.life && g.ref && g.ref.alive !== false));
     // beam heads arriving at the target spawn the impact ring (D2 bullets carry headT / impact)
@@ -355,7 +354,7 @@ Object.assign(Game.prototype, {
     const ring = FXM.ring || {};
     const hs = FXM.hitStop || {};
     this.addShockwave(x, y, small ? fxNum(ring.letter, 12) : fxNum(ring.kill, 20), "cyan");
-    fxPush(this.dyingPlates, { x, y, w: (en && en.plateW) || 64, h: (en && en.plateH) || 40, t: 0, life: 0.09, chip: len <= 1 }, FX_LIST_CAPS.dyingPlates);
+    // the white impact plate itself is recorded by notePlateDeath(en, "kill") (70-render.js)
     p.recoil = Math.min(1, p.recoil + fxNum(FXM.recoilPerKill, 0.8));
     this.addHitStop(len > 1 ? fxNum(hs.word, 0.045) : fxNum(hs.letter, 0.03));
   },

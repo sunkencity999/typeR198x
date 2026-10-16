@@ -1302,7 +1302,6 @@ Object.assign(Game.prototype, {
     const boss = (this.inBoss && this.boss) ? this.boss : null;
     if (boss) this.drawBossArt(ctx, boss);                     // L6
     else if (this.bossClear && this.bossDissolve) this.drawBossDissolve(ctx);
-    if (typeof this.drawMuzzleFlashes === "function") this.drawMuzzleFlashes(ctx); // L7 (D2, optional)
     this.drawBullets(ctx);                                     // L7
     for (const p of this.powerups) this.drawPowerup(ctx, p);   // L8
     this.drawEnemies(ctx);                                     // L9 (far to near, locked last)
@@ -1312,9 +1311,7 @@ Object.assign(Game.prototype, {
     this.drawExplosionSprites(ctx);                            // L12
     this.drawDyingPlates(ctx);
     this.drawParticles(ctx);
-    if (typeof this.drawRings === "function") this.drawRings(ctx);     // L12 additive batch (D2, optional hooks)
-    if (typeof this.drawBolts === "function") this.drawBolts(ctx);
-    if (typeof this.drawDebris === "function") this.drawDebris(ctx);
+    // rings / bolts / debris / muzzles are drawn by drawBullets (L7) and drawParticles (L12) in 75-fx-draw.js
     if (typeof this.drawFloaters === "function") this.drawFloaters(ctx); // L13 (D5)
     this.drawWorldOverlays(ctx);                               // L14
     ctx.restore();

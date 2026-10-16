@@ -315,8 +315,7 @@ Object.assign(Game.prototype, {
     this.addExplosion(en.x, en.y, 14 + len * 2);
     this.addExplosionSprite(en.x, en.y, this.getExplosionTypeForEnemy(en));
     this.sfx.explosion(minion ? 0.15 : clamp((len - 1) / 11, 0, 1));
-    this.screenShake(len > 6 ? 5 : 3);
-    this.hitStop = Math.max(this.hitStop || 0, len > 1 ? 0.045 : 0.03);
+    this.screenShake(len > 6 ? 5 : 3);   // hit-stop, recoil and the impact ring come from onKillFx
 
     this.maybeDropPowerup(en);
     if (!secondary && !minion && this.power.spread > 0) this.applySpread(en);
@@ -388,7 +387,7 @@ Object.assign(Game.prototype, {
     // a danger ring spreads from the contact point; no explosion sprite.
     const slamX = Math.max(en.x, this.player.x + 35 + (en.plateW || 40) / 2);
     if (typeof this.notePlateDeath === "function") this.notePlateDeath(en, "slam", { x: slamX, y: en.y });
-    this.player.kick = Math.max(this.player.kick || 0, 1);
+    this.player.kick = Math.max(this.player.kick || 0, 14);
     if (typeof this.addShockwave === "function") this.addShockwave(this.player.x + 40, en.y, 120, "danger");
     const dmg = en.kind === "bossMinion" ? DAMAGE.minion : DAMAGE.leak(en.text.length);
     this.takeDamage(dmg, "leak");
@@ -421,12 +420,10 @@ Object.assign(Game.prototype, {
     else { ls.waveDamage = (ls.waveDamage | 0) + dmg; this.waveDmg = (this.waveDmg || 0) + dmg; }
     this.onComboBreak(this.stats.combo | 0);
     if (source !== "surge") this.sfx.damage();   // surgeFire() carries its own damage() hit
-    this.player.hitT = 0.3;
-    this.player.kick = 1;
+    this.player.hitT = 0.12;   // white hull overlay (VIS-06)
+    this.player.kick = 14;     // px, eased back at 8/s by tickEffects
     this.damageFlash = 1;
     if (typeof this.crtTear === "function") this.crtTear();
-    this.damagePulse = Math.max(this.damagePulse, 0.3);   // legacy tint: .3 x .4 = alpha .12 (contract cap)
-    this.flash = Math.max(this.flash, 0.04);
     this.screenShake(12);
     this.flashHudHit();
     this.updateLowHp();
@@ -579,13 +576,7 @@ Object.assign(Game.prototype, {
       this.player.shield = Math.max(0, shieldBefore - dt);
       if (this.player.shield === 0) this.sfx.powerDown();
     }
-    this.invulnT = Math.max(0, (this.invulnT || 0) - dt);
-    this.player.hitT = Math.max(0, (this.player.hitT || 0) - dt);
-    this.player.kick = Math.max(0, (this.player.kick || 0) - dt * 4);
-    this.player.shieldFlash = Math.max(0, (this.player.shieldFlash || 0) - dt * 3);
-    this.typoFlash = Math.max(0, (this.typoFlash || 0) - dt * 3);
-    this.damageFlash = Math.max(0, (this.damageFlash || 0) - dt * 1.8);
-    this.whiteFlash = Math.max(0, (this.whiteFlash || 0) - dt * 2);
+    this.invulnT = Math.max(0, (this.invulnT || 0) - dt);   // the flash channels and player.hitT/kick decay in tickEffects (80-fx.js)
   },
 
   // Prefetch the next sector's art and music once per level (at 25 % of the duration, and when the finale starts).

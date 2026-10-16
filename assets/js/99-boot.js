@@ -29,3 +29,4 @@ if (typeof comboTier === "function") window.TypeRDebug.comboTier = comboTier;
 if (typeof getThemeForLevel === "function") window.TypeRDebug.getThemeForLevel = getThemeForLevel;
 window.TypeRDebug.PALETTE = PALETTE;
 window.TypeRDebug.FONT = FONT;
+if (typeof Game !== "undefined" && Game.CAMERA_HOOKS) window.TypeRDebug.cameraHooks = Game.CAMERA_HOOKS;

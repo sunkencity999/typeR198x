@@ -13,6 +13,8 @@
     "native": "node play.mjs --root ../.. --out ./out/native --scenario all --ua native",
     "fixture": "node play.mjs --root ../.. --out ./out/fixture --scenario smoke --fixture",
     "matrix": "bash run-matrix.sh",
+    "no-music": "node play.mjs --root ../.. --out ./out/no-music --scenario smoke --dpr 2 --no-music",
+    "audio": "node probes/audio-contract.mjs --root ../.. && node probes/audio-contract.mjs --root ../.. --legacy && node probes/audio-lifecycle.mjs --root ../..",
     "matrix:quick": "bash run-matrix.sh --quick"
   },
   "dependencies": {
