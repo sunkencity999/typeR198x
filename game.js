@@ -23,6 +23,7 @@
 //   assets/js/game/60-hud.js         Game.prototype: updateHUD, getAccuracyPct
 //   assets/js/game/70-render.js      Game.prototype: resizeCanvas, render(dt) and all draw* methods
 //   assets/js/game/80-fx.js          Game.prototype: lasers, sparks, explosions, trauma/effects clock
+//   assets/js/game/85-attract.js     Game.prototype: attract mode (ghost typist behind the title, PERF-10 idle drift)
 //   assets/js/99-boot.js             const game = new Game(); window.game = game; window.TypeRDebug
 //
 // Every game/*.js file is an Object.assign(Game.prototype, { ... }) mixin. Methods are only called at
@@ -272,9 +273,11 @@ class Game {
         this.update(raw * this.timeScale);
         this.drawFrame(raw);
       } else if (this.mode === "menu") {
-        // Full rate: the attract mode (D8) lives here later.
+        // Full rate. Attract mode (D8, 85-attract.js) steps before the ambient drift so its parallax multiplier
+        // applies this frame; PERF-10 lets it drop the draw to 20 fps once the menu has been idle for 90 s.
+        if (typeof this.updateAttract === "function") this.updateAttract(raw);
         this.stepAmbient(raw);
-        this.drawFrame(raw);
+        if (!(typeof this.attractFrameSkip === "function" && this.attractFrameSkip())) this.drawFrame(raw);
       } else {
         // Paused / level complete / game over / victory: 20 fps ambient tick.
         this.ambientAcc += raw;
