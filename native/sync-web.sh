@@ -4,6 +4,16 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SOURCE_DIR="$ROOT_DIR"
 
+# Secondary pages the shell links to (footer: privacy-policy.html, support.html; privacy.html is the old
+# redirect stub, info.html the how-to page). Without them the footer links are dead inside the apps (review R43).
+PAGES=(privacy-policy.html support.html privacy.html info.html)
+copy_pages() {
+  local target_dir="$1" page
+  for page in "${PAGES[@]}"; do
+    if [[ -f "$SOURCE_DIR/$page" ]]; then cp "$SOURCE_DIR/$page" "$target_dir/"; fi
+  done
+}
+
 # Function to patch files for native environment
 patch_for_native() {
   local target_dir="$1"
@@ -37,6 +47,7 @@ mkdir -p "$TARGET_IOS"
 cp "$SOURCE_DIR/index.html" "$TARGET_IOS/"
 cp "$SOURCE_DIR/game.js" "$TARGET_IOS/"
 cp "$SOURCE_DIR/style.css" "$TARGET_IOS/"
+copy_pages "$TARGET_IOS"
 rsync -a --delete "$SOURCE_DIR/assets/" "$TARGET_IOS/assets/"
 patch_for_native "$TARGET_IOS"
 echo "Synced iOS bundle to $TARGET_IOS"
@@ -47,6 +58,7 @@ mkdir -p "$TARGET_MAC"
 cp "$SOURCE_DIR/index.html" "$TARGET_MAC/"
 cp "$SOURCE_DIR/game.js" "$TARGET_MAC/"
 cp "$SOURCE_DIR/style.css" "$TARGET_MAC/"
+copy_pages "$TARGET_MAC"
 rsync -a --delete "$SOURCE_DIR/assets/" "$TARGET_MAC/assets/"
 patch_for_native "$TARGET_MAC"
 echo "Synced macOS bundle to $TARGET_MAC"

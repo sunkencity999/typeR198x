@@ -1,0 +1,6 @@
+{
+  "description": "No save at all (first visit): the key typesmup198x.save.v1 is removed before the page loads.",
+  "entry": "start",
+  "expect": { "levelIndex": 0, "highScore": 0, "lastUnlockedLevel": 1 },
+  "save": null
+}

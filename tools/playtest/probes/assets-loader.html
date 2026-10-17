@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Served by tools/playtest/probes/assets-loader.mjs from the repository root; the base makes the
+       manifest's "./assets/..." paths resolve against the root exactly as they do from index.html. -->
+  <base href="/" />
+  <title>Assets loader probe</title>
+  <link rel="icon" href="data:," />
+  <style>
+    html, body { margin: 0; background: #070A16; color: #39F5FF; font: 14px/1.4 ui-monospace, Menlo, monospace; }
+    main { padding: 16px; }
+    canvas { display: block; background: #0b1020; border: 1px solid #1d2a4a; margin-top: 12px; }
+    pre { white-space: pre-wrap; color: #cfd8ff; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1 style="font-size:16px;margin:0 0 8px">Assets loader probe</h1>
+    <pre id="log">booting…</pre>
+    <canvas id="preview" width="960" height="540"></canvas>
+  </main>
+  <!-- 00-util.js throws without window.SFX; the probe does not need audio. -->
+  <script>window.SFX = window.SFX || function ProbeSfxStub() {};</script>
+  <script src="assets/opt/manifest.js"></script>
+  <script src="assets/js/core/00-util.js"></script>
+  <script src="assets/js/core/20-constants.js"></script>
+  <script src="assets/js/core/30-content.js"></script>
+  <script src="assets/js/core/50-assets.js"></script>
+  <script>
+    // Draws what the loader hands back so the screenshot shows the trimmed-sprite placement math in use:
+    // the ship and boss boxes are the untrimmed boxes callers already use; sprite() supplies the offsets.
+    window.probeDrawPreview = function () {
+      const c = document.getElementById("preview");
+      const ctx = c.getContext("2d");
+      ctx.fillStyle = "#0b1020";
+      ctx.fillRect(0, 0, c.width, c.height);
+      const bg = Assets.get("bg/first");
+      if (bg) ctx.drawImage(bg, 0, 0, c.width, c.height);
+      const drawBox = (key, ox, oy, targetW, label) => {
+        const s = Assets.sprite(key, targetW);
+        const orig = Assets.meta(key) && Assets.meta(key).orig;
+        const fullH = orig ? targetW * orig.h / orig.w : s.h;
+        ctx.strokeStyle = "rgba(255,57,209,.8)";
+        ctx.setLineDash([6, 4]);
+        ctx.strokeRect(ox, oy, targetW, fullH);          // untrimmed box (where drawShip/drawBoss used to draw)
+        ctx.setLineDash([]);
+        if (s.img) ctx.drawImage(s.img, ox + s.x, oy + s.y, s.w, s.h);
+        ctx.strokeStyle = "rgba(168,255,58,.9)";
+        ctx.strokeRect(ox + s.x, oy + s.y, s.w, s.h);     // trimmed crop box
+        const cr = Assets.contentRect(key, targetW);
+        ctx.strokeStyle = "rgba(57,245,255,.9)";
+        ctx.strokeRect(ox + cr.x, oy + cr.y, cr.w, cr.h); // opaque content box
+        ctx.fillStyle = "#fff";
+        ctx.font = "12px ui-monospace, Menlo, monospace";
+        ctx.fillText(label, ox, oy - 4);
+      };
+      drawBox("ships/coconut", 40, 330, 150, "ships/coconut @150 (magenta: untrimmed box, lime: crop, cyan: content)");
+      drawBox("bosses/1", 420, 60, 500, "bosses/1 @500");
+      const fx = Assets.get("fx/explosions");
+      if (fx && typeof EXPLOSION_FRAMES !== "undefined") {
+        const k = Assets.sheetScale("fx/explosions");
+        const f = EXPLOSION_FRAMES[7];
+        ctx.drawImage(fx, f.x * k, f.y * k, f.w * k, f.h * k, 250, 380, f.w * 0.5, f.h * 0.5);
+        ctx.fillStyle = "#fff";
+        ctx.fillText("fx frame 7, sheetScale " + k, 250, 376);
+      }
+    };
+  </script>
+</body>
+</html>

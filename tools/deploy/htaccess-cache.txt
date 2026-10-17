@@ -1,0 +1,40 @@
+# Type-R 198X cache policy for Apache hosts (the live site answers with x-httpd-modphp / x-proxy-cache-info
+# headers, i.e. Apache behind the host's nginx static cache). Upload as .htaccess in the web root with
+# `node tools/deploy/deploy.mjs --htaccess` or paste the block into an existing .htaccess.
+#
+# Goal (audit G025/G026): the HTML shell must revalidate on every visit so a new ?v= token reaches returning
+# players, while versioned assets stay cacheable for a year. If the host's own static cache still serves
+# index.html with a long max-age after this change, disable that cache for .html in the hosting panel
+# (SiteGround: Site Tools > Speed > Caching > NGINX Direct Delivery / Dynamic Cache exclusions) and purge it.
+#
+# Immutability is gated on the ?v= token, not on the extension (review R15): FilesMatch cannot see the query
+# string, and the shell references several files without a token (favicon, logo, CSS url() icons, noise.png,
+# the Orbitron woff2 preload/@font-face, bookmarked bare game.js/style.css), none of which has a way to bust
+# a one-year immutable cache. So, mirroring tools/nginx-cache.conf: bare js/css/json revalidate, bare media
+# and fonts get 30 days, and any URL carrying ?v= is immutable for a year. The conditional `Header set`
+# uses a mod_headers expr (Apache >= 2.4.10); on an older Apache that line is a config error, so check the
+# site answers after enabling it.
+
+<IfModule mod_headers.c>
+  <FilesMatch "\.(html)$">
+    Header set Cache-Control "no-cache, max-age=0, must-revalidate"
+  </FilesMatch>
+  <FilesMatch "\.(js|css|json)$">
+    Header set Cache-Control "no-cache, max-age=0, must-revalidate"
+    Header set Cache-Control "public, max-age=31536000, immutable" "expr=%{QUERY_STRING} =~ /(^|&)v=/"
+  </FilesMatch>
+  <FilesMatch "\.(webp|png|jpg|svg|woff2|mp3|wav)$">
+    Header set Cache-Control "public, max-age=2592000"
+    Header set Cache-Control "public, max-age=31536000, immutable" "expr=%{QUERY_STRING} =~ /(^|&)v=/"
+  </FilesMatch>
+  <FilesMatch "^manifest\.js$">
+    Header set Cache-Control "no-cache, max-age=0, must-revalidate"
+  </FilesMatch>
+</IfModule>
+
+<IfModule mod_mime.c>
+  AddType image/webp .webp
+  AddType font/woff2 .woff2
+  AddType audio/mpeg .mp3
+  AddType application/javascript .js
+</IfModule>

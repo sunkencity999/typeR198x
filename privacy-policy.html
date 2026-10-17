@@ -2,130 +2,155 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Type-R 198X Privacy Policy</title>
-  <link rel="stylesheet" href="./assets/style/tokens.css" />
-  <link rel="stylesheet" href="./style.css" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Privacy Policy — Type-R 198X</title>
+  <meta name="description" content="Type-R 198X privacy policy: the game stores progress and settings on your device only, never collects personal data and makes no network calls while you play." />
+  <meta name="color-scheme" content="dark" />
+  <meta name="theme-color" content="#0B1030" />
+  <link rel="canonical" href="https://typer198x.com/privacy-policy.html" />
+  <link rel="icon" href="./assets/ui/mark.svg" type="image/svg+xml" sizes="any" />
+  <link rel="icon" type="image/png" sizes="32x32" href="./assets/icons/generated/macos/Icon-App-32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="./assets/icons/generated/macos/Icon-App-16.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="./assets/ui/apple-touch-icon.png" />
+  <link rel="stylesheet" href="./assets/style/tokens.css?v=20261016a" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Type-R 198X" />
+  <meta property="og:title" content="Type-R 198X — privacy policy" />
+  <meta property="og:description" content="The game stores progress and settings on your device only, never collects personal data and makes no network calls while you play." />
+  <meta property="og:url" content="https://typer198x.com/privacy-policy.html" />
+  <meta property="og:image" content="https://typer198x.com/assets/ui/og-card.jpg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Type-R 198X gameplay: a neon ship firing at word enemies over a night city" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Type-R 198X — privacy policy" />
+  <meta name="twitter:description" content="Progress and settings stay on your device. No accounts, no analytics, no tracking." />
+  <meta name="twitter:image" content="https://typer198x.com/assets/ui/og-card.jpg" />
   <style>
     body.privacy-page {
       min-height: 100vh;
       margin: 0;
-      background: linear-gradient(160deg, #05070b 0%, #10153e 60%, #1f0f33 100%);
-      font-family: var(--font-ui, "Inter", system-ui, -apple-system, BlinkMacSystemFont);
-      color: rgba(255, 255, 255, 0.92);
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      background: radial-gradient(circle at 30% 20%, rgba(255,57,209,0.12), transparent 45%),
+                  radial-gradient(circle at 70% 60%, rgba(57,245,255,0.10), transparent 45%),
+                  linear-gradient(180deg, var(--bg2), var(--bg0));
+      font-family: var(--font-ui);
+      color: var(--c-text);
+      line-height: 1.6;
       padding: 40px 16px;
+      padding-left: max(16px, env(safe-area-inset-left));
+      padding-right: max(16px, env(safe-area-inset-right));
     }
-
+    * { box-sizing: border-box; }
     .privacy-shell {
-      width: min(960px, 100%);
-      background: rgba(9, 12, 32, 0.88);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      border-radius: 32px;
-      padding: 48px;
-      box-shadow: 0 40px 90px rgba(0, 0, 0, 0.45);
+      width: min(880px, 100%);
+      margin: 0 auto;
+      padding: 40px 44px;
+      background: rgba(9,12,32,0.88);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      box-shadow: 0 40px 90px rgba(0,0,0,0.45);
+      -webkit-backdrop-filter: blur(16px);
       backdrop-filter: blur(16px);
     }
-
-    .privacy-header {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 16px;
-      justify-content: space-between;
+    .eyebrow {
+      margin: 0 0 8px;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: var(--fs-sm);
+      letter-spacing: 0.35em;
+      text-transform: uppercase;
+      color: var(--neon-cyan);
+    }
+    h1 {
+      margin: 0 0 6px;
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: var(--fs-2xl);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+    h2 {
+      margin: 28px 0 8px;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: var(--fs-md);
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--neon-cyan);
+    }
+    p, li { color: rgba(246,247,255,0.86); }
+    ul { padding-left: 20px; margin: 6px 0; }
+    li { margin: 4px 0; }
+    code {
+      font-family: var(--font-mono);
+      font-size: 0.92em;
+      padding: 1px 6px;
+      border-radius: 6px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid var(--chrome1);
+    }
+    a { color: var(--neon-cyan); text-underline-offset: 2px; text-decoration-color: rgba(57,245,255,0.5); }
+    a:hover, a:focus-visible { text-shadow: var(--glow-soft); text-decoration-color: currentColor; }
+    :focus-visible { outline: 2px solid var(--neon-cyan); outline-offset: 3px; }
+    .meta { font-size: var(--fs-sm); color: rgba(246,247,255,0.6); margin: 0 0 20px; }
+    .back {
+      display: inline-flex;
       align-items: center;
-      margin-bottom: 32px;
-    }
-
-    .privacy-header h1 {
-      margin: 0;
-      letter-spacing: 0.25em;
+      gap: 8px;
+      font-family: var(--font-mono);
+      font-size: var(--fs-sm);
+      letter-spacing: 0.1em;
       text-transform: uppercase;
-      font-size: 1.4rem;
+      text-decoration: none;
+      border: 1px solid var(--border);
+      border-radius: var(--r-md);
+      padding: 10px 14px;
+      min-height: 44px;
     }
-
-    .privacy-section {
-      margin-bottom: 28px;
-      padding: 24px;
-      border-radius: 20px;
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-    }
-
-    .privacy-section h2 {
-      margin-top: 0;
-      letter-spacing: 0.2em;
-      color: #9ff1ff;
-      font-size: 0.95rem;
-      text-transform: uppercase;
-    }
-
-    .privacy-section p,
-    .privacy-section ul {
-      color: rgba(255, 255, 255, 0.82);
-      line-height: 1.6;
-      margin: 0.4rem 0 0;
-    }
-
-    .privacy-section ul {
-      padding-left: 20px;
-    }
-
-    .pill {
-      padding: 6px 14px;
-      border-radius: 999px;
-      border: 1px solid rgba(255, 255, 255, 0.25);
-      font-size: 0.75rem;
-      letter-spacing: 0.2em;
-      text-transform: uppercase;
-    }
-
-    @media (max-width: 720px) {
-      .privacy-shell {
-        padding: 32px 20px;
-      }
-    }
+    .back:hover { box-shadow: var(--glow-strong); text-shadow: none; }
+    .back--bottom { margin-top: 28px; }
+    @media (max-width: 720px) { .privacy-shell { padding: 28px 20px; } }
   </style>
 </head>
 <body class="privacy-page">
   <main class="privacy-shell">
-    <header class="privacy-header">
-      <div>
-        <h1>Type-R 198X</h1>
-        <p class="pill">Privacy Policy</p>
-      </div>
-      <small>Effective Date: December 2, 2025</small>
-    </header>
+    <a class="back" href="./index.html">← Back to the game</a>
+    <p class="eyebrow" style="margin-top:24px">Type-R 198X</p>
+    <h1>Privacy Policy</h1>
+    <p class="meta">Effective date: 16 October 2026 · Applies to the web build at typer198x.com and the iOS/iPadOS and macOS builds.</p>
 
-    <section class="privacy-section">
-      <h2>No Data Collection</h2>
-      <p>Type-R 198X does not collect, transmit, or store any personal information. All gameplay data (ship selection, progress, preferences) remains on your device inside local storage solely to enable your own save files.</p>
-    </section>
+    <p>Type-R 198X is a single-player typing shooter published by Christopher Bradford. The short version: the game keeps your progress on your own device, never sends it anywhere, and does not know who you are.</p>
 
-    <section class="privacy-section">
-      <h2>No Account Storage</h2>
-      <p>We do not host accounts or store passwords. When a macOS or web version prompts for a name, it is only used locally to personalize your pilot card. Nothing is uploaded to our servers.</p>
-    </section>
+    <h2>What is stored, and where</h2>
+    <ul>
+      <li><strong>Save data stays on your device.</strong> Pilot name, ship selection, unlocked sectors, sector bests, high scores, settings (sound, CRT, motion) and any saved run are written to your browser's local storage, or to the embedded web view's local storage in the native apps, under the single key <code>typesmup198x.save.v1</code>.</li>
+      <li><strong>One session flag.</strong> On phones, dismissing the "rotate to landscape" hint sets <code>typer.rotateHintDismissed</code> in session storage for that browser session only.</li>
+      <li><strong>Nothing leaves the device.</strong> There is no server account, no cloud save, no leaderboard upload. The pilot name is only used to label your own records and HUD. The game never reads or writes any other storage, cookie or identifier.</li>
+    </ul>
 
-    <section class="privacy-section">
-      <h2>Third-Party Services</h2>
-      <p>Type-R 198X currently ships exclusively through platform storefronts (such as Apple’s). We do not embed ads, analytics SDKs, or payment processors, and we rely on each storefront’s existing privacy protections for purchases and distribution.</p>
-    </section>
+    <h2>What is not collected</h2>
+    <ul>
+      <li>No personal identifiers: no email address, no account, no password, no advertising or analytics identifiers.</li>
+      <li>No telemetry, crash reporting, fingerprinting or IP-based tracking.</li>
+      <li>No advertising SDKs, payment processors or third-party scripts. The web build makes no network calls while you play beyond fetching its own art, music and code from typer198x.com.</li>
+    </ul>
 
-    <section class="privacy-section">
-      <h2>Your Controls</h2>
-      <ul>
-        <li>Clear your browser’s local storage to remove saved runs/settings.</li>
-        <li>Uninstall the app to delete all data on macOS/iOS.</li>
-        <li>Contact <a href="mailto:support@typer198x.com">support@typer198x.com</a> with any questions.</li>
-      </ul>
-    </section>
+    <h2>Offline-first by design</h2>
+    <p>The native apps bundle the whole game and run it offline inside a <code>WKWebView</code>. A connection is only needed to download or update the app from the store, or when you explicitly visit <a href="https://typer198x.com">typer198x.com</a>. Store purchases and distribution are handled by the platform storefront under its own privacy terms.</p>
 
-    <section class="privacy-section">
-      <h2>Updates</h2>
-      <p>If this policy changes, we will update the effective date and provide the revised statement on this page.</p>
-    </section>
+    <h2>Your controls</h2>
+    <ul>
+      <li><strong>Reset save</strong> on the title screen (the link row under the pilot stats: Records · Re-read briefing · How to play · Settings · <em>Reset save</em>) erases everything the game stored, after a confirmation.</li>
+      <li>Clearing your browser's site data for typer198x.com removes the same data; deleting the app removes it on iOS, iPadOS and macOS.</li>
+    </ul>
+
+    <h2>Children</h2>
+    <p>The game is rated for ages 9+ (mild fantasy violence). Because nothing is collected from anyone, no data is collected from children under 13.</p>
+
+    <h2>Changes and contact</h2>
+    <p>If this policy changes, the effective date above is updated and the revised text is published on this page. Questions go to <a href="mailto:support@typer198x.com">support@typer198x.com</a>.</p>
+
+    <a class="back back--bottom" href="./index.html">← Back to the game</a>
   </main>
 </body>
 </html>

@@ -2,32 +2,63 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Type-R 198X Support</title>
-  <link rel="stylesheet" href="./assets/style/tokens.css" />
-  <link rel="stylesheet" href="./style.css" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Support — Type-R 198X</title>
+  <meta name="description" content="Support for Type-R 198X, the neon arcade typing shoot-'em-up: how to reach the creator, where your save lives and how to reset it." />
+  <meta name="color-scheme" content="dark" />
+  <meta name="theme-color" content="#0B1030" />
+  <link rel="canonical" href="https://typer198x.com/support.html" />
+  <link rel="icon" href="./assets/ui/mark.svg" type="image/svg+xml" sizes="any" />
+  <link rel="icon" type="image/png" sizes="32x32" href="./assets/icons/generated/macos/Icon-App-32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="./assets/icons/generated/macos/Icon-App-16.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="./assets/ui/apple-touch-icon.png" />
+  <link rel="stylesheet" href="./assets/style/tokens.css?v=20261016a" />
+  <link rel="stylesheet" href="./style.css?v=20261016a" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Type-R 198X" />
+  <meta property="og:title" content="Type-R 198X — support" />
+  <meta property="og:description" content="Support for Type-R 198X, the neon arcade typing shoot-'em-up: how to reach the creator, where your save lives and how to reset it." />
+  <meta property="og:url" content="https://typer198x.com/support.html" />
+  <meta property="og:image" content="https://typer198x.com/assets/ui/og-card.jpg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Type-R 198X gameplay: a neon ship firing at word enemies over a night city" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Type-R 198X — support" />
+  <meta name="twitter:description" content="How to reach the creator of Type-R 198X, where your save lives and how to reset it." />
+  <meta name="twitter:image" content="https://typer198x.com/assets/ui/og-card.jpg" />
   <style>
+    * { box-sizing: border-box; }
     body.support-page {
       min-height: 100vh;
       margin: 0;
+      /* Sector-3 skyline from the optimised set (never the 8 MB PNG master); 2x only on dense screens.
+         No background-attachment: fixed (it forces a repaint of the whole image on every scroll frame on iOS). */
       background: radial-gradient(circle at top, rgba(8, 12, 36, 0.95), rgba(3, 5, 16, 0.98)),
-                  url('./assets/backgrounds/thirdlevelbg.png') center / cover no-repeat fixed;
+                  url('./assets/opt/bg/third@1x.webp') center / cover no-repeat;
+      background-image: radial-gradient(circle at top, rgba(8, 12, 36, 0.95), rgba(3, 5, 16, 0.98)),
+                        -webkit-image-set(url('./assets/opt/bg/third@1x.webp') 1x, url('./assets/opt/bg/third@2x.webp') 2x);
+      background-image: radial-gradient(circle at top, rgba(8, 12, 36, 0.95), rgba(3, 5, 16, 0.98)),
+                        image-set(url('./assets/opt/bg/third@1x.webp') 1x, url('./assets/opt/bg/third@2x.webp') 2x);
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 32px;
+      padding: 32px 16px;
+      padding-left: max(16px, env(safe-area-inset-left));
+      padding-right: max(16px, env(safe-area-inset-right));
       font-family: var(--font-ui, "Inter", system-ui, -apple-system);
+      color: var(--c-text);
     }
 
     .support-modal {
-      width: min(520px, 100%);
+      width: min(560px, 100%);
       background: rgba(7, 9, 26, 0.9);
-      border-radius: 28px;
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      padding: 48px;
+      border-radius: var(--r-lg, 28px);
+      border: 1px solid var(--border, rgba(255, 255, 255, 0.15));
+      padding: 44px 40px;
       text-align: center;
-      color: rgba(255, 255, 255, 0.92);
       box-shadow: 0 30px 90px rgba(0, 0, 0, 0.6);
+      -webkit-backdrop-filter: blur(18px);
       backdrop-filter: blur(18px);
     }
 
@@ -36,13 +67,14 @@
       letter-spacing: 0.3em;
       font-size: 1.1rem;
       text-transform: uppercase;
-      color: #7ef7ff;
+      color: var(--neon-cyan);
     }
 
     .support-modal p {
-      margin: 0 0 24px;
+      margin: 0 0 20px;
       font-size: 1.05rem;
       line-height: 1.6;
+      color: rgba(246, 247, 255, 0.86);
     }
 
     .support-email {
@@ -50,25 +82,72 @@
       align-items: center;
       gap: 10px;
       padding: 12px 24px;
+      min-height: 44px;
       border-radius: 999px;
-      background: linear-gradient(90deg, #ff73d4, #5be6ff);
+      background: linear-gradient(90deg, var(--neon-magenta), var(--neon-cyan));
       color: #060913;
       font-weight: 600;
       text-decoration: none;
       letter-spacing: 0.1em;
       text-transform: uppercase;
     }
+    .support-email:hover { opacity: 0.9; }
 
-    .support-email:hover {
-      opacity: 0.9;
+    .support-faq {
+      margin: 28px 0 0;
+      padding: 0;
+      list-style: none;
+      text-align: left;
+      font-size: 0.95rem;
     }
+    .support-faq li { margin: 0 0 12px; color: rgba(246, 247, 255, 0.78); }
+    .support-faq strong { color: var(--c-text); }
+    .support-faq a { color: var(--neon-cyan); }
+    code {
+      font-family: var(--font-mono);
+      font-size: 0.92em;
+      padding: 1px 6px;
+      border-radius: 6px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid var(--chrome1, rgba(255,255,255,0.18));
+    }
+
+    .back {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 24px;
+      font-family: var(--font-mono);
+      font-size: var(--fs-sm, 0.85rem);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      text-decoration: none;
+      color: var(--neon-cyan);
+      border: 1px solid var(--border, rgba(255, 255, 255, 0.15));
+      border-radius: var(--r-md, 12px);
+      padding: 10px 14px;
+      min-height: 44px;
+    }
+    .back:hover { box-shadow: var(--glow-strong, 0 0 18px rgba(57,245,255,0.45)); }
+    :focus-visible { outline: 2px solid var(--neon-cyan); outline-offset: 3px; }
+
+    @media (max-width: 480px) { .support-modal { padding: 32px 20px; } }
   </style>
 </head>
 <body class="support-page">
-  <div class="support-modal">
+  <main class="support-modal">
     <h1>Type-R 198X Support</h1>
     <p>For support or questions email the creator at</p>
     <a class="support-email" href="mailto:support@typer198x.com">support@typer198x.com</a>
-  </div>
+
+    <ul class="support-faq">
+      <li><strong>Lost progress?</strong> The game saves on your own device only (browser local storage, key <code>typesmup198x.save.v1</code>). Clearing site data or switching browsers starts a fresh save; nothing is kept on a server.</li>
+      <li><strong>Starting over.</strong> <em>Reset save</em> sits in the link row under the pilot stats on the title screen and asks for confirmation first.</li>
+      <li><strong>Stuck on the loading screen?</strong> The game needs Safari 14.1+, Chrome 87+ or Firefox 103+. If art fails to arrive, the loading screen offers <em>Retry</em> and <em>Continue</em> (procedural fallbacks).</li>
+      <li><strong>Privacy.</strong> No accounts, no analytics, no tracking: see the <a href="./privacy-policy.html">privacy policy</a>.</li>
+    </ul>
+
+    <a class="back" href="./index.html">← Back to the game</a>
+  </main>
 </body>
 </html>

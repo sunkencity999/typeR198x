@@ -1,0 +1,23 @@
+{
+  "name": "typer198x-playtest",
+  "private": true,
+  "version": "2.0.0",
+  "description": "Headless Playwright play-test harness for the Type-R 198X web build",
+  "type": "module",
+  "scripts": {
+    "smoke": "node play.mjs --root ../.. --out ./out/smoke --scenario smoke",
+    "all": "node play.mjs --root ../.. --out ./out/all --scenario all",
+    "hidpi": "node play.mjs --root ../.. --out ./out/hidpi --scenario all --dpr 2",
+    "mobile": "node play.mjs --root ../.. --out ./out/mobile --scenario smoke --mobile",
+    "reduced-motion": "node play.mjs --root ../.. --out ./out/reduced-motion --scenario all --dpr 2 --reduced-motion",
+    "native": "node play.mjs --root ../.. --out ./out/native --scenario all --ua native",
+    "fixture": "node play.mjs --root ../.. --out ./out/fixture --scenario smoke --fixture",
+    "matrix": "bash run-matrix.sh",
+    "no-music": "node play.mjs --root ../.. --out ./out/no-music --scenario smoke --dpr 2 --no-music",
+    "audio": "node probes/audio-contract.mjs --root ../.. && node probes/audio-contract.mjs --root ../.. --legacy && node probes/audio-lifecycle.mjs --root ../..",
+    "matrix:quick": "bash run-matrix.sh --quick"
+  },
+  "dependencies": {
+    "playwright": "^1.58.2"
+  }
+}

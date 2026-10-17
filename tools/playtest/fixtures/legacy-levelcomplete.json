@@ -1,0 +1,28 @@
+{
+  "description": "Today's F003 shape: a run autosaved on the Level Complete screen of sector 3 with levelT (119.6) past the 114 s duration and inBoss false. Continue must land in wave play (levelT clamped below duration), not straight back into the boss.",
+  "entry": "continue",
+  "expect": { "levelIndex": 2, "scoreMin": 9400, "highScore": 9400, "lastUnlockedLevel": 4, "levelTBelowDuration": true, "notInBossForS": 3 },
+  "save": {
+    "playerName": "LEGACY",
+    "selectedShip": "little-dark-one",
+    "highScore": 9400,
+    "lastUnlockedLevel": 4,
+    "storySeen": true,
+    "keyboardHintSeen": true,
+    "settings": { "muted": false, "crt": true },
+    "run": {
+      "levelIndex": 2,
+      "levelT": 119.6,
+      "inBoss": false,
+      "hp": 400,
+      "maxHp": 400,
+      "shield": 0,
+      "power": { "spread": 0, "pierce": 0, "rapid": 0, "multiplier": 0 },
+      "stats": { "score": 9400, "combo": 12, "mult": 1, "correct": 203, "total": 215 },
+      "shipId": "little-dark-one",
+      "spawnAcc": 0,
+      "powerAcc": 0,
+      "hazardAcc": 0
+    }
+  }
+}
