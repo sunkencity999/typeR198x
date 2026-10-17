@@ -36,6 +36,22 @@
 // native/sync-web.sh patches the withAssetVersion return line below by sed; keep it byte-identical.
 
 const ASSET_VERSION = "20261016a";
+// Stale-shell guard. A host or CDN page cache can keep serving a previous index.html after a deploy (SiteGround's
+// dynamic cache did exactly that for "/" on 2026-10-17): that shell loads only this file and cannot boot the split
+// build, so the loading screen never ends. When the page that loaded this file has none of the assets/js/ scripts in
+// its markup, it is reloaded once with the current token in the query string, a URL no cache has seen. The current
+// shell (web and native) lists assets/js/core/*.js before this file, so it never takes this path; the v= check stops a
+// second reload if the stale copy somehow comes back.
+(function staleShellGuard() {
+  try {
+    if (typeof document === "undefined" || typeof location === "undefined" || location.protocol === "file:") return;
+    if (document.querySelector('script[src*="assets/js/"]')) return;
+    if (new URLSearchParams(location.search).get("v") === ASSET_VERSION) return;
+    const u = new URL(location.href);
+    u.searchParams.set("v", ASSET_VERSION);
+    location.replace(u.toString());
+  } catch (_) { /* never let the guard itself break a boot */ }
+})();
 const withAssetVersion = (path) => {
   if (!path) return path;
   const sep = path.includes("?") ? "&" : "?";
