@@ -61,7 +61,8 @@ unset TYPER_FTP_PASSWORD
 
 What happens, in order: FTPS connect (explicit TLS; the script never falls back to plain FTP, a TLS or
 certificate failure aborts with exit 1, and `--secure false` is the only way to log in over cleartext FTP,
-which it warns about before connecting), web-root detection, backup to
+which it warns about before connecting), web-root detection, backup of the deploy set (the web root's own files plus `assets/`; other directories that
+may sit there, such as an old `native/` copy or a `.venv`, are neither crawled nor backed up) to
 `tools/deploy/backups/<timestamp>/` (`light` skips files over 4 MB; use `--backup full` before a risky
 release), upload of `assets/` first, then CSS/JS, then `assets/opt/manifest.js`, then `index.html` last, `.htaccess` cache policy merged
 into the existing file (the host's file is downloaded first and kept as
@@ -115,7 +116,8 @@ curl -s  https://typer198x.com/ | grep -o 'v=[0-9a-z]*' | sort | uniq -c
 
 ## Rollback
 
-Each deploy leaves `tools/deploy/backups/<timestamp>/` mirroring the remote tree as it was (light backups
+Each deploy leaves `tools/deploy/backups/<timestamp>/` mirroring the deploy set of the remote tree as it was: the
+web root's own files and `assets/`, nothing from other directories (light backups
 omit files over 4 MB, which are the masters already in git and unchanged on the host).
 
 1. Copy the backup into a scratch root: `rsync -a tools/deploy/backups/<timestamp>/ /tmp/typer-rollback/`

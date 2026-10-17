@@ -10,8 +10,9 @@
 //   1. connects with explicit FTPS (TLS). It never falls back to plain FTP: a TLS failure aborts with exit 1,
 //      and only an explicit --secure false logs in over cleartext FTP (warned about before connecting),
 //   2. finds the remote web root (looks for index.html in /, /public_html, /httpdocs, /www, /htdocs),
-//   3. backs up the remote tree to tools/deploy/backups/<timestamp>/ (light = skip files > 4 MB,
-//      which are the art/audio masters already in git),
+//   3. backs up the deploy set of the remote tree (root files + assets/, never other directories such as an old
+//      native/ copy or a .venv) to tools/deploy/backups/<timestamp>/ (light = skip files > 4 MB, which are the
+//      art/audio masters already in git),
 //   4. uploads assets first, then css/js, then assets/opt/manifest.js, then index.html last; unchanged binaries
 //      (same size) are skipped,
 //   5. verifies over HTTPS that index.html and game.js now match the local files and prints cache headers.
@@ -116,6 +117,17 @@ async function remoteWalk(dir, out = []) {
   }
   return out;
 }
+// Only what the deploy can overwrite is listed and backed up: the web root's own files plus ASSET_DIRS. Other
+// directories that may sit in the web root (an old native/ copy, a Python .venv with thousands of files, logs)
+// are neither crawled nor backed up, so the backup stays minutes, not hours, and mirrors the rollback set.
+async function remoteWalkScoped(root, out = []) {
+  for (const f of await remoteList(root)) {
+    const p = root === "/" ? `/${f.name}` : `${root}/${f.name}`;
+    if (f.isFile) out.push({ path: p, size: f.size });
+    else if (f.isDirectory && ASSET_DIRS.includes(f.name)) await remoteWalk(p, out);
+  }
+  return out;
+}
 
 // ------------------------------------------------------------------ main
 (async () => {
@@ -127,8 +139,8 @@ async function remoteWalk(dir, out = []) {
   await connect();
   const root = await findRemoteRoot();
   console.log(`remote web root: ${root}`);
-  const remoteFiles = await remoteWalk(root);
-  console.log(`remote has ${remoteFiles.length} files`);
+  const remoteFiles = await remoteWalkScoped(root);
+  console.log(`remote has ${remoteFiles.length} files in the deploy set (root files + ${ASSET_DIRS.join(", ")}/)`);
 
   // backup
   if (BACKUP !== "none") {
