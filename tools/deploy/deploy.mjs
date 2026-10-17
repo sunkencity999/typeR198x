@@ -9,7 +9,8 @@
 // What it does, in order:
 //   1. connects with explicit FTPS (TLS). It never falls back to plain FTP: a TLS failure aborts with exit 1,
 //      and only an explicit --secure false logs in over cleartext FTP (warned about before connecting),
-//   2. finds the remote web root (looks for index.html in /, /public_html, /httpdocs, /www, /htdocs),
+//   2. finds the remote web root (index.html next to game.js or assets/, searched from the login directory and /
+//      through www / domain / public_html-style folders; --remote-dir overrides),
 //   3. backs up the deploy set of the remote tree (root files + assets/, never other directories such as an old
 //      native/ copy or a .venv) to tools/deploy/backups/<timestamp>/ (light = skip files > 4 MB, which are the
 //      art/audio masters already in git),
@@ -99,13 +100,31 @@ async function findRemoteRoot() {
   // review R41: normalise once so every later path is absolute (a relative --remote-dir would otherwise make
   // ensureDir nest a copy of it inside the web root and the following cd(root) fail)
   if (REMOTE_DIR !== "auto") { await client.cd(REMOTE_DIR); return await client.pwd(); }
-  for (const c of ["/", "/public_html", "/httpdocs", "/www", "/htdocs", "/web", "/typer198x.com"]) {
-    try {
-      const list = await client.list(c);
-      if (list.some((f) => f.name === "index.html")) { await client.cd(c); return c; }
-    } catch { /* not there */ }
+  // The web root holds index.html next to game.js (or assets/): webstats/index.html and other index pages that sit
+  // beside public_html on shared hosts must not win. The search starts where the login lands (SiteGround FTP
+  // accounts may open in the account home, several levels above public_html) and only descends into the usual
+  // web-root parents (www, a domain-named folder) and web-root names (public_html, httpdocs, htdocs, web).
+  const strict = (list) => list.some((f) => f.name === "index.html") && list.some((f) => f.name === "game.js" || (f.isDirectory && f.name === "assets"));
+  const loose = (list) => list.some((f) => f.name === "index.html");
+  const start = (await client.pwd()) || "/";
+  console.log(`login directory: ${start}`);
+  const join = (d, n) => (d === "/" ? `/${n}` : `${d.replace(/\/$/, "")}/${n}`);
+  const seen = new Set(); const looseHits = []; const tried = [];
+  const queue = [[start, 0], ["/", 0]];
+  const descend = (name) => /^(www|public_html|httpdocs|htdocs|web|html|customer|home)$/.test(name) || /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(name);
+  while (queue.length) {
+    const [dir, depth] = queue.shift();
+    if (seen.has(dir)) continue; seen.add(dir);
+    let list;
+    try { list = await client.list(dir); } catch { tried.push(`${dir} (not listable)`); continue; }
+    tried.push(`${dir} (${list.slice(0, 10).map((f) => f.name + (f.isDirectory ? "/" : "")).join(", ")}${list.length > 10 ? ", ..." : ""})`);
+    if (strict(list)) { await client.cd(dir); return await client.pwd(); }
+    if (loose(list)) looseHits.push(dir);
+    if (depth < 4) for (const f of list) if (f.isDirectory && descend(f.name)) queue.push([join(dir, f.name), depth + 1]);
   }
-  throw new Error("could not find a remote directory containing index.html; pass --remote-dir");
+  if (looseHits.length === 1) { await client.cd(looseHits[0]); return await client.pwd(); }
+  throw new Error(`could not find the web root (index.html next to game.js or assets/). Looked at:\n  ${tried.join("\n  ")}\n` +
+    (looseHits.length ? `index.html alone was found in: ${looseHits.join(", ")}\n` : "") + "pass --remote-dir <absolute path of the web root>");
 }
 const listCache = new Map();
 async function remoteList(dir) {
