@@ -59,6 +59,10 @@ node tools/deploy/deploy.mjs --user <ftp-user> --backup light --htaccess
 unset TYPER_FTP_PASSWORD
 ```
 
+The host defaults to the server's own name (`gcam1233.siteground.biz`, the name on SiteGround's FTP certificate;
+`ftp.typer198x.com` reaches the same server but fails the TLS name check, so use it only with `--secure false`).
+If SiteGround ever moves the account, Site Tools shows the new server name; pass it with `--host` or `TYPER_FTP_HOST`.
+
 What happens, in order: FTPS connect (explicit TLS; the script never falls back to plain FTP, a TLS or
 certificate failure aborts with exit 1, and `--secure false` is the only way to log in over cleartext FTP,
 which it warns about before connecting), web-root detection, backup of the deploy set (the web root's own files plus `assets/`; other directories that

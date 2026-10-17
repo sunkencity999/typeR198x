@@ -2,7 +2,7 @@
 // Deploys the Type-R 198X web build to a static host over FTP/FTPS.
 //
 //   TYPER_FTP_PASSWORD=... node tools/deploy/deploy.mjs \
-//       --host ftp.typer198x.com --user <ftp-user> [--port 21] \
+//       --host gcam1233.siteground.biz --user <ftp-user> [--port 21] \
 //       [--remote-dir auto|/public_html (an absolute path)] [--secure true|false] \
 //       [--backup light|full|none] [--dry-run] [--force] [--site https://typer198x.com] [--htaccess]
 //
@@ -26,7 +26,9 @@ import { fileURLToPath } from "node:url";
 
 const argv = process.argv.slice(2);
 const opt = (k, d) => { const i = argv.indexOf(`--${k}`); return i >= 0 ? (argv[i + 1] && !argv[i + 1].startsWith("--") ? argv[i + 1] : "true") : d; };
-const HOST = opt("host", process.env.TYPER_FTP_HOST || "ftp.typer198x.com");
+// The FTPS host is the hosting server's own name, not the site domain: SiteGround's FTP certificate is issued for
+// gcamNNNN.siteground.biz only (Site Tools shows the server name), and the domain alias fails the TLS name check.
+const HOST = opt("host", process.env.TYPER_FTP_HOST || "gcam1233.siteground.biz");
 const USER = opt("user", process.env.TYPER_FTP_USER || "");
 const PORT = Number(opt("port", process.env.TYPER_FTP_PORT || 21));
 const SECURE = opt("secure", "true"); // review R4/R23: TLS unless the operator opts out explicitly
@@ -84,6 +86,8 @@ async function connect() {
     client.close();
     if (secure) {
       console.error(`FTPS connect to ${HOST}:${PORT} failed: ${e.message}`);
+      const alt = /altnames:.*?DNS:([A-Za-z0-9.-]+)/.exec(e.message || "");
+      if (alt && alt[1] !== HOST) console.error(`the server's certificate is issued for ${alt[1]}: connect to that name instead (--host ${alt[1]} or TYPER_FTP_HOST=${alt[1]}); it is the same server`);
       console.error("not retrying over plain FTP; re-run with --secure false only if you accept sending the password in cleartext");
       process.exit(1);
     }
