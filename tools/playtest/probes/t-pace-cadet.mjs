@@ -5,6 +5,7 @@
 // no offer outside the campaign. ~90 s. PASS = the Cadet assist works as D2 states.
 // Usage: node tools/playtest/probes/t-pace-cadet.mjs [--dpr 1|2]
 import { openProbe, sleep, waitFor, startFresh, jumpTo, forceClear, dieNow, reloadInPlace, errorsCheck } from "./pace_lib.mjs";
+import { harnessFlags, LS_KEY } from "./_lib.mjs";
 
 const args = Object.fromEntries(process.argv.slice(2).map((a, i, arr) => a.startsWith("--") ? [a.slice(2), arr[i + 1]] : null).filter(Boolean));
 const DPR = Number(args.dpr || 1);
@@ -131,23 +132,72 @@ P.check("7. S5: a death, reload (blob re-read) + Continue, a second death: the c
   r1.deaths.n === 1 && !r1.btn && rs.level === 5 && rs.n === 1 && r2.btn && r2.deaths.n === 2, { r1, rs, r2 });
 
 // ---- 8. no Cadet outside the campaign ----
-const modesLoaded = await P.g(() => typeof window.game.beginModeRun === "function");
-for (const mode of ["daily", "endless"]) {
-  await jumpTo(P, 1);
-  await P.g((m) => { window.game.run.mode = m; }, mode);
-  await dieNow(P);
-  await sleep(200);
-  const m1 = await over();
-  await P.g(() => { const g = window.game; g.run.mode = "campaign"; });
-  await retrySector();
-  await P.g((m) => { window.game.run.mode = m; }, mode);
-  await dieNow(P);
-  await sleep(300);
-  const m2 = await over();
-  await P.g(() => { window.game.run.mode = "campaign"; });
-  P.check(`8. a run whose runMode() reads ${mode}: two deaths in one sector never show the Cadet button and count nothing${modesLoaded ? "" : " (MODES absent: run.mode set by the probe; re-run after MODES merges)"}`,
-    !m1.btn && !m2.btn && m2.deaths.n === 0 && m2.offer === null, { m1: { btn: m1.btn, deaths: m1.deaths }, m2: { btn: m2.btn, deaths: m2.deaths } });
+// With MODES merged (startModeRun exists) a real Daily Sortie is flown twice (a death ends a sortie) and an Endless run
+// takes a hit; on a tree without MODES the probe sets run.mode itself (runMode() reads it), which exercises the same guard.
+const modesLoaded = await P.g(() => typeof window.game.startModeRun === "function");
+if (modesLoaded) {
+  const res = [];
+  for (const mode of ["daily", "daily", "endless"]) {
+    await P.g(() => { const g = window.game; if (g.mode !== "menu") g.stopToMenu(true); });
+    const ok = await P.g(async (m) => { try { return !!(await window.game.startModeRun(m)); } catch (e) { return String(e); } }, mode);
+    if (ok !== true) { res.push({ mode, started: ok }); continue; }
+    await waitFor(P, () => window.game.mode === "playing" && !window.game.levelIntro, 8000);
+    await P.g(() => { const g = window.game; g.player.shield = 0; g.invulnT = 0; g.player.hp = 1; g.takeDamage(40, "leak"); });
+    await sleep(800);
+    res.push({ mode, runMode: await P.g(() => window.game.runMode()), ...(await over()), applies: await P.g(() => window.game.paceCampaign()) });
+  }
+  const started = res.filter((r) => r.btn !== undefined);
+  if (!started.length) P.note("8. no Cadet in daily / endless (MODES present)", `MODES refused every start: ${JSON.stringify(res)}`);
+  else P.check("8. MODES runs (two daily sorties ending in death, an endless hit): the Cadet button never shows and no death is counted for Cadet",
+    started.every((r) => !r.btn && r.applies === false), res.map((r) => ({ mode: r.mode, runMode: r.runMode, btn: r.btn, started: r.started, deaths: r.deaths })));
+} else {
+  for (const mode of ["daily", "endless"]) {
+    await jumpTo(P, 1);
+    await P.g((m) => { window.game.run.mode = m; }, mode);
+    await dieNow(P);
+    await sleep(200);
+    const m1 = await over();
+    await P.g(() => { const g = window.game; g.run.mode = "campaign"; });
+    await retrySector();
+    await P.g((m) => { window.game.run.mode = m; }, mode);
+    await dieNow(P);
+    await sleep(300);
+    const m2 = await over();
+    await P.g(() => { window.game.run.mode = "campaign"; });
+    P.check(`8. a run whose runMode() reads ${mode}: two deaths in one sector never show the Cadet button and count nothing (MODES absent: run.mode set by the probe; re-run after MODES merges)`,
+      !m1.btn && !m2.btn && m2.deaths.n === 0 && m2.offer === null, { m1: { btn: m1.btn, deaths: m1.deaths }, m2: { btn: m2.btn, deaths: m2.deaths } });
+  }
 }
+
+// ---- 9. touch: a phone context taps the offer ----
+const ctx2 = await P.browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: DPR, isMobile: true, hasTouch: true });
+await harnessFlags(ctx2);
+await ctx2.addInitScript((k) => { try { localStorage.removeItem(k); } catch {} }, LS_KEY);
+const p2 = await ctx2.newPage();
+const p2errors = [];
+p2.on("pageerror", (e) => p2errors.push(String(e && e.stack || e)));
+p2.on("console", (m) => { if (m.type() === "error") p2errors.push(m.text()); });
+await p2.goto(P.base, { waitUntil: "load" });
+await p2.waitForFunction(() => { const el = document.getElementById("loadingOverlay"); return !el || el.classList.contains("hidden") || getComputedStyle(el).visibility === "hidden"; }, null, { timeout: 120000 });
+const M = { page: p2, g: (fn, a) => p2.evaluate(fn, a) };
+await p2.fill("#playerName", "TOUCH").catch(() => {});
+await p2.tap("#btnStart");
+try { const st = p2.locator("#btnStoryLaunch"); await st.waitFor({ state: "visible", timeout: 2500 }); await st.tap(); } catch {}
+await p2.waitForFunction(() => window.game && window.game.mode === "playing", null, { timeout: 30000 });
+await jumpTo(M, 1);
+for (let i = 0; i < 2; i++) {
+  await dieNow(M);
+  await sleep(700);
+  if (i === 0) { await p2.tap("#btnTryAgain"); await p2.waitForFunction(() => window.game.mode === "playing" && !window.game.levelIntro, null, { timeout: 10000 }); }
+}
+const t9a = await M.g(() => { const b = document.getElementById("btnCadetPace"); const r = b.getBoundingClientRect(); return { visible: !b.classList.contains("hidden") && r.width > 0, w: Math.round(r.width), h: Math.round(r.height), inView: r.bottom <= innerHeight && r.top >= 0 }; });
+if (!t9a.inView) await p2.locator("#btnCadetPace").scrollIntoViewIfNeeded().catch(() => {});
+await p2.tap("#btnCadetPace");
+await p2.waitForFunction(() => window.game.mode === "playing", null, { timeout: 8000 }).catch(() => {});
+const t9b = await M.g(() => ({ mode: window.game.mode, diff: window.game.diff().id, touch: !!window.game.touchMode }));
+P.check("9. touch (390 x 844 phone context): the second death shows 'Fly at Cadet pace' (>= 44 px tall); a tap accepts it (playing, diff cadet); no page / console errors there",
+  t9a.visible && t9a.h >= 44 && t9b.mode === "playing" && t9b.diff === "cadet" && p2errors.length === 0, { t9a, t9b, errors: p2errors.slice(0, 3) });
+await ctx2.close();
 
 errorsCheck(P);
 await P.finish();

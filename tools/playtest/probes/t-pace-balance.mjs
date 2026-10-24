@@ -111,7 +111,7 @@ if (SETS.length) {
 // page-side classifier and per-wave log (listeners registered after PACE's, so they read the tuning PACE wrote)
 await P.g(() => {
   const B = window.__bal = {
-    reset() { B.st = { card: 0, bossIntro: 0, finale: 0, transition: 0, boss: 0, active: 0, idle: 0, total: 0 }; B.gap = 0; B.gapMax = 0; B.waves = []; B.minHp = Infinity; B.dmg = 0; B.toBoss = null; B.t0 = window.game.playClock || 0; B.hullIn = B.lastCard || null; },
+    reset() { B.st = { card: 0, bossIntro: 0, finale: 0, transition: 0, boss: 0, active: 0, idle: 0, total: 0 }; B.gap = 0; B.gapMax = 0; B.waves = B.waves ? B.waves.filter((w) => w.L === LEVELS[window.game.levelIndex].level) : []; B.minHp = Infinity; B.dmg = 0; B.toBoss = null; B.t0 = window.game.playClock || 0; B.hullIn = B.lastCard || null; },
     st: null
   };
   B.reset();
@@ -132,20 +132,22 @@ await P.g(() => {
   });
   onGameHook("waveWillStart", function (e) {
     const l = this._paceLast || {};
-    B.waves.push({ w: e.wave, mul: e.tuning.spawnMul, quota: e.tuning.quota, source: l.source || null, target: l.target ?? null, runN: l.n ?? null, carry: l.carry || 0, timedOut: false, escaped: 0 });
+    B.waves.push({ L: e.level, w: e.wave, mul: e.tuning.spawnMul, quota: e.tuning.quota, source: l.source || null, target: l.target ?? null, runN: l.n ?? null, carry: l.carry || 0, timedOut: false, escaped: 0 });
   });
   onGameHook("waveWillEnd", function (e) { const w = B.waves[B.waves.length - 1]; if (w && !e.byQuota) { w.timedOut = true; w.aliveAtCap = e.alive; } });
   onGameHook("waveDrained", function (e) { const w = B.waves[B.waves.length - 1]; if (w && !e.byQuota) w.escaped = e.detonated; });
   onGameHook("hullDamage", function (e) { B.dmg += e.dmg; });
-  onGameHook("sectorCardWillShow", function () { B.lastCard = { hp: this.player.hp, maxHp: this.player.maxHp }; });
+  onGameHook("sectorCardWillShow", function () { B.lastCard = { hp: this.player.hp, maxHp: this.player.maxHp }; if (!B.hullIn) B.hullIn = B.lastCard; });
 });
 
+// the classifier only counts mode "playing", so arming it before Start keeps the first sector's card and wave 1
+await P.g(() => window.__bal.reset());
 await P.startRun("BALANCE");
 if (JUMP) {
   await P.g((i) => { window.__jumpTo = i; window.game.startSector(i); }, JUMP - 1);
   await waitFor(P, () => window.game && window.game.mode === "playing" && window.game.levelIndex === window.__jumpTo, 8000);
+  await P.g(() => window.__bal.reset());
 }
-await P.g(() => window.__bal.reset());
 
 const report = { label: LABEL, wpm: WPM, accuracy: ACC, seedProfile: SEED || null, jump: JUMP, sets: SETS, expect: EXPECT, sectors: [] };
 const r2 = (x) => (x === null || x === undefined || !Number.isFinite(x) ? null : Math.round(x * 100) / 100);
