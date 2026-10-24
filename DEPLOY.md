@@ -1,13 +1,15 @@
 # Type-R 198X release procedure (web build)
 
-Run from the repo root on the `web-overhaul` branch (or its merge into `main`). Every step is a command
-the owner runs by hand; nothing here is automated end to end on purpose. The FTP password is only ever
+Run from the repo root on the release branch (for 20261024a: `release/20261024a`, or its merge into `main`).
+Every step is a command the owner runs by hand; nothing here is automated end to end on purpose. The FTP password is only ever
 passed through the `TYPER_FTP_PASSWORD` environment variable (or `--password-file`); never paste it into a
 file, a commit or a shell history you keep.
 
-Background: the live site serves the pre-overhaul build under the same shell token the repo still carries
-(`20251130a`) and answers `/index.html` with `Cache-Control: max-age=15552000` (audit G025). Steps 1, 4
-and 6 exist to make sure returning players actually receive this release.
+Background: the live site serves release `20261016a`. Its `/` answers `no-cache` (the `.htaccess` policy works
+there), but the host's NGINX direct delivery still answers `/index.html` with `Cache-Control: max-age=15552000` and
+every other static file with `max-age=31536000`, and ignores the query string when it resolves a file (audit G025;
+checked 2026-10-24). Steps 1, 4 and 6 exist to make sure returning players actually receive this release; the
+stale-shell guard in `game.js` reloads a browser that kept an older shell once into the new one.
 
 ## 0. Preconditions
 
@@ -21,8 +23,8 @@ node --version                          # 18+
 ## 1. Bump the shell token
 
 ```bash
-tools/bump-version.sh 20261016a         # YYYYMMDDx; omit the argument for today + next letter
-tools/bump-version.sh 20261016a --dry-run   # same token again: must report "no changes"
+tools/bump-version.sh 20261024a         # YYYYMMDDx; omit the argument for today + next letter
+tools/bump-version.sh 20261024a --dry-run   # same token again: must report "no changes"
 git diff --stat                         # index/info/support/privacy pages + game.js only
 ```
 
@@ -46,8 +48,8 @@ before the first keystroke <= 2.5, every `fixture-*` row `pass`.
 node tools/deploy/deploy.mjs --dry-run --user <ftp-user>
 ```
 
-Prints the local set in upload order (about 190 files, ~370 MB listed; on a real run the ~341 MB of
-PNG/WAV masters are skipped when the remote size matches) and exits without connecting, so no password
+Prints the local set in upload order (about 200 files, 199 for 20261024a, ~370 MB listed; on a real run the
+~341 MB of PNG/WAV masters are skipped when the remote size matches) and exits without connecting, so no password
 is needed. Check that `index.html` is last, `assets/opt/manifest.js` just before it, and that `privacy-policy.html`
 and every `assets/opt` file are in the list.
 

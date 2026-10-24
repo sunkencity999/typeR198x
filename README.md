@@ -7,7 +7,9 @@ target to lock on, finish the word to fire, and clear ten sectors of word-bosses
 (plain HTML, CSS and classic JavaScript, no bundler, no runtime dependencies) that plays at
 **[https://typer198x.com](https://typer198x.com)** and can be served from any static host.
 
-This README describes the web build after the 2026 overhaul. Release steps live in [DEPLOY.md](./DEPLOY.md);
+This README describes the web build after the 2026 overhaul and the first part of the training update (release
+`20261024a`: hand-speed WPM, typo feedback, rank lines, the pilot profile and Flight log, and the first-run flight
+check). Release steps live in [DEPLOY.md](./DEPLOY.md);
 the play-test harness has its own [tools/playtest/README.md](./tools/playtest/README.md).
 
 ## Contents
@@ -47,7 +49,12 @@ the play-test harness has its own [tools/playtest/README.md](./tools/playtest/RE
   thruster and shield ring.
 - **Progress.** Checkpoints every sector; retry a boss from the phase you reached or the sector from its
   start; Continue from the resume card; replay any unlocked sector from the title grid; a records modal
-  keeps the top ten runs and your sector bests.
+  keeps the top ten runs and your sector bests, and its Flight log tab keeps your typing profile (see
+  [hand speed](#sectors-bosses-and-ranks)).
+- **Flight check.** A fresh save flies a short check before the Sector 1 card: type `J`, finish `SPARK`, then let go
+  of `COMET` with `Space` and take the nearer `LASER`. Nothing can hit you, nothing scores and nothing reaches the
+  records; `Esc` or **Skip** goes straight to the sector, and returning pilots never see it. The mission briefing
+  opens on three lines (lock, fire, let go) with the full story behind *Read the full briefing*.
 
 ## Controls
 
@@ -56,7 +63,7 @@ the play-test harness has its own [tools/playtest/README.md](./tools/playtest/RE
 | Letters | First letter locks the nearest matching target; keep typing to fire |
 | `Space` or `Backspace` | Release the current lock |
 | Three wrong keys on a locked target | The lock drops on its own ("lock lost") |
-| `Esc` | Pause / resume during play; back out of a modal or screen |
+| `Esc` | Pause / resume during play; skips the first-run flight check; back out of a modal or screen |
 | `Enter` (or `Space` on result screens) | Advance screens; `Enter` in the pilot-name field starts the run; skips the boss intro when you have already cleared that sector, and the rest of the finale once its skip window opens (2 s) |
 | Any letter during the sector card | Skips the card once you have already cleared that sector (returning players); keys are never counted there |
 | `?` or `F1` | Open the help manual (title and pause screens) |
@@ -84,9 +91,28 @@ finale gets the crystal city. Each sector's quota, cap, target characters per se
 letter/word ratio, word-length window, surge cadence and minion rate come from `LEVEL_TABLE` in
 `assets/js/core/20-constants.js`.
 
-Every results card stamps a rank from `rankFor(accPct, wpm, hpPts)`: accuracy 50 %, speed 30 %, hull 20 %
-(`RANK` in 20-constants.js, thresholds S 0.90 / A 0.75 / B 0.55 / C 0.35, D below). The numbers behind the
-curve are being tuned in the balance pass; see [tools/playtest/balance.md](./tools/playtest/balance.md).
+Every results card stamps a rank from `rankFor(accPct, wpm, hpPts, level)`: accuracy 50 %, speed 30 %, hull 20 %
+(`RANK` in 20-constants.js, thresholds S 0.90 / A 0.75 / B 0.55 / C 0.35, D below). Speed is hand speed (below) and
+every sector measures it against its own stream rate (`targetCps x 12`): the speed term runs from 0.5 x nominal to
+1.22 x nominal, never wider than the absolute 20-60 WPM window, so a pilot at the sector's nominal WPM with 98 %
+accuracy and no damage reaches S (S at 98 %: 14 WPM in S1, 27 in S3, 35 in S4, 41 in S5, 47 from S7). A line under
+the stamp names the term that held the rank back and the value for the next grade
+(`ACCURACY HELD YOU BACK · 93% · S AT 95%`); an S shows none, and Game Over names the cause instead
+(`SIGNAL LOST · 4 WORDS LEAKED IN WAVE 2`). The ACC tile is captioned with the miss count and up to three
+WEAK SIGNAL chips follow the tiles (the most-missed key, the slowest letter pair, `STEADY nn%`). The balance numbers
+live in [tools/playtest/balance.md](./tools/playtest/balance.md).
+
+**WPM is hand speed.** `assets/js/game/32-typist.js` times the gap between consecutive correct keys inside one
+target (plate, capsule or boss segment); the first key of each target, gaps over 1.5 s and sub-10 ms bursts are left
+out, and wrong keys stay inside the gap, so errors cost speed. WPM = 12000 x intervals / total ms. The HUD shows the
+last 30 intervals (`--` before 10), the cards the sector or run figure, Best WPM the best cleared campaign sector
+with at least 60 intervals. The gross characters-per-time figure survives as `results.throughput` for tooling and as
+THROUGHPUT in the Flight log. The HUD ACC cell reads `--` until 10 keys, turns amber below 95 % and red below 90 %,
+and pulses on each hard miss. A wrong key while locked shows the typed glyph struck through inside the plate; a
+wrong key with nothing locked pops the glyph off the gun and pulses the nearest plate's lead letter. Records ->
+Flight log shows per-key misses and latency on a keyboard, slowest keys, weak keys, a speed / accuracy sparkline of
+the last 20 sessions, per-sector best speed and accuracy, days flown and a goal line built from the last five
+sessions (also on the title screen, under Best WPM).
 
 ## Settings, reduced motion and touch play
 
@@ -133,27 +159,33 @@ Module map, in `index.html` load order:
 | --- | --- |
 | `assets/opt/manifest.js` | Generated: `window.TYPER_ASSET_MANIFEST` (keys, variants, trim and content boxes, music list, ART version) |
 | `assets/audio/sfx.js` | IIFE: `window.SFX`, the Web Audio bus, cue registry, streamed music transport with loop points |
-| `assets/js/core/00-util.js` | `clamp/lerp/rand/...`, `normalizeKey/foldLatin`, `IS_FILE_ORIGIN`, `IS_NATIVE_SHELL` |
+| `assets/js/core/00-util.js` | `clamp/lerp/rand/...`, `normalizeKey/foldLatin`, `IS_FILE_ORIGIN`, `IS_NATIVE_SHELL`, the `GAME_HOOKS` registry (`onGameHook` / `runGameHooks`) the training-update files listen on |
 | `assets/js/core/10-tokens.js` | `PALETTE` / `FONT` / `MOTION` / easings / `SHAKE_PAD`: the CSS design tokens mirrored into JS |
 | `assets/js/core/20-constants.js` | Timing and balance constants, `LEVEL_TABLE` -> `LEVELS`, `RANK`/`rankFor`, powerups, `buildBossSegments` |
+| `assets/js/core/25-lexicon.js` | Header only in this release (reserved for the WORDS track); no code runs |
 | `assets/js/core/30-content.js` | Word pools and letter sets, boss tables, ship configs, `LEVEL_THEMES`, explosion sheet, victory script |
-| `assets/js/core/40-save.js` | `LS_KEY`, schema 2 `defaultSave`, `loadSave`/`storeSave`, `migrateSave`, checkpoints and resume helpers |
+| `assets/js/core/40-save.js` | `LS_KEY`, schema 3 `defaultSave`, `loadSave`/`storeSave`, `migrateSave`, checkpoints and resume helpers |
 | `assets/js/core/50-assets.js` | `Assets` IIFE (`window.TypeRAssets`): manifest-driven image loader, variants, prepare, prefetch, gc |
 | `assets/js/core/60-entities.js` | `Enemy`, `Powerup`, `Bullet`, `ExplosionSprite`, `Particle`, `Boss` |
 | `assets/js/core/70-canvas.js` | Stateless canvas helpers: `roundRect`, `bracketRect`, `drawSplitText`, `fitText`, `drawTracked` |
-| `game.js` | `ASSET_VERSION` + `withAssetVersion` (literal line kept for the native sed), `class Game { constructor, loop }` |
+| `game.js` | `ASSET_VERSION`, the stale-shell guard, `withAssetVersion` (literal line kept for the native sed), `class Game { constructor, loop }`, `hook` / `runMode` / `rand` |
 | `assets/js/game/05-boot.js` | Boot sequence, loading overlay and watchdog, per-sector asset gate, prefetch of the next sector |
 | `assets/js/game/10-ui.js` | Shell: `setMode` state machine, focus routing, announcer, modals and confirms, settings + `resolveMotion`, fullscreen, top bar, mobile input |
 | `assets/js/game/15-screens.js` | Title cabinet (sector grid, resume card), records and help modals, results cards, tutorial toasts, CRT overlay and the typewriter ending |
+| `assets/js/game/17-onboarding.js` | First-run Flight check (ONBOARD): eligibility, the three drills, Skip / `Esc`, pause relabel, the briefing summary and disclosure, the `TypeRHarness.flightCheck` flag |
 | `assets/js/game/20-run.js` | Run and sector lifecycle, checkpoints, `saveRun`, level complete / game over / victory |
 | `assets/js/game/30-input.js` | Keydown routing, `handleTyped`, lock rules (release, three-miss loss), scoring hooks |
+| `assets/js/game/32-typist.js` | Hand speed (qualifying intervals, live / window / sector / run / lifetime), per-key and bigram profile (`save.profile`), weak keys, sessions and bests, the typo pair / gun pop, HUD ACC / WPM providers, rank line / WEAK SIGNAL / Game Over cause, Flight log, goal line (MEASURE) |
 | `assets/js/game/40-combat.js` | Spawning, lanes, waves and approach, kills, powerups, damage, `update(dt)` |
+| `assets/js/game/42-pacing.js` | Header only in this release (reserved for the PACE track) |
 | `assets/js/game/45-feedback.js` | Banner system (sector, wave, boss intro/clear, callouts) and score floaters |
 | `assets/js/game/50-boss.js` | Boss v2: phases, surge, minions, intro and finale |
+| `assets/js/game/52-modes.js` | Header only in this release (reserved for the MODES track) |
 | `assets/js/game/60-hud.js` | DOM HUD with write-on-change diffing: score, combo and multiplier, HP meter, chips, boss meter |
 | `assets/js/game/70-render.js` | `resizeCanvas`/`renderScale`, plates, capsules and rails, boss art and console slab, warp-in, storms, parallax, stars, `render()` in layer order |
 | `assets/js/game/75-fx-draw.js` | Ship, beams, rings/bolts/debris, particles, overlays, vignette, active-target redraw |
 | `assets/js/game/80-fx.js` | Effects clock: trauma camera and `shakeOffset`, hit-stop/slow-mo, flash channels, `onKeyFx`/`onKillFx`, ambient step |
+| `assets/js/game/82-overdrive.js` | Header only in this release (reserved for the ARCADE track) |
 | `assets/js/game/85-attract.js` | Attract mode on the title screen: ghost plates from `LEVELS[0].words`, selected-ship cruise, 20 fps drift after 90 s idle (`startAttract`/`stopAttract`/`updateAttract`/`drawAttract`) |
 | `assets/js/99-boot.js` | `const game = new Game(); window.game = game; window.TypeRDebug / TypeRAssets` |
 
@@ -172,7 +204,7 @@ come from `PALETTE` / CSS variables rather than literals.
    is its only writer:
 
    ```bash
-   tools/bump-version.sh 20261016a            # rewrite every shell token (index, info, support, privacy pages, game.js)
+   tools/bump-version.sh 20261024a            # rewrite every shell token (index, info, support, privacy pages, game.js)
    tools/bump-version.sh                      # today's date + next letter
    tools/bump-version.sh --dry-run            # report only
    tools/bump-version.sh --add-missing        # also stamp script/stylesheet tags that have no ?v= yet (never the font preload)
@@ -191,6 +223,12 @@ come from `PALETTE` / CSS variables rather than literals.
 
 Production must serve the HTML pages, `/` and `manifest.js` with `Cache-Control: no-cache` and every
 versioned URL as immutable; see [Deployment](#deployment). Bump the shell token before every deploy.
+While the host still answers `/index.html` with `max-age=15552000`, `staleShellGuard` at the top of `game.js` covers
+a stale shell: when the page has no `assets/js/` scripts (a pre-overhaul shell) or an `assets/js/` tag carries a
+`?v=` other than `ASSET_VERSION` (an older modular shell kept by the browser, whose versioned URLs now return this
+release's code because the server ignores the query), it reloads once with `?v=<ASSET_VERSION>`, stops if that
+query is already there, and on the reloaded page refetches the bare `/index.html` with `cache: "reload"` so the next
+visit needs no reload. It never runs on a `file:` origin or under the native user agent.
 `tools/deploy-check.sh` fails when the served tokens disagree, `manifest.js` differs from the local one, or an
 `assets/opt` token on the shell (the ship cards) differs from the manifest version.
 
@@ -266,20 +304,23 @@ pause applies -6 dB and a low-pass, hidden tabs pause the transport. Defaults: m
 
 ## Budgets (measured)
 
-Numbers from the harness on the merged build (`tools/playtest/run-matrix.sh`, 1440x900 viewport):
+Numbers from the harness at a 1440x900 viewport. The byte, frame-rate and render rows were re-measured for release
+`20261024a` with `play.mjs --scenario all` at DPR 1 and 2; the art rows are unchanged because this release adds no
+art:
 
 | Metric | Measured | Budget |
 | --- | --- | --- |
-| Non-media bytes finished before the first keystroke | 1.8 MB at DPR 1, 2.2 MB at DPR 2 | <= 2.5 MB |
+| Non-media bytes finished before the first keystroke | 1.94 MB at DPR 1, 2.39 MB at DPR 2 | <= 2.5 MB |
 | `assets/opt` (everything the web build can download) | 29 MB | <= 35 MB whole game |
 | Frame rate (menu, gameplay, boss, finale windows) | 60 fps at DPR 1 and DPR 2 | >= 58 |
-| `render()` wall time | ~7 ms max at DPR 1 | <= 16 ms |
+| `render()` wall time | 2.1 ms max at DPR 1, 6.9 ms at DPR 2 | <= 16 ms |
 | `shadowBlur` sets per frame in steady state | 0 | <= 2 |
 | Translucent full-frame fill alpha | .12 (storm tint .22 multiply is the documented exception) | <= .12 |
 | Decoded bitmap pixels at DPR 2, sector 1 | ~10.9 Mpx (~19 Mpx with the next sector prefetched) | <= 12 Mpx resident |
 
-Known and tracked: `layoutCountPer5s` while typing reads 17-30 with the probe run alone (target <= 40 per 5 s:
-the 5 Hz HUD commits plus event-driven writes, see `probes/e2-layout.mjs`); idle play is 1; the
+Known and tracked: `layoutCountPer5s` while typing reads 15-30 with the probe run alone (14.9 at DPR 1 and 25.7 at
+DPR 2 for `20261024a`; target <= 40 per 5 s: the 5 Hz HUD commits plus event-driven writes, see
+`probes/e2-layout.mjs`); idle play is about 4 (`layoutCountPer5sIdle` 3.9 / 3.5); the
 first frame of a sector entered by a direct `startLevel(i)` jump costs 45-80 ms at DPR 2 (GPU upload;
 `advanceLevel` is pre-warmed and does not hitch).
 
@@ -301,12 +342,27 @@ on an integrated GPU.
 
 ## Save data
 
-One `localStorage` key, **`typesmup198x.save.v1`**, schema 2 (`assets/js/core/40-save.js`):
+One `localStorage` key, **`typesmup198x.save.v1`**, schema 3 (`assets/js/core/40-save.js`):
 `playerName`, `selectedShip`, `highScore`, `lastUnlockedLevel` (1..10), `storySeen`, `settings`
 (`muted`, `crt`, `musicVolume`, `sfxVolume`, `crtIntensity`, `reduceMotion`, `renderScaleCap`),
 `highScores` (top 10), `sectorBests` ("1".."10" -> score, rank, wpm, acc, maxCombo, date), `bestWpm`,
-`victories`, `tutorialSeen` and `run` (the live run with `checkpoint`, `boss`, `bossCheckpoint`, `stats`,
-`levelStats`). `migrateSave()` is idempotent and brings any pre-overhaul blob (the same key, no `schema`)
+`victories`, `tutorialSeen`, `onboardingDone` (ms epoch when the first-run flight check was passed or skipped,
+0 = not yet; written once, never on quit-to-menu; `migrateSave` keeps it), `profile`, `modes` (reserved for a
+later release, stays `null`) and `run` (the live run with `checkpoint`, `boss`, `bossCheckpoint`, `stats`,
+`levelStats`).
+
+Schema 3 adds `profile` (created on the first key): `keys` (`a`..`z` -> `{n, err, ms}`, attempts, miss EMA .05,
+latency EMA .15), `bigrams` (top 200 by attempts), `speedEma` / `thrEma` / `speedN`, `sessions` (last 100 as rows
+`[t, mode, sector, speed, acc, rank, score, misses, steady, weak]`, read through `typistSessions()`; one per campaign
+sector cleared or lost, `speed` 0 under 10 intervals, `acc` null under 10 keys), `sectorBest`, `bests` (`speed`;
+`ceiling` and `drill` are reserved for later modes and stay 0) and `days`. The profile is capped at 16,384 B of JSON
+(oldest sessions dropped first; worst case measured 13,088 B); with the run and everything else inside their 4 KB
+budgets the whole save stays within 24 KB. Run records carry `run.spd` and `levelStats.spdN/spdMs/spdSq/hits`.
+Migrating a schema < 3 blob flags every `highScores` row and `sectorBests` entry `wpmLegacy: true` (the records table
+dims them) and freezes `bestWpm` as a legacy number. The tables are folded into the save only inside `storeSave`;
+typing adds no write.
+
+`migrateSave()` is idempotent and brings any pre-overhaul blob (the same key, no `schema`)
 up to date: legacy runs get `id`, `startLevel`, `legacy: true` (their high score still counts), deep-merged
 stats, a clamped `levelT`, and a legacy in-boss run without boss state re-enters through the approach
 phase. `storeSave()` keeps playing from memory with a toast when storage is unavailable. **Reset save** on
@@ -330,14 +386,17 @@ bash run-matrix.sh [--quick] [--only dpr1,dpr2]       # the standard matrix, sum
 Flags: `--scenario all|smoke`, `--seconds N`, `--dpr 1|2`, `--mobile`, `--reduced-motion`,
 `--ua native|"<string>"`, `--cpu N`, `--wpm N`, `--accuracy A`, `--fixture <fresh|legacy-midwave|legacy-inboss|legacy-postvictory|legacy-levelcomplete|legacy-gameover>`,
 `--entry auto|start|continue`, `--fail-webp`, `--delay-opt <ms>`, `--expect-resource-errors`,
-`--ignore-errors <regex>`, `--no-music`, `--file`, `--headed`. Matrix rows: `dpr1`, `dpr2`,
-`reduced-motion`, `mobile`, `native-ua`, `no-music` and one `fixture-*` row per fixture. Report
+`--ignore-errors <regex>`, `--no-music`, `--flight-check`, `--file`, `--headed`. Matrix rows: `dpr1`, `dpr2`,
+`reduced-motion`, `mobile`, `native-ua`, `no-music`, `flight-check` and one `fixture-*` row per fixture. Report
 headlines: `pageErrors`, `fps.*`, `maxRenderMs`, `shadowBlurPerFrame`, `fullFrameFillMaxAlpha`,
 `layoutCountPer5s`, `networkTotals.bytesFinishedBeforeFirstKeystrokeNonMedia`, `mediaAborts`,
-`reduceMotion`, `fixture.check`. Per-task probes live in `tools/playtest/probes/` (loader, audio
-contract and lifecycle, gameplay `b*`, shell `c*`, presentation `d*`, `d8.mjs` for the attract mode,
-`b-run.mjs` typist profiles behind the balance pass, `harness-report-check.mjs` for report shape and the
-byte budget). The balance numbers are recorded in [tools/playtest/balance.md](./tools/playtest/balance.md).
+`reduceMotion`, `fixture.check`, `flightCheck`. Every run skips the first-run flight check
+(`window.TypeRHarness.flightCheck = "skip"`) unless `--flight-check` plays it. Per-task probes live in
+`tools/playtest/probes/` (loader, audio contract and lifecycle, gameplay `b*`, shell `c*`, presentation `d*`,
+`d8.mjs` for the attract mode, `b-run.mjs` typist profiles behind the balance pass, `t-measure-*` for hand speed,
+typos, ranks, the profile and the Flight log, `t-onboard-*` for the flight check and the briefing,
+`harness-report-check.mjs` for report shape and the byte budget). The balance numbers are recorded in
+[tools/playtest/balance.md](./tools/playtest/balance.md).
 Full flag, field and fixture tables: [tools/playtest/README.md](./tools/playtest/README.md).
 
 ## Tools
@@ -359,9 +418,9 @@ Full flag, field and fixture tables: [tools/playtest/README.md](./tools/playtest
 The full, ordered procedure is in [DEPLOY.md](./DEPLOY.md). In short:
 
 ```bash
-tools/bump-version.sh 20261016a                               # 1. new shell token (never deploy the old one)
+tools/bump-version.sh 20261024a                               # 1. new shell token (never deploy the old one)
 (cd tools/playtest && bash run-matrix.sh)                      # 2. matrix green
-node tools/deploy/deploy.mjs --dry-run --user <ftp-user>       # 3. what would upload (about 190 files, ~370 MB listed; unchanged binaries skipped by size)
+node tools/deploy/deploy.mjs --dry-run --user <ftp-user>       # 3. what would upload (about 200 files, ~370 MB listed; unchanged binaries skipped by size)
 TYPER_FTP_PASSWORD=... node tools/deploy/deploy.mjs --user <ftp-user> --htaccess   # 4. backup, upload, cache policy, verify
 tools/deploy-check.sh https://typer198x.com --strict            # 5. go/no-go
 ```
@@ -376,7 +435,8 @@ tools/deploy-check.sh https://typer198x.com --strict            # 5. go/no-go
   and the optional `robots.txt`/`sitemap.xml`/`site.webmanifest`); `assets/` is walked whole.
 - **Cache policy (audit G025).** The live host currently answers `/index.html` with
   `Cache-Control: max-age=15552000` (180 days), so a returning browser would keep the old shell next to
-  new scripts. `--htaccess` merges `tools/deploy/htaccess-cache.txt` into the web root's `.htaccess`
+  new scripts (the stale-shell guard turns that into one reload, see [Versioning](#versioning-the-two-tokens)).
+  `--htaccess` merges `tools/deploy/htaccess-cache.txt` into the web root's `.htaccess`
   (never replaces it: the download is kept as `tools/deploy/backups/htaccess-<ms>.previous.txt`, the uploaded
   text as `htaccess-<ms>.merged.txt`, a new file is created only after a download attempt answers "no such
   file" even when the listing hides dotfiles, and any other download failure makes the step skip and the
@@ -409,7 +469,10 @@ asserts both patches.
 Two notes for the native owner (amendment E-4b): the rsync carries the **masters and `assets/opt`** into
 both bundles (341 MB of PNG/WAV plus 29 MB of encoded files); excluding `assets/opt` there, or syncing
 from the encoded set only, would halve the bundles. This release is **web-only**: nothing under `native/`
-changed and no native build was produced.
+changed and no native build was produced. The secondary pages link back to the game with `./index.html`, not `./`:
+inside the WKWebView a `./` link is a `file:` directory, which has no index, and the navigation fails (measured with
+the wrappers' navigation policy: provisional load error 102), so the web build accepts one guarded reload for a
+browser holding a stale `/index.html` instead.
 
 The Xcode projects remain as documented in `native/ios/README.md` and `native/macos/README.md`: run
 `bash native/sync-web.sh` from the repo root, open the platform project, add the synced `www` folder as a
@@ -418,8 +481,10 @@ folder reference, configure signing and bundle identifiers, test on hardware, ar
 ## Privacy
 
 Everything the game stores lives on the player's device under `typesmup198x.save.v1` (plus a one-session
-rotate-hint flag on phones). No accounts, analytics, telemetry or third-party scripts; the web build makes
-no network calls while playing beyond fetching its own code, art and music. The footer links
+rotate-hint flag on phones), including the typing profile behind the Flight log (per-key speed and misses, the
+slowest letter pairs and a summary of the last 100 sectors); it is never sent anywhere and Reset save erases it.
+[privacy-policy.html](./privacy-policy.html) says so, effective 24 October 2026. No accounts, analytics, telemetry or
+third-party scripts; the web build makes no network calls while playing beyond fetching its own code, art and music. The footer links
 [privacy-policy.html](./privacy-policy.html); `privacy.html` is a meta-refresh stub for old links.
 [info.html](./info.html) and [support.html](./support.html) carry the same icon/meta block as the game
 and a back link.
@@ -434,6 +499,38 @@ If you stream, teach or hack on typing games, fork the project and share improve
 remixes are welcome.
 
 ## Changelog
+
+### 2026-10 training update, part 1 (release token `20261024a`, art token unchanged)
+
+**Honest speed.** WPM is now your hand speed: the time between correct keys inside a word or boss segment, with
+the first key of each target and pauses over 1.5 s left out and wrong keys counted against you. The HUD, the
+results cards, the records and Best WPM all show that one number (Best WPM needs a cleared sector with at least 60
+timed keys); speeds recorded before this release are kept and shown dimmed as a legacy measure.
+
+**Typos name themselves.** A wrong key on a locked target shows the letter you typed struck through next to the
+one you needed; a wrong key with nothing locked pops the letter off your gun and pulses the nearest target's first
+letter. The HUD accuracy reads `--` until 10 keys, turns amber under 95 % and red under 90 %, and pulses on a miss;
+the first letter of every target you can lock is underlined for colour-blind pilots.
+
+**The rank explains itself.** Each sector's speed is judged against that sector's own pace, so S is reachable at
+the sector's nominal speed with 98 % accuracy. A line under the rank names what held it back and what the next grade
+needs; the accuracy tile counts your misses; WEAK SIGNAL chips name the key you missed most, your slowest letter pair
+and how steady you typed; Game Over says what ended the run. Every new line is announced to screen readers.
+
+**Pilot profile and Flight log.** Save schema 3 keeps a typing profile on your device: per-key misses and latency,
+letter pairs and your last 100 sectors. Records has a Flight log tab with a keyboard map of misses and speed, slowest
+and weak keys, a speed and accuracy sparkline, per-sector best speed and accuracy, days flown, and a next-goal line
+that also shows on the title screen. Older saves migrate on load.
+
+**Flight check for new pilots.** A fresh save flies a short flight check before Sector 1 (type a letter, finish a
+word, let go of a far target with Space and take the nearer one); nothing can hit you, nothing scores, and Esc or
+Skip leaves it. The mission briefing opens on a three-line summary with the full story one click away, and the
+"keep typing to finish it" tip now shows on a new pilot's first word lock.
+
+**Under the hood.** A cached older page shell now reloads once into the current release instead of running new
+code under old markup; the help manual, privacy policy and README describe this build. The rest of the training
+update (common words and two-word targets, the Counter-Signal boss rework and Overdrive, pace that follows you,
+daily / endless / drill modes) is not part of this release.
 
 ### 2026-10 web overhaul (release token `20261016a`, art token `202610161134`)
 
