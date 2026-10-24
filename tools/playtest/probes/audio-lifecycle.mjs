@@ -6,6 +6,7 @@
 //   node probes/audio-lifecycle.mjs --root ../.. [--out ./out/audio-lifecycle] [--headed]
 // Writes <out>/report.json (checks, cue log, loop captures) and screenshots; exit code 1 on any failed check.
 import { chromium } from "playwright";
+import { harnessFlags } from "./_lib.mjs";
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
@@ -87,6 +88,7 @@ const { server, port } = await startServer(ROOT);
 const base = `http://127.0.0.1:${port}/index.html`;
 const browser = await chromium.launch({ channel: "chrome", headless: !HEADED, args: ["--autoplay-policy=no-user-gesture-required", "--mute-audio"] });
 const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+await harnessFlags(context);   // ONBOARD: MUTED_SAVE is fresh-eligible; Start skips the Flight Check (harness default)
 await context.addInitScript(([k, v]) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }, [LS_KEY, MUTED_SAVE]);
 await context.addInitScript({ content: cueSpy });
 const page = await context.newPage();

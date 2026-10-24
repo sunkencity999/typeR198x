@@ -238,7 +238,8 @@ try {
     // Modals
     await page.evaluate(() => { document.body.dataset.mode = "menu"; document.getElementById("screenMenu").classList.add("is-active"); });
     await showModal(page, "storyModal"); await shot(page, dir, "70-story");
-    const storyFit = await page.evaluate(() => { const b = document.querySelector("#storyModal .modalBody"); return { scroll: b.scrollHeight, client: b.clientHeight }; });
+    // ONBOARD: the five paragraphs sit behind the "Read the full briefing" disclosure; measure them opened.
+    const storyFit = await page.evaluate(() => { const d = document.getElementById("storyMore"); if (d) d.open = true; const b = document.querySelector("#storyModal .modalBody"); return { scroll: b.scrollHeight, client: b.clientHeight }; });
     if (vp.name === "1440x900") check("1440x900 story body shows last paragraph without scrolling", storyFit.scroll <= storyFit.client + 1, JSON.stringify(storyFit));
     await showModal(page, "helpModal"); await shot(page, dir, "71-help");
     await showModal(page, "confirmModal");

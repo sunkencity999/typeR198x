@@ -1,6 +1,6 @@
 // C4 acceptance probe: results cards on Level Complete / Game Over / Victory, retry copy, ending progress, reduced motion.
 // Usage: cd tools/playtest && node probes/c4-results.mjs
-import { openProbe, sleep } from "./_lib.mjs";
+import { openProbe, sleep, harnessFlags } from "./_lib.mjs";
 import { chromium } from "playwright";
 
 const P = await openProbe("c4");
@@ -120,6 +120,7 @@ P.check("no page errors through victory", P.errors.pageErrors.length === 0, JSON
 {
   const browser = await chromium.launch({ channel: "chrome", headless: true, args: ["--autoplay-policy=no-user-gesture-required", "--mute-audio"] });
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1, reducedMotion: "reduce" });
+  await harnessFlags(ctx);   // ONBOARD: a fresh-save Start skips the Flight Check (harness default)
   const pg = await ctx.newPage();
   const errs = [];
   pg.on("pageerror", (e) => errs.push(String(e)));
