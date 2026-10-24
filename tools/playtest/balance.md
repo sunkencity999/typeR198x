@@ -18,34 +18,41 @@ par, surge damage) were not on this tree: the lead's re-pass on the merged tree 
 --matrix`, b10 for the three profiles, the stakes jumps below; every PACE number lives in the `PACE` block of
 `assets/js/game/42-pacing.js` plus `HUNGRY_SPAWN_S` / `SPAWN_ROLLIN_PX` in 20-constants.js).
 
-Shipped numbers: spec-pace 1 unchanged (pilot factor 0.85, paceMul 1.0-2.5, step 0.35, run speed from 20 intervals,
-profile from 60, maxEnemies + min(3, round(2 (m - 1))), speed x (1 + 0.15 (m - 1)), 2-alive top-up from paceMul 1.5,
-Cadet 0.75 / 0.75 / 0.8, hull carry from S4 at 50 %), `HUNGRY_SPAWN_S` 0.1, `SPAWN_ROLLIN_PX` [10, 30]. No knob moved:
-every R26 target held in both rounds.
+Shipped numbers: spec-pace 1 except one knob, `PACE.hungryMin2AtMul` **1.5 -> 1.35** (spec 14.3 knob 1, after round 3
+below): pilot factor 0.85, paceMul 1.0-2.5, step 0.35, run speed from 20 intervals, profile from 60, maxEnemies +
+min(3, round(2 (m - 1))), speed x (1 + 0.15 (m - 1)), 2-alive top-up from paceMul 1.35, Cadet 0.75 / 0.75 / 0.8, hull
+carry from S4 at 50 %; `HUNGRY_SPAWN_S` 0.1, `SPAWN_ROLLIN_PX` [10, 30].
 
 Probe: `probes/t-pace-balance.mjs` (one profile per run; `--matrix` runs the five; `--set key=value` retunes a `PACE`
 knob or `rollin=a-b` in the page). Idle share = time in a spawn phase with nothing targetable / the sector's play time
 (mode `playing`, sector card and boss included), the pedagogy probe's definition.
 
-### R26 targets, two rounds (`t-pace-balance --matrix`)
+### R26 targets (`t-pace-balance --matrix`): rounds 1-3 at `hungryMin2AtMul` 1.5, round 4 at the shipped 1.35
 
-| profile | S1 idle (target) | S2 idle | S3 idle | longest idle gap | to S1 boss | deaths / damage S1-3 | rank S1/S2/S3 | hand WPM | paceMul per wave S1 · S2 · S3 |
+| profile | S1 idle r1 / r2 / r3 -> r4 (target) | S2 idle | S3 idle | longest idle gap | to S1 boss | deaths / damage S1-3 | rank S1-S3 (r4) | hand WPM | paceMul S1 · S2 · S3 (r4) |
 |---|---|---|---|---|---|---|---|---|---|
-| 35 / .90 fresh | 15 % / 13 % (not harder) | 6 % / 5 % | 6 % / 3 % | 0.52 s | 39.5 / 35.7 s | 0 / 0 | A A B (both) | 30-33 | 1/1/1 · 1.27-1.34 · 1/1/1 |
-| 55 / .93 fresh | 18 % / 23 % (<= 30) | 2 % / 3 % | 3 % / 0 % | 0.61 s | 41.7 / 37.2 s | 0 / 0 | A A A / S S A | 47-52 | 1/1/1.35 · 1.70/2.01-2.05/1.98-2.17 · 1.63-1.82/1.51-1.56/1.51-1.53 |
-| 80 / .97 fresh | 25 % / 29 % (<= 30) | 7 % / 4 % | 3 % / 7 % | 0.51 s | 33.4 / 32.6 s | 0 / 0 | S S S / A S S | 71-73 | 1/1/1.35 · 1.70/2.05/2.40 · 2.19-2.24 |
-| 55 / .93 seeded (51 WPM) | 6 % / 8 % (<= 15) | 3 % / 1 % | 2 % / 1 % | 0.47 s | 45.5 / 39.6 s | 0 / 0 | A S A / S A A | 48-52 | 1.35/1.70/2.05 · 2.04-2.15 · 1.72-1.77/1.54/1.52-1.54 |
-| 80 / .97 seeded (78 WPM) | 13 % / 14 % (<= 15) | 3 % / 5 % | 4 % / 3 % | 0.49 s | 34.1 / 37.3 s | 0 / 0 | S S S (both) | 72-74 | 1.35/1.70/2.05 · 2.40/2.50/2.50 · 2.27-2.28 |
+| 35 / .90 fresh | 15 / 13 / 14 -> **7 %** (not harder) | 6 / 5 / 3 -> 5 % | 6 / 3 / 5 -> 4 % | <= 0.52 s | 36-47 s | 0 / 0 in all four | B A B | 28-33 | 1/1/1.35 · 1.18-1.22 · 1/1/1 |
+| 55 / .93 fresh | 18 / 23 / 24 -> **5 %** (<= 30) | 2 / 3 / 7 -> 2 % | 3 / 0 / 1 -> 1 % | <= 0.61 s | 32-43 s | 0 / 0 | A A A | 47-52 | 1/1.35/1.7 · 2.05/2.10/2.10 · 1.75/1.52/1.52 |
+| 80 / .97 fresh | 25 / 29 / 28 -> **27 %** (<= 30) | 7 / 4 / 7 -> 6 % | 3 / 7 / 4 -> 2 % | <= 0.52 s | 29-34 s | 0 / 0 | A S S | 70-75 | 1/1/1 · 1.35/1.70/2.05 · 2.26-2.28 |
+| 55 / .93 seeded (51) | 6 / 8 / 8 -> **4 %** (<= 15) | 3 / 1 / 2 -> 2 % | 2 / 1 / 1 -> 1 % | <= 0.52 s | 40-46 s | 0 / 0 | A A A | 48-52 | 1.35/1.70/2.05 · 2.06-2.08 · 1.71/1.53/1.52 |
+| 80 / .97 seeded (78) | 13 / 14 / **19 FAIL** -> **15 %** (<= 15) | 3 / 5 / 8 -> 4 % | 4 / 3 / 3 -> 1 % | <= 0.52 s | 32-37 s | 0 / 0 | S S S | 72-76 | 1.35/1.70/2.05 · 2.40/2.50/2.50 · 2.27-2.29 |
 
-Before PACE (pedagogy baseline): idle 35 / 22 / 12 % (35 WPM), 36 / 34 / 25 % (55), 50 / 44 / 41 % (80). A third 80 / .97
-fresh run gave S1 26 %, S2 6 %, S3 3 %; the same profile with `--set rollin=10-20` gave S1 26 % / S2 4 % / S3 1 %
-(the roll-in knob barely moves sector 1, where a fresh pilot flies at paceMul 1.0 until the 20-interval gate, R26). The
-two margins to watch on the merged tree: 80 fresh S1 (25-29 % against 30 %) and 80 seeded S1 (13-14 % against 15 %).
-`hungryMin2AtMul` does not act at paceMul 1.0; for S1 the lever is the run-speed gate or R26's kept-out alternative
-(the 2-alive top-up from MEASURE's live speed). In the round-2 JSON the S1 `minHullPct` reads 66.7 % because that
-probe version took the max-HP after the clear for the first sector (fixed); the damage column is 0 in every sector.
+Knob runs at 1.35 before shipping it (`--set hungryMin2AtMul=1.35`): 80 seeded S1 8 % and 12 %, 55 seeded S1 4 %
+(S2 3 %, S3 2 %), 35 fresh S1 10 % / S2 5 % / S3 2 % with 0 damage and ranks A / B / B (its S2 waves stayed at
+1.32-1.34). Why this knob: a returning pilot's first wave runs at exactly 1.35 (one step from 1.0), below the old 1.5
+top-up, so every kill emptied the field; 1.35 is the lowest value that leaves the 35 WPM pilot's S2 (1.18-1.34 in four
+rounds) on the table's empty-field rule. Before PACE (pedagogy baseline): idle 35 / 22 / 12 % (35 WPM), 36 / 34 / 25 %
+(55), 50 / 44 / 41 % (80). Extra runs at 1.5: 80 fresh S1 26 / S2 6 / S3 3 %, and with `--set rollin=10-20` S1 26 / S2 4 /
+S3 1 % (the roll-in knob barely moves sector 1).
 
-### b10 (three profiles, fresh save, sectors 1-3; pace columns added by PACE)
+The two margins to watch on the merged tree: **80 fresh S1** (25-29 % against 30 %: a fresh pilot flies S1 at paceMul
+1.0 until the 20-interval run gate, R26; the knob only acts from 1.35) and **80 seeded S1** (8-15 % at 1.35 against 15 %).
+If either misses there, the next levers are R26's kept-out alternative (the 2-alive top-up from MEASURE's live speed in
+S1) for the fresh case and `PACE.profileMinIntervals` / a 1.3 knob (it then reaches the 35 pilot's S2) for the seeded one.
+In the round-2 JSON the S1 `minHullPct` reads 66.7 % because that probe version took the max-HP after the clear for the
+first sector (fixed before round 3); the damage column is 0 in every sector of every round.
+
+### b10 (three profiles, fresh save, sectors 1-3; pace columns added by PACE; measured at `hungryMin2AtMul` 1.5)
 
 The band is now judged per wave against `targetCps x the applied paceMul`: every wave delivers at least 0.85 x (all
 spawns) and the stream alone stays under 1.35 x. Hungry top-ups above it are demand-driven (a typist who clears the
@@ -76,7 +83,7 @@ field is fed at their own pace: sector 1 at paceMul 1.0 reads 1.6-3.3 x for 35-8
 | 2 | clear | 39.8 | 8.8 | 100 % | 0 | 0 (0/0/0) | 2.41/3.05/4.52 | 11/14 14/20 25/29 | 0.45/0.30/0.27 | 0/0 | S / S | 71.8 (20.4) | 95.7 | 0 | 4424 | 0.94 | 1.35/1.70/2.05 | 14/20/29 | 1.78/0.54 1.80/0.29 2.20/0.35 | no/no/no | 300/300 | 57 |
 | 3 | clear | 52.9 | 10.8 | 100 % | 0 | 0 (0/0/0) | 2.52/2.66/3.32 | 22/27 11/31 20/36 | 0.23/0.28/0.20 | 0/0 | S / S | 74.4 (27.6) | 97.7 | 0 | 6065 | 0.94 | 2.23/2.23/2.24 | 27/31/36 | 1.13/0.20 1.19/0.90 1.48/0.56 | no/no/no | 400/400 | 67 |
 
-### Stakes (D3), seeded profile, sector jump then consecutive sectors, one retry allowed (none used)
+### Stakes (D3), seeded profile, sector jump then consecutive sectors, one retry allowed (none used; every wave ran at paceMul 1.0, so the knob does not apply)
 
 | profile | sector: hull in (card) -> damage, min hull, wave timeouts (escaped), paceMul |
 |---|---|
