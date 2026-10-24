@@ -283,14 +283,16 @@ const t13 = await od();
 await P.g(() => window.__ty.clear());
 P.check("13. 20 synchronous handleTyped keys, then 3 s with a target up: no interval reaches the burst ring (count 0), never charges", t13a.count === 0 && t13.count === 0 && t13.charge === 0 && !t13.on, { afterBurst: t13a, after3s: t13 });
 
-// 13b. A fast burst then a pause never charges to full: 6 keys at 150 ms (80 WPM, above T 63), then 2 s idle with the
-//      plate still up (the d4 scenario): the arc drains instead of filling, no activation
-await P.g(() => { window.__ty.clear(); window.__ty.hold(); window.game.odReset(false); window.__od.frames.length = 0; window.__od.sample = true; });
+// 13b. A fast burst then a pause never charges to full: 6 keys at 150 ms (80 WPM) on a fresh pilot's threshold (T pinned
+//      at the 25 WPM floor: the d4 scenario, where the open-interval burst stays above T for ~2 s of the pause), then 2 s
+//      idle with the plate still up: the arc drains instead of filling (it charges only while the pilot types), no activation
+await P.g(() => { window.__ty.clear(); window.__ty.hold(); window.game.odReset(false); window.game._od.threshold = OVERDRIVE.floorWpm; window.__od.frames.length = 0; window.__od.sample = true; });
 await run(P, [{ at: 10, plate: "heatwave" }, ...[..."heatwa"].map((ch, k) => ({ at: 40 + k * 150, ch }))]);
+const T13b = await P.g(() => window.game._od.threshold);
 await sleep(2000);
 const t13b = await P.g(() => { const O = window.__od; O.sample = false; const ch = O.frames.map((f) => f.charge); return { peak: Math.max(0, ...ch), end: ch[ch.length - 1], anyOn: O.frames.some((f) => f.on), threshold: window.game._od.threshold, frames: ch.length }; });
 await P.g(() => window.__ty.clear());
-P.check("13b. 6 keys at 80 WPM then a 2 s pause with the plate up: the charge never fills (peak < .6) and drains during the pause, no activation", !t13b.anyOn && t13b.peak > 0 && t13b.peak < 0.6 && t13b.end < t13b.peak, t13b);
+P.check("13b. 6 keys at 80 WPM then a 2 s pause with the plate up, T at the 25 WPM floor: the charge never fills (peak < .6) and drains during the pause, no activation", T13b === 25 && !t13b.anyOn && t13b.peak > 0 && t13b.peak < 0.6 && t13b.end < t13b.peak, { T: T13b, ...t13b });
 
 // 15. Drill (MODES): blocked. MODES is not merged on this branch: the block is checked with run.mode = "drill" (what
 // MODES sets) and re-run after MODES merges (CONTRACT 4.1); the Flight Check block reads ONBOARD's flightCheck.
