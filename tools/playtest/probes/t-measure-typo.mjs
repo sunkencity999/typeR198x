@@ -61,6 +61,22 @@ const installSpies = async (page) => page.evaluate(() => {
     if (T.texts && this.canvas && this.canvas.id === "game") { const m = this.getTransform(); T.texts.push({ text: String(text), x: m.a * x + m.c * y + m.e, y: m.b * x + m.d * y + m.f }); }
     return ft.apply(this, arguments);
   };
+  // draws: every fillText / strokeText / fillRect on #game with its device-space anchor and whether its style is danger red
+  T.draws = null;
+  const isDanger = (st) => { if (typeof st !== "string") return false; let r, gg, b; const m = st.match(/rgba?\(([^)]+)\)/);
+    if (m) { const p = m[1].split(/[\s,\/]+/).filter(Boolean).map(Number); [r, gg, b] = p; } else if (/^#[0-9a-f]{6}$/i.test(st)) { r = parseInt(st.slice(1, 3), 16); gg = parseInt(st.slice(3, 5), 16); b = parseInt(st.slice(5, 7), 16); } else return false;
+    return Math.abs(r - 255) <= 40 && Math.abs(gg - 77) <= 40 && Math.abs(b - 109) <= 40; };
+  for (const [name, styleKey] of [["fillText", "fillStyle"], ["strokeText", "strokeStyle"], ["fillRect", "fillStyle"]]) {
+    const orig = proto[name];
+    proto[name] = function (a, x, y) {
+      if (T.draws && this.canvas && this.canvas.id === "game") {
+        const m = this.getTransform(); const px = name === "fillRect" ? a : x, py = name === "fillRect" ? x : y;
+        T.draws.push({ op: name, text: name === "fillRect" ? "" : String(a), x: m.a * px + m.c * py + m.e, y: m.b * px + m.d * py + m.f, danger: isDanger(this[styleKey]) });
+      }
+      return orig.apply(this, arguments);
+    };
+  }
+  T.captureDraws = async () => { T.draws = []; await new Promise((r) => requestAnimationFrame(r)); await new Promise((r) => requestAnimationFrame(r)); const c = T.draws; T.draws = null; return c; };
   T.captureSplit = async () => { T.splitCalls = []; await new Promise((r) => requestAnimationFrame(r)); await new Promise((r) => requestAnimationFrame(r)); const c = T.splitCalls; T.splitCalls = null; return c; };
   T.captureText = async () => { T.texts = []; await new Promise((r) => requestAnimationFrame(r)); await new Promise((r) => requestAnimationFrame(r)); const c = T.texts; T.texts = null; return c; };
 });
@@ -102,34 +118,53 @@ const c2 = await P.g(async () => {
   const splitA = (await T.captureSplit()).filter((c) => c.remaining === "harpness");
   const redA = T.red(band);
   const ctx = g.ctx; const W = g.canvas.width, H = g.canvas.height; const s = g.renderScale || 1;
+  const nb = { x0: (en.x - pw / 2 - 60) * s, x1: (en.x + pw / 2 + 60) * s, y0: (en.y - ph / 2 - 60) * s, y1: (en.y + ph / 2 + 60) * s };
+  const outside = (x, y) => !(x >= nb.x0 && x <= nb.x1 && y >= nb.y0 && y <= nb.y1) && x > 280 * s;   // ship / plume column (d1) excluded
+  // pixels that turned danger red between two frames, outside the neighbourhood
+  const turnedRed = (A, B, where) => {
+    let n = 0;
+    for (let y = 0; y < H; y += 2) for (let x = 0; x < W; x += 2) {
+      if (!outside(x, y)) continue;
+      const i = (y * W + x) * 4;
+      const redB = B[i] > 170 && B[i + 1] < 130 && B[i + 2] < 160 && B[i] - B[i + 1] > 90, redA = A[i] > 170 && A[i + 1] < 130 && A[i + 2] < 160 && A[i] - A[i + 1] > 90;
+      if (redB && !redA && B[i] - A[i] > 20) { n++; if (where && where.length < 8) where.push([Math.round(x / s), Math.round(y / s), A[i], B[i]]); }
+    }
+    return n;
+  };
+  const drawsOutside = (list) => list.filter((d) => outside(d.x, d.y) && (d.danger || d.op !== "fillRect"));
+  const baseDraws = drawsOutside(await T.captureDraws());   // two frames with no miss
+  await new Promise((r) => requestAnimationFrame(r));
+  const A0 = ctx.getImageData(0, 0, W, H).data;
   await new Promise((r) => requestAnimationFrame(r));
   const A = ctx.getImageData(0, 0, W, H).data;
+  const baseRed = turnedRed(A0, A, null);   // the backdrop's own flicker over one frame, no key
   g.handleTyped("x");
+  T.draws = [];
   await new Promise((r) => requestAnimationFrame(r));
   const B = ctx.getImageData(0, 0, W, H).data;   // one frame later, as d1: only the plate neighbourhood may change red
-  await T.wait(200);   // the 120 ms danger stroke flash is over; the pair (450 ms) is still up
+  await new Promise((r) => requestAnimationFrame(r));
+  const missAll = T.draws.length, missDraws = drawsOutside(T.draws); T.draws = null;
+  await T.wait(150);   // the 120 ms danger stroke flash is over; the pair (450 ms) is still up
   const typedDraws = (await T.captureText()).filter((t) => t.text === "x").map((t) => ({ x: t.x / s, y: t.y / s }));
   const splitB = (await T.captureSplit()).filter((c) => c.remaining === "harpness");
   const redB = T.red(band);
-  const nb = { x0: (en.x - pw / 2 - 60) * s, x1: (en.x + pw / 2 + 60) * s, y0: (en.y - ph / 2 - 60) * s, y1: (en.y + ph / 2 + 60) * s };
-  let outsideRed = 0; const where = [];
-  for (let y = 0; y < H; y += 2) for (let x = 0; x < W; x += 2) {
-    if (x >= nb.x0 && x <= nb.x1 && y >= nb.y0 && y <= nb.y1) continue;
-    if (x <= 280 * s) continue;   // ship / plume column (d1)
-    const i = (y * W + x) * 4;
-    // a pixel that turned danger red (the animated backdrop changes every frame, but never into #FF4D6D)
-    const redB = B[i] > 170 && B[i + 1] < 130 && B[i + 2] < 160 && B[i] - B[i + 1] > 90, redA = A[i] > 170 && A[i + 1] < 130 && A[i + 2] < 160 && A[i] - A[i + 1] > 90;
-    if (redB && !redA && B[i] - A[i] > 20) { outsideRed++; if (where.length < 12) where.push([Math.round(x / s), Math.round(y / s), A[i], B[i]]); }
-  }
+  const where = [];
+  const outsideRed = turnedRed(A, B, where);
   await T.wait(450);
   const redC = T.red(band);
   const inPlate = typedDraws.length > 0 && typedDraws.every((t) => Math.abs(t.x - en.x) < pw / 2 + 20 && Math.abs(t.y - en.y) < ph / 2);
-  return { redA, redB, redC, outsideRed, where, typedDraws, inPlate, widthA: splitA[0] && splitA[0].width, widthB: splitB[0] && splitB[0].width, typoB: splitB[0] && splitB[0].typo };
+  const sig = (d) => `${d.op}:${d.text}:${d.danger}`;
+  const baseSet = new Set(baseDraws.map(sig));
+  const newDraws = missDraws.filter((d) => !baseSet.has(sig(d))).map((d) => ({ ...d, x: Math.round(d.x / s), y: Math.round(d.y / s) }));
+  const allowance = Math.round(40 * s * s);
+  return { redA, redB, redC, outsideRed, baseRed, allowance, renderScale: s, where, newDraws, baseDraws: baseDraws.length, baseKinds: [...baseSet].slice(0, 8), missAll, missDraws: missDraws.length, typedDraws, inPlate, widthA: splitA[0] && splitA[0].width, widthB: splitB[0] && splitB[0].width, typoB: splitB[0] && splitB[0].typo };
 });
-// The animated sector backdrop flips a few near-threshold pixels per frame (measured 0-3 with no key at all), so the outside
-// scan allows 8; the fillText positions of the typed glyph pin the pair inside the plate exactly.
-P.check("2. pixels: danger-red glyph inside the plate's text band during the pair (none before / after), drawn width + one glyph, every typed-glyph fill inside the plate, no pixel turns danger red outside the 60 px neighbourhood (<= 8 backdrop px)",
-  c2.redB > 15 && c2.redA <= 2 && c2.redC <= 2 && c2.typoB === "x" && c2.widthB - c2.widthA > 4 && c2.inPlate && c2.outsideRed <= 8, c2);
+// Outside the plate: the draw-call spy is exact (no text and no danger-red fill outside the 60 px neighbourhood in the two
+// frames after the miss that the two no-miss frames before did not have). Pixels are a coarse guard only: the animated
+// backdrop flips up to ~60 near-threshold sample pixels per frame with no key at all (DPR 2; ~30 at DPR 1), so the miss
+// frame may exceed the no-miss frame's own flicker by at most 40 x renderScale^2 samples (a tint or flash adds thousands).
+P.check("2. pixels: danger-red glyph inside the plate's text band during the pair (none before / after), drawn width + one glyph, every typed-glyph fill inside the plate; outside the 60 px neighbourhood no new text or danger-red draw call, and red pixels within the no-miss frame's backdrop flicker + 40 x renderScale^2",
+  c2.redB > 15 && c2.redA <= 2 && c2.redC <= 2 && c2.typoB === "x" && c2.widthB - c2.widthA > 4 && c2.inPlate && c2.missAll > 0 && c2.newDraws.length === 0 && c2.outsideRed <= c2.baseRed + c2.allowance, c2);
 
 // ---- 3. a second pair replaces the first ----
 const c3 = await P.g(async () => {
