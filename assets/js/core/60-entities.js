@@ -103,7 +103,7 @@ const FX_BULLET = (() => {
   return { life: typeof m.bulletLife === "number" ? m.bulletLife : 0.15, head: typeof m.bulletHeadS === "number" ? m.bulletHeadS : 0.035, tail: typeof m.bulletTailS === "number" ? m.bulletTailS : 0.07 };
 })();
 class Bullet {
-  constructor({ x, y, tx, ty, life = FX_BULLET.life, width = 3, color = "cyan", impact = true }) {
+  constructor({ x, y, tx, ty, life = FX_BULLET.life, width = 3, color = "cyan", impact = true, hot = false }) {
     this.kind = "bullet";
     this.x = x; this.y = y;
     this.tx = tx; this.ty = ty;
@@ -112,6 +112,7 @@ class Bullet {
     this.width = width;
     this.color = color; // PALETTE name (BULLET_COLORS in 75-fx-draw.js)
     this.impact = impact;
+    this.hot = hot;     // ARCADE D11: an Overdrive beam (white-hot core, 75-fx-draw.js drawBullets)
     this.arrived = false;
   }
   update(dt) {
