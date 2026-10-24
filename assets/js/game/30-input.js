@@ -467,10 +467,14 @@ Object.assign(Game.prototype, {
   // Callers pass the multiplied amount for kills/pickups/boss chars and the flat amount for bonuses.
   addScore(amount, opts = {}) {
     if (this.mode === "gameOver") return 0;   // a kill resolving in the death tick must not outrun the committed score
-    // scoreWillAdd (scaffold): ONBOARD / MODES cancel, ARCADE multiplies `mul` (Overdrive). Reused payload.
-    const se = this._evtScore || (this._evtScore = { amount: 0, opts: null, kind: "", mul: 1, cancel: false });
+    // scoreWillAdd (scaffold): ONBOARD / MODES cancel, ARCADE multiplies `mul` (Overdrive). Reused payload, except that a
+    // listener paying a nested addScore gets a fresh one, so the outer call still reads its own mul / cancel.
+    const nested = (this._scoreDepth | 0) > 0;
+    const se = nested ? { amount: 0, opts: null, kind: "", mul: 1, cancel: false }
+      : (this._evtScore || (this._evtScore = { amount: 0, opts: null, kind: "", mul: 1, cancel: false }));
     se.amount = amount; se.opts = opts; se.kind = (opts && opts.kind) || ""; se.mul = 1; se.cancel = false;
-    this.hook("scoreWillAdd", se);
+    this._scoreDepth = (this._scoreDepth | 0) + 1;
+    try { this.hook("scoreWillAdd", se); } finally { this._scoreDepth--; }
     se.opts = null;
     if (se.cancel) return 0;
     const n = Math.round(Math.max(0, amount) * (this.diff().score || 1) * (se.mul > 0 ? se.mul : 1));

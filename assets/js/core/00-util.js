@@ -24,8 +24,11 @@ const nowMs = () => performance.now();
 // runGameHooks(name, evt, self). Listeners run in registration order (= index.html script order) with this = self, each
 // inside try/catch (a throw is logged once per event per 5 s and never stops the emit). Payloads may be mutated: the emit
 // site reads its documented fields (hold / claimed / cancel / handled / text / mul / lines / hp / perfect ...) after the
-// call. Per-frame / per-key / per-spawn payloads are reused objects: listeners read them synchronously, never retain them.
-// Re-entrant: a listener may emit (even the same event); each dispatch iterates the length it saw at entry.
+// call. Payloads marked "Reused" at their emit site are one object per game: listeners read them synchronously, never
+// retain them. Dispatch is re-entrant (each emit iterates the listener count it saw at entry), but a listener of a reused
+// payload must not call the function that emits it (onHardMiss / emitKeyCorrect, takeDamage, spawnPowerup, makeEnemyText,
+// beginBossApproach, update / render): the nested call would overwrite the outer payload. addScore is depth-safe.
+// Static emits (saveMigrate, saveStore) pass self = null, which sloppy-mode listeners see as window: read evt, never this.
 const GAME_HOOK_EVENTS = Object.freeze([
   // run / level / mode
   "runWillStart", "levelWillStart", "sectorStart", "modeChange", "storyWillShow", "restartWillRun", "restartWillAsk",
