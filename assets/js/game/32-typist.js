@@ -19,9 +19,9 @@ const TYPIST_LIVE_N = 30;               // HUD live window (intervals)
 const TYPIST_SHOW_MIN_N = 10;           // any speed is shown only from 10 intervals ("--" before)
 const TYPIST_BEST_MIN_N = 60;           // Best WPM / sector best speed need 60 intervals
 // Player-facing statement of that rule (help copy, menu row title, Flight Log tile caption; release finding CT-01).
+const TYPIST_BEST_RULE = `Best WPM counts a cleared sector with at least ${TYPIST_BEST_MIN_N} timed keys.`;
 // WEAK SIGNAL chip tooltips by kind (release finding J5).
 const TYPIST_CHIP_TITLES = Object.freeze({ key: "The key you missed most", bigram: "Your slowest letter pair and its average time", steady: "How even your key rhythm was (higher is steadier)" });
-const TYPIST_BEST_RULE = `Best WPM counts a cleared sector with at least ${TYPIST_BEST_MIN_N} timed keys.`;
 const TYPIST_RING = 128;                // interval ring (power of two: index & 127)
 const TYPIST_EMA_SECTOR_K = 300;        // speedEma / thrEma weight w = n / (n + 300) per finished segment
 const TYPIST_KEY_MS_ALPHA = 0.15;
