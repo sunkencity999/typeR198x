@@ -63,7 +63,8 @@ const PACE_COPY = {
   cadetToast: (L) => `CADET PACE · UNTIL SECTOR ${L} IS CLEARED`,
   cadetRow: "Cadet pace",
   cadetTag: "CADET",
-  paceTag: (mean) => `PACE x${mean.toFixed(1)}`
+  paceTag: (mean) => `PACE x${mean.toFixed(1)}`,
+  paceTagSay: (x) => `Pace ${x} times the standard stream.`
 };
 
 // run.pace objects already normalised in this page session (a reload parses new objects, so they are checked again).
@@ -361,6 +362,10 @@ Object.assign(Game.prototype, {
       if (Array.isArray(evt.notes)) evt.notes.push(PACE_COPY.hullNote(n.pct));
     }
     if (this.paceCadetActive() && Array.isArray(evt.notes)) evt.notes.push(PACE_COPY.cadetFlown);
+    // The card's "PACE x1.6" chip is spoken too (review: a visible line without an announcement).
+    const tags = evt.results && Array.isArray(evt.results.tags) ? evt.results.tags : null;
+    const tag = tags ? tags.find((t) => typeof t === "string" && t.indexOf("PACE x") === 0) : null;
+    if (tag && Array.isArray(evt.notes)) evt.notes.push(PACE_COPY.paceTagSay(tag.slice(6)));
   },
 
   // Sector card lines (drawn and spoken by the scaffold): carried hull first, then the Cadet line.
@@ -432,6 +437,7 @@ Object.assign(Game.prototype, {
     ps.deaths.n += 1;   // persisted by the writeRunSave({ dead: true }) that follows the hook
     if (ps.cadetLevel === L) {
       if (ctl.note) { ctl.note.textContent = PACE_COPY.cadetStays(L); ctl.note.classList.remove("hidden"); }
+      if (Array.isArray(evt.notes)) evt.notes.push(PACE_COPY.cadetStays(L));   // shown and spoken (the button that describes it is hidden)
       return;
     }
     if (ps.deaths.n < PACE.cadetAfterDeaths) return;
