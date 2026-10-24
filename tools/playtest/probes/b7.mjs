@@ -90,16 +90,19 @@ await sleep(60);
 const phaseNext = await P.g(() => window.game.enemies.filter(e => e.alive && e.kind === "bossMinion").length);
 P.check("segmentIndex reaches phaseStarts[1] -> no minions next frame, shield >= 3, #bossPhase 'PHASE 2/3', run.bossCheckpoint.bossPhase === 1, data-state p2", phase.minionsBefore >= 1 && phaseNext === 0 && phase.shield >= 3 && phase.phaseText === "PHASE 2/3" && phase.cp === 1 && phase.phase === 1 && phase.state === "p2", { ...phase, phaseNext });
 
-// L1 / L2 forced bosses never start a surge (surgeEvery null) - observed 20 s each plus the table
+// ARCADE D10: the L1 forced boss never starts a surge (surgeEvery null, observed 20 s); from sector 2 the boss does:
+// L2 surgeEvery === 20 and the first surge of the fight starts within 8 s (min(6 s, surgeEvery) after the unlock).
 for (const li of [0, 1]) {
   await jumpTo(P, li);
   await P.g(() => { window.game.levelT = LEVELS[window.game.levelIndex].duration + 0.01; });
   await waitFor(P, () => window.game.inBoss && !(window.game.bossIntro && window.game.bossIntro.locked), 15000);
   let surged = false;
   const t0 = Date.now();
-  while (Date.now() - t0 < 20000) { if (await P.g(() => !!(window.game.boss && window.game.boss.surge))) { surged = true; break; } await sleep(250); }
+  const span = li === 0 ? 20000 : 8000;
+  while (Date.now() - t0 < span) { if (await P.g(() => !!(window.game.boss && window.game.boss.surge))) { surged = true; break; } await sleep(250); }
   const cfg = await P.g(() => LEVELS[window.game.levelIndex].surgeEvery);
-  P.check(`L${li + 1} forced boss never starts a surge (observed 20 s; surgeEvery === null)`, !surged && cfg === null, { surged, surgeEvery: cfg });
+  if (li === 0) P.check("L1 forced boss never starts a surge (observed 20 s; surgeEvery === null)", !surged && cfg === null, { surged, surgeEvery: cfg });
+  else P.check("L2 forced boss starts a surge within 8 s (surgeEvery === 20, first surge at min(6 s, 20 s))", surged && cfg === 20, { surged, surgeEvery: cfg, ms: Date.now() - t0 });
 }
 
 // L10: 3 phase ticks (phaseStarts length 4)

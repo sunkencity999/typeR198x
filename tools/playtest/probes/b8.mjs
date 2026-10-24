@@ -62,8 +62,10 @@ P.check("enemies.length === 0 throughout / after the finale", enemiesDuring === 
 // tally.time === max(0, par - elapsed) * 25 * L and tally.flawless === 500*L when bossDamage === 0
 const tally = k1.tally;
 const L = 2;
-const expectedTime = Math.max(0, k1.totalChars / 3 - k1.elapsed) * 25 * L;
-P.check("tally.time === max(0, par - elapsed)*25*L and tally.flawless === 500*L when bossDamage === 0", !!tally && Math.abs(tally.time - expectedTime) < 1e-6 && tally.flawless === 500 * L && tally.clear === 1500 + 350 * L, { tally, expectedTime, elapsed: k1.elapsed, totalChars: k1.totalChars });
+// ARCADE D10: par = totalChars / (0.9 x targetCps) (SCORE.par; L2 targetCps 1.7)
+const par2 = await P.g((n) => SCORE.par(n, 2), k1.totalChars);
+const expectedTime = Math.max(0, par2 - k1.elapsed) * 25 * L;
+P.check("tally.time === max(0, SCORE.par(totalChars, L) - elapsed)*25*L (par = chars / (0.9 x targetCps)) and tally.flawless === 500*L when bossDamage === 0", !!tally && Math.abs(tally.time - expectedTime) < 1e-6 && Math.abs(par2 - k1.totalChars / (0.9 * 1.7)) < 1e-9 && tally.flawless === 500 * L && tally.clear === 1500 + 350 * L, { tally, expectedTime, par: par2, elapsed: k1.elapsed, totalChars: k1.totalChars });
 const lcScore = await P.g(() => ({ score: window.game.stats.score, lastTotal: window.game.lastTally && window.game.lastTally.total, text: document.getElementById("levelCompleteText").textContent, sectorBest: window.game.save.sectorBests["2"] }));
 P.check("Level Complete: lastTally.total banked once and the sector best recorded with a rank", !!lcScore.sectorBest && "SABCD".includes(lcScore.sectorBest.rank) && lcScore.lastTotal > 0, lcScore);
 await P.shot("level-complete");

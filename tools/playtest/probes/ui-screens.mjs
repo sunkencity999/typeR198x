@@ -110,7 +110,7 @@ async function showScreen(page, mode) {
         card.querySelector(".bonusList").innerHTML =
           row("Clear", "+2,450") + row("Time", "+900") + row("Accuracy", "+400") + row("Flawless boss", "+500") + row("Retry penalty", "x0.75", "bonusRow--penalty") +
           `<li class="bonusCaption">Banked during the sector</li>` +
-          row("Perfect waves", "+250", "bonusRow--banked") + row("Boss phases", "+600", "bonusRow--banked") + row("Surges countered", "+0", "bonusRow--banked");
+          row("Perfect waves", "+250", "bonusRow--banked") + row("Boss phases", "+600", "bonusRow--banked") + row("Counter-signal bonus", "+0", "bonusRow--banked");
         card.querySelector(".newBest").classList.remove("hidden");
       }
     });
