@@ -114,6 +114,7 @@ Object.assign(Game.prototype, {
     if (typeof this.renderSectorGrid === "function") this.renderSectorGrid();
     if (typeof this.renderResumeCard === "function") this.renderResumeCard();
     if (typeof this.renderMenuStats === "function") this.renderMenuStats();
+    this.hook("menuRender", {});   // MEASURE (Best WPM, goal line), MODES (mode deck)
   },
 
   // ------------------------- Shared fallbacks (shell hooks) -------------------------
@@ -558,7 +559,12 @@ Object.assign(Game.prototype, {
     tbody.innerHTML = rows.map((h, i) => {
       const tag = SECTOR_TAG(h);
       const sector = h.levelReached === 11 ? "ALL" : String(h.levelReached | 0 || 1);
-      return `<tr class="hsRow${tag === "LEGEND" ? " is-legend" : ""}"><td>${i + 1}</td><td>${screensEscape(h.name || "PILOT")}</td><td>${formatInt(h.score | 0)}</td><td>${sector}</td><td>${h.wpm | 0}</td><td><span class="hsTag" data-tag="${screensEscape(tag)}">${screensEscape(tag)}</span></td></tr>`;
+      // MEASURE: rows from before honest speed keep their number, dimmed and flagged legacy; PACE: run tags as chips.
+      const wpm = (h.wpm | 0) || "--";
+      const wpmCell = h.wpmLegacy ? `<td class="hsLegacy" title="Legacy measure">${wpm}<span class="srOnly"> legacy</span></td>` : `<td>${wpm}</td>`;
+      const extra = (Array.isArray(h.tags) ? h.tags : []).filter((t) => typeof t === "string" && t).slice(0, 2)
+        .map((t) => ` <span class="hsTag" data-tag="${screensEscape(t)}">${screensEscape(t)}</span>`).join("");
+      return `<tr class="hsRow${tag === "LEGEND" ? " is-legend" : ""}"><td>${i + 1}</td><td>${screensEscape(h.name || "PILOT")}</td><td>${formatInt(h.score | 0)}</td><td>${sector}</td>${wpmCell}<td><span class="hsTag" data-tag="${screensEscape(tag)}">${screensEscape(tag)}</span>${extra}</td></tr>`;
     }).join("");
   },
 
@@ -566,6 +572,7 @@ Object.assign(Game.prototype, {
     const E = this.screenEls || {};
     if (!E.recordsModal) return;
     this.renderRecordsTable();
+    this.hook("recordsOpen", { modal: E.recordsModal });   // MEASURE: Flight log tab (idempotent; #btnRecords is bound twice)
     this.screensOpenModal(E.recordsModal, { returnFocusTo: E.btnRecords, initialFocus: "#btnRecordsClose" });
   },
 
@@ -603,7 +610,7 @@ Object.assign(Game.prototype, {
   },
 
   tutorialEnabled() {
-    return !!this.save && ((this.save.lastUnlockedLevel | 0) || 1) <= 1;
+    return !!this.save && ((this.save.lastUnlockedLevel | 0) || 1) <= 1 && this.runMode() === "campaign";   // MODES (G10)
   },
 
   markTutorial(kind) {
@@ -802,11 +809,24 @@ Object.assign(Game.prototype, {
     toggle(".newBest", level && !!results.newSectorBest);
     toggle(".newHigh", !!results.newHigh);
     toggle(".newWpm", !!results.newWpm && (results.wpm | 0) > 0);
+    // results.tags (PACE: CADET, PACE x1.6) as chips in the head, rebuilt per render (reuses .hsTag).
+    const head = q(".resultsHead");
+    if (head) {
+      for (const old of head.querySelectorAll(".resultsTag")) old.remove();
+      for (const t of (Array.isArray(results.tags) ? results.tags : []).slice(0, 3)) {
+        if (typeof t !== "string" || !t) continue;
+        const s = document.createElement("span");
+        s.className = "hsTag resultsTag";
+        s.dataset.tag = t;
+        s.textContent = t;
+        head.appendChild(s);
+      }
+    }
 
     const tally = level ? (this.lastTally || null) : null;
     const bonusTotal = tally ? (tally.total | 0) : 0;
     const tiles = {
-      wpm: { to: results.wpm | 0, fmt: (n) => String(Math.round(n)) },
+      wpm: { to: Math.round(Number(results.wpm) || 0), fmt: (n) => String(Math.round(n)) },   // MEASURE's wpm is unrounded
       acc: { to: Number(results.acc) || 0, fmt: (n) => `${Math.round(n)}%` },
       maxCombo: { to: results.maxCombo | 0, fmt: (n) => `x${Math.round(n)}` },
       words: { to: results.words | 0, fmt: (n) => String(Math.round(n)) },
@@ -857,6 +877,28 @@ Object.assign(Game.prototype, {
       }
     }
 
+    // results.notes (ARCADE: COUNTER-SIGNALS 3/4, OVERDRIVE 14 S): one ul.resultsNotes after .bonusList, created once.
+    const notes = Array.isArray(results.notes) ? results.notes : [];
+    let notesEl = q(".resultsNotes");
+    if (!notesEl && notes.length) {
+      notesEl = document.createElement("ul");
+      notesEl.className = "resultsNotes";
+      const anchor = q(".bonusList");
+      if (anchor) anchor.after(notesEl); else cardEl.appendChild(notesEl);
+    }
+    if (notesEl) {
+      notesEl.textContent = "";
+      for (const n of notes) {
+        if (!n || !n.text) continue;
+        const li = document.createElement("li");
+        li.className = "resultsNote";
+        li.dataset.note = String(n.id || "");
+        li.textContent = String(n.text);
+        notesEl.appendChild(li);
+      }
+      notesEl.classList.toggle("hidden", !notesEl.childElementCount);
+    }
+
     const badge = q(".rankBadge");
     if (badge) {
       badge.dataset.rank = rank;
@@ -877,6 +919,7 @@ Object.assign(Game.prototype, {
         }, RESULTS_RANK_AT_MS));
       }
     }
+    this.hook("resultsRender", { cardEl, results, animate });   // MEASURE: rank line, ACC caption, WEAK SIGNAL, Best WPM text
   },
 
   cancelResultsAnimation(cardEl) {

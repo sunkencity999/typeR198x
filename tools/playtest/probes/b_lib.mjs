@@ -48,10 +48,10 @@ export async function typeFor(P, seconds, { wpm = 80, accuracy = 0.97, until = n
     if (until && until(st)) break;
     if (st.mode !== "playing") { await sleep(80); continue; }
     const k = await nextKey(P);
-    if (k && /^[a-z]$/.test(k)) {
+    if (k && /^[a-z ]$/.test(k)) {
       const wrong = Math.random() > accuracy;
       const key = wrong ? "abcdefghijklmnopqrstuvwxyz".replace(k, "")[Math.floor(Math.random() * 25)] : k;
-      await P.page.keyboard.press(key);
+      await P.page.keyboard.press(key === " " ? "Space" : key);
       typed++;
       const jitter = interval * (0.8 + Math.random() * 0.4);
       await sleep(Math.max(5, jitter - (Date.now() - loopStart)));

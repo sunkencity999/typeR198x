@@ -125,11 +125,14 @@ Object.assign(Game.prototype, {
     if (commit) this._hudCommitAcc = 0;
 
     this.setText(el.name, this.save.playerName || "(unnamed)");
-    this.setText(el.level, `${cfg.level}/10`);
+    this.setText(el.level, (typeof this.modesHudLevel === "function" && this.modesHudLevel(cfg)) || `${cfg.level}/10`);   // MODES clocks
     this.updateScoreCell(dt, commit);
     this.updateComboCell(commit);
     this.updateMultBadge();
-    if (commit) this.setText(el.acc, `${this.getAccuracyPct()}%`);
+    if (commit) {
+      if (typeof this.typistHudAcc === "function") this.typistHudAcc(el.acc);   // MEASURE (D4): "--" under 10 keys, warn / bad
+      else this.setText(el.acc, `${this.getAccuracyPct()}%`);
+    }
     this.updateWpmCell(commit);
     this.updateHullMeter(commit);
     this.updateStageBar();
@@ -175,7 +178,8 @@ Object.assign(Game.prototype, {
   updateWpmCell(commit = true) {
     const el = this.hudEls();
     if (!el.wpm || !commit) return;
-    this.setText(el.wpm, String(this.liveWpm()));
+    if (typeof this.typistHudWpm === "function") this.typistHudWpm(el.wpm);   // MEASURE (D1): live hand speed
+    else this.setText(el.wpm, String(this.liveWpm()));
   },
 
   updateMultBadge() {
@@ -229,7 +233,7 @@ Object.assign(Game.prototype, {
       const done = waveDone(w);
       let p = 0;
       if (done) p = 1;
-      else if (wave === w) p = clamp(this.waveKills / Math.max(1, cfg.quota[w]), 0, 1);
+      else if (wave === w) p = clamp(this.waveKills / Math.max(1, this.waveQuota()), 0, 1);   // PACE: the paced quota
       this.setStyleVar(fill, "--p", Math.round(p * 100) / 100);
       this.setClass(seg, "isDone", done);
     }

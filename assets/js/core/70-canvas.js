@@ -32,11 +32,12 @@ function fontPx(font) {
   return m ? parseFloat(m[1]) : 16;
 }
 
-// Typed / untyped halves of one word drawn as a single centred run (VIS-03). Measures both halves so the join
-// never drifts as letters are typed, paints a bg0 halo under every glyph and, when asked, a caret under the
-// next character. Returns { x0, wd, wr, width } so plates can size themselves from the same metrics.
-//   opts: { font, doneColor, remColor, halo=true, caret=false, caretColor, caretAlpha=1, leadColor }
-//   leadColor paints only the first remaining glyph (the key that locks this target) in that colour.
+// Draws `done` (dim) + `remaining` centred on cx as one run (unchanged contract), plus, when asked:
+//   typo (one glyph drawn struck through between done and remaining, counted in the width; MEASURE D4), typoColor,
+//   leadUnderline / leadUnderlinePx (bar under the lead glyph in leadColor), leadPulse 0..1 (one scale bump of the lead glyph),
+//   and the gap dots of a two-word target (WORDS D8, lexiconDrawGapDots). Returns { x0, wd, wr, width }.
+//   opts: { font, doneColor, remColor, halo=true, caret=false, caretColor, caretAlpha=1, leadColor, typo, typoColor,
+//           leadUnderline=false, leadUnderlinePx=2, leadPulse=0 }
 function drawSplitText(ctx, done, remaining, cx, y, opts = {}) {
   const font = opts.font || ctx.font;
   ctx.font = font;
@@ -44,8 +45,11 @@ function drawSplitText(ctx, done, remaining, cx, y, opts = {}) {
   ctx.textBaseline = "middle";
   const wd = done ? ctx.measureText(done).width : 0;
   const wr = remaining ? ctx.measureText(remaining).width : 0;
-  const width = wd + wr;
+  const typo = opts.typo || null;
+  const wt = typo ? ctx.measureText(typo).width : 0;
+  const width = wd + wt + wr;
   const x0 = cx - width / 2;
+  const xr = x0 + wd + wt;                 // where the remaining run starts
   const halo = opts.halo !== false;
   const haloColor = opts.haloColor || PALETTE.rgba("bg0", 0.92);
   if (halo) {
@@ -53,11 +57,17 @@ function drawSplitText(ctx, done, remaining, cx, y, opts = {}) {
     ctx.lineWidth = 3;
     ctx.strokeStyle = haloColor;
     if (done) ctx.strokeText(done, x0, y);
-    if (remaining) ctx.strokeText(remaining, x0 + wd, y);
+    if (typo) ctx.strokeText(typo, x0 + wd, y);
+    if (remaining) ctx.strokeText(remaining, xr, y);
   }
   if (done) {
     ctx.fillStyle = opts.doneColor || PALETTE.rgba("text", 0.45);
     ctx.fillText(done, x0, y);
+  }
+  if (typo) {
+    ctx.fillStyle = opts.typoColor || PALETTE.rgba("danger", 1);
+    ctx.fillText(typo, x0 + wd, y);
+    ctx.fillRect(x0 + wd - 1, Math.round(y) - 1, wt + 2, 2);   // strike-through
   }
   if (remaining) {
     ctx.fillStyle = opts.remColor || PALETTE.rgba("text", 0.92);
@@ -65,14 +75,31 @@ function drawSplitText(ctx, done, remaining, cx, y, opts = {}) {
       const lead = remaining[0];
       const wl = ctx.measureText(lead).width;
       ctx.fillStyle = opts.leadColor;
-      ctx.fillText(lead, x0 + wd, y);
+      ctx.fillText(lead, xr, y);
+      if (opts.leadUnderline) ctx.fillRect(xr, y + fontPx(font) * 0.52, wl, opts.leadUnderlinePx || 2);
+      if (opts.leadPulse > 0) {
+        const s = 1 + 0.3 * Math.sin(Math.PI * (1 - opts.leadPulse));
+        ctx.save();
+        ctx.translate(xr + wl / 2, y);
+        ctx.scale(s, s);
+        ctx.textAlign = "center";
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = haloColor;
+        ctx.strokeText(lead, 0, 0);
+        ctx.fillStyle = opts.leadColor;
+        ctx.fillText(lead, 0, 0);
+        ctx.restore();
+      }
       if (remaining.length > 1) {
         ctx.fillStyle = opts.remColor || PALETTE.rgba("text", 0.92);
-        ctx.fillText(remaining.slice(1), x0 + wd + wl, y);
+        ctx.fillText(remaining.slice(1), xr + wl, y);
       }
     } else {
-      ctx.fillText(remaining, x0 + wd, y);
+      ctx.fillText(remaining, xr, y);
     }
+  }
+  if (typeof lexiconDrawGapDots === "function" && ((done && done.indexOf(" ") !== -1) || (remaining && remaining.indexOf(" ") !== -1))) {
+    lexiconDrawGapDots(ctx, done, remaining, x0, wd, wr, y, opts, xr);   // WORDS: dim dot of glyph width at each gap
   }
   if (opts.caret && remaining) {
     const px = fontPx(font);
@@ -80,7 +107,7 @@ function drawSplitText(ctx, done, remaining, cx, y, opts = {}) {
     const prevAlpha = ctx.globalAlpha;
     ctx.globalAlpha = prevAlpha * (typeof opts.caretAlpha === "number" ? opts.caretAlpha : 1);
     ctx.fillStyle = opts.caretColor || PALETTE.rgba("lime", 1);
-    ctx.fillRect(x0 + wd, y + px * 0.52, cw, 2);
+    ctx.fillRect(xr, y + px * 0.52, cw, 2);
     ctx.globalAlpha = prevAlpha;
   }
   return { x0, wd, wr, width };

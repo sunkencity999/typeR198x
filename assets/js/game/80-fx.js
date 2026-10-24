@@ -254,6 +254,8 @@ Object.assign(Game.prototype, {
   // 2 px danger line flickers along the top edge of the playfield. Never a wash.
   onTypoFx() {
     this.ensureFx();
+    const claimed = !!this._typoClaimed;   // MEASURE (32-typist.js) drew the typed / expected pair itself (D4)
+    this._typoClaimed = false;
     const m = this.fxMotion();
     let ref = this.lock && this.lock.ref && this.lock.ref.alive ? this.lock.ref : null;
     if (!ref) {
@@ -271,6 +273,7 @@ Object.assign(Game.prototype, {
       return;
     }
     if (ref.kind !== "boss") ref.typoT = Math.max(ref.typoT || 0, 0.12);
+    if (claimed) return;   // one glyph pair on screen: the rising expected glyph is skipped; typoEdge (no plate) is kept
     fxPush(this.typoGlyphs, { ch, ref, t: 0, life: fxNum(FXM.typoGlyphS, 0.4), rise: m.anim > 0 ? 10 : 0 }, FX_LIST_CAPS.typoGlyphs);
   },
 

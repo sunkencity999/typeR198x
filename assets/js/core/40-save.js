@@ -11,15 +11,15 @@ function getResumeLevelIndex(save) {
 
 // Full stats / levelStats shapes (CONTRACT §9). Later tracks increment these fields; they always exist.
 function defaultStats() {
-  return { score: 0, combo: 0, mult: 1, correct: 0, total: 0, maxCombo: 0, kills: 0, words: 0, letters: 0, chars: 0, misses: 0, timeMs: 0, bossTimeMs: 0, retries: 0 };
+  return { score: 0, combo: 0, mult: 1, correct: 0, total: 0, maxCombo: 0, kills: 0, words: 0, letters: 0, chars: 0, misses: 0, timeMs: 0, bossTimeMs: 0, retries: 0, overdriveMs: 0, csCountered: 0, csFired: 0 };
 }
 
 function defaultLevelStats() {
-  return { kills: 0, words: 0, chars: 0, correct: 0, total: 0, maxCombo: 0, timeMs: 0, bossTimeMs: 0, damageTaken: 0, waveDamage: 0, bossDamage: 0, surgesCancelled: 0, perfectWaves: 0, perfectWaveBonus: 0, retries: 0, levelScore: 0 };
+  return { kills: 0, words: 0, chars: 0, correct: 0, total: 0, maxCombo: 0, timeMs: 0, bossTimeMs: 0, damageTaken: 0, waveDamage: 0, bossDamage: 0, surgesCancelled: 0, perfectWaves: 0, perfectWaveBonus: 0, retries: 0, levelScore: 0, spdN: 0, spdMs: 0, spdSq: 0, hits: 0, overdriveMs: 0, surgesFired: 0 };
 }
 
 // Every stats field a checkpoint carries (all of them except the live combo/mult).
-const STAT_SNAPSHOT_FIELDS = ["score", "correct", "total", "kills", "words", "letters", "chars", "misses", "maxCombo", "timeMs", "bossTimeMs", "retries"];
+const STAT_SNAPSHOT_FIELDS = ["score", "correct", "total", "kills", "words", "letters", "chars", "misses", "maxCombo", "timeMs", "bossTimeMs", "retries", "overdriveMs", "csCountered", "csFired"];
 
 function makeRunId() {
   let id = "";
@@ -61,6 +61,7 @@ function buildResumeRun(levelIndex, maxHp, shipId) {
     levelStats: defaultLevelStats(),
     shipId,
     difficulty: "standard",
+    mode: "campaign",                  // MODES (D9): a stored run is always a campaign run
     retries: 0,
     checkpoint: snapshotCheckpoint("level", i, stats, hp, 0),
     bossCheckpoint: null,
@@ -101,7 +102,10 @@ const defaultSave = () => ({
   bestWpm: 0,
   victories: 0,
   legacySeeded: false,
-  tutorialSeen: { lock: false, finish: false, powerup: false, boss: false, release: false, accuracy: false },
+  tutorialSeen: { lock: false, finish: false, powerup: false, boss: false, release: false, accuracy: false, phrase: false, surge: false, overdrive: false },
+  onboardingDone: 0,   // ONBOARD (D13): ms epoch when the Flight Check was passed or skipped; 0 = not yet
+  profile: null,       // MEASURE (D6): pilot profile, created lazily by 32-typist.js
+  modes: null,         // MODES (D9): daily / endless / drill records, created on the first finished mode run
   run: null
 });
 
@@ -118,6 +122,7 @@ function migrateRun(run) {
   // E-3: a run migrated from v1 keeps feeding the headline high score even if it was saved mid-game.
   if (legacy) r.legacy = true;
   r.difficulty = r.difficulty || "standard";
+  r.mode = "campaign";   // MODES (D9): forced, never defaulted (a mode run is never stored)
   r.retries = Number.isFinite(r.retries) ? r.retries : 0;
   r.stats = { ...defaultStats(), ...((r.stats && typeof r.stats === "object") ? r.stats : {}) };
   r.levelStats = { ...defaultLevelStats(), ...((r.levelStats && typeof r.levelStats === "object") ? r.levelStats : {}) };
@@ -218,6 +223,9 @@ function migrateSave(obj) {
   }
   save.highScores.sort(byScoreThenNewest);
   if (save.highScores.length > 10) save.highScores.length = 10;
+  save.onboardingDone = Number(obj.onboardingDone) > 0 ? Number(obj.onboardingDone) : 0;   // ONBOARD (D13)
+  // saveMigrate (scaffold): MEASURE normalises save.profile and flags pre-schema-3 WPM as legacy (src = the raw blob).
+  runGameHooks("saveMigrate", { save, src: obj }, null);
   save.schema = SAVE_SCHEMA;
   return save;
 }
@@ -240,6 +248,8 @@ function loadSave() {
 
 // Returns false (and flags the game once) when storage is blocked; the run keeps going in memory (F044).
 function storeSave(save) {
+  // saveStore (scaffold): MEASURE folds its dirty per-key tables into save.profile; this adds no write.
+  runGameHooks("saveStore", { save }, (typeof window !== "undefined" && window.game) || null);
   try {
     localStorage.setItem(LS_KEY, JSON.stringify(save));
     return true;

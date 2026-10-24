@@ -47,7 +47,8 @@ Object.assign(Game.prototype, {
         paused: this.ui.paused,
         levelComplete: this.ui.levelComplete,
         gameOver: this.ui.gameOver,
-        victory: this.ui.victory
+        victory: this.ui.victory,
+        modeResults: this.$("screenModeResults")   // MODES (G11)
       };
     }
     return this._screens;
@@ -432,6 +433,8 @@ Object.assign(Game.prototype, {
   },
 
   async onRestartPressed() {
+    const ra = this.hook("restartWillAsk", { cancel: false });   // MODES: a mode run restarts with its own confirm
+    if (ra.cancel) return;
     const cp = this.run && this.run.checkpoint;
     const cpScore = cp ? (cp.score | 0) : 0;
     if ((this.stats.score | 0) > cpScore) {
@@ -458,6 +461,7 @@ Object.assign(Game.prototype, {
     if (!modal) return;
     const launch = opts.launch !== false;
     this.storyLaunchMode = launch;
+    this.hook("storyWillShow", { launch });   // ONBOARD: first-run Launch shows the summary, re-read opens the briefing
     if (this.storyLaunchBtn) this.storyLaunchBtn.textContent = launch ? "Launch the Keystream" : "Close";
     const back = this.$("btnStoryBack");
     if (back) back.classList.toggle("hidden", !launch);
@@ -813,7 +817,12 @@ Object.assign(Game.prototype, {
       case "levelComplete": this.announce(`Sector ${L} cleared. Score ${score}.${L < 10 ? ` Press Enter for Sector ${L + 1}.` : ""}`); break;
       case "gameOver": this.announce(`Game over in Sector ${L}. Score ${score}. Press Enter to retry.`); break;
       case "victory": this.announce("Victory. All ten sectors cleared."); break;
-      case "playing": if (prev !== "paused") this.announce(`Sector ${L}. Type the first letter of a target to lock on.`); break;
+      case "playing": if (prev !== "paused") {
+        const say = this._sectorCardSay || "";   // PACE / WORDS sector-card lines (45-feedback.js), spoken once
+        this._sectorCardSay = "";
+        if (say) this._sectorCardSaid = say;
+        this.announce(`Sector ${L}. Type the first letter of a target to lock on.${say ? " " + say : ""}`);
+      } break;
       default: break;
     }
   },
@@ -835,6 +844,7 @@ Object.assign(Game.prototype, {
         if (next && this.isVisible(next)) return next;
         return this.btnNewRun;
       }
+      case "modeResults": return this.$("btnModeAgain");   // MODES (G12)
       default: return null;
     }
   },
@@ -882,7 +892,7 @@ Object.assign(Game.prototype, {
     if (prev === "menu" && m !== "menu" && typeof this.stopAttract === "function") this.stopAttract();   // D8
     // review R29: the results count-ups / rank stamp and the ending typewriter end with the screen they belong to.
     if (prev !== m && typeof this.cancelResultsAnimation === "function") {
-      const leaving = prev === "levelComplete" ? "resultsLevel" : prev === "gameOver" ? "resultsOver" : prev === "victory" ? "resultsRun" : null;
+      const leaving = prev === "levelComplete" ? "resultsLevel" : prev === "gameOver" ? "resultsOver" : prev === "victory" ? "resultsRun" : prev === "modeResults" ? "resultsMode" : null;
       if (leaving) this.cancelResultsAnimation(this.$(leaving));
     }
     if (prev === "victory" && m !== "victory" && typeof this.cancelEndingTypewriter === "function") this.cancelEndingTypewriter();
@@ -928,6 +938,7 @@ Object.assign(Game.prototype, {
     this.focusPrimary(m);
     this.requestFrame();
     if (m === "menu" && typeof this.startAttract === "function") this.startAttract();   // D8 (idempotent; waits for the menu bitmaps)
+    if (prev !== m) this.hook("modeChange", { from: prev, to: m });   // every screen / focus / save step above has run
   },
 
   // Game Over: the CRT power-off line (once, full motion only) and a desaturated frozen canvas 600 ms after the hit lands.
@@ -960,6 +971,7 @@ Object.assign(Game.prototype, {
     set("pauseAcc", `${this.getAccuracyPct()}%`);
     set("pauseEyebrow", `Paused // Sector ${String(cfg.level).padStart(2, "0")} · ${cfg.bossName || ""}`.replace(/ · $/, ""));
     if (this.ui.pauseReason) this.ui.pauseReason.textContent = PAUSE_REASON_COPY[this.pauseReason] || PAUSE_REASON_COPY.user;
+    this.hook("pauseScreenFilled", {});   // MODES / ONBOARD relabel the pause screen for their runs
   },
 
   // ------------------------- Settings (C6) -------------------------
@@ -1342,6 +1354,10 @@ Object.assign(Game.prototype, {
   handleTextInput(ch) {
     if (ch == null) return;
     const raw = String(ch);
+    if (raw === " " || raw === "\u3000") {   // U+3000: ideographic space, as on line 1345
+      const sk = this.hook("spaceKey", { source: "text", key: raw, event: null, handled: false });   // WORDS: types the gap
+      if (sk.handled) { this.hideTapToType(); return; }
+    }
     if (raw === "\b" || raw === " " || raw === "　") {
       if (this.mode === "playing" && this.lock && !this.inBoss) this.releaseLock("manual");
       this.hideTapToType();

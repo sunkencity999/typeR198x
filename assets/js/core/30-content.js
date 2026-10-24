@@ -275,6 +275,8 @@ const WORDS_THEMED = [
 
 const ALL_WORDS = [...new Set([...WORDS_EASY, ...WORDS_MED, ...WORDS_HARD, ...WORDS_THEMED].map((w) => w.toLowerCase()))]
   .filter((w) => /^[a-z]+$/.test(w));
+// WORDS (25-lexicon.js): the wave pools drop the non-dictionary inventions and gain real neon words.
+const WAVE_WORDS = (typeof lexiconThemedPool === "function") ? lexiconThemedPool(ALL_WORDS) : ALL_WORDS;
 
 // Single-letter enemies draw from a graded alphabet: home row first, the full a-z from sector 4.
 const LETTER_SETS = {
@@ -291,7 +293,7 @@ const LEVEL_POOL_MIN = 24;
 function buildLevelWordPool(min, max) {
   let lo = clamp(min, WORD_LEN_MIN, WORD_LEN_MAX);
   let hi = clamp(max, lo, WORD_LEN_MAX);
-  const fitting = () => ALL_WORDS.filter((w) => w.length >= lo && w.length <= hi);
+  const fitting = () => WAVE_WORDS.filter((w) => w.length >= lo && w.length <= hi);
   let pool = fitting();
   let growMax = true;
   while (pool.length < LEVEL_POOL_MIN && (lo > WORD_LEN_MIN || hi < WORD_LEN_MAX)) {
@@ -342,6 +344,7 @@ function attachLevelContent(levels) {
     const keys = letterSetKeysForLevel(cfg.level);
     cfg.waveLetterSets = keys.map((k) => LETTER_SETS[k]);
     cfg.letterSet = cfg.level <= 3 ? LETTER_SETS.basic : LETTER_SETS.full;   // the widest alphabet the sector uses
+    if (typeof lexiconAttachLevel === "function") lexiconAttachLevel(cfg);   // WORDS: waveCommon / wavePhrases / waveTextLen / maxTextLen
   }
   return levels;
 }

@@ -2691,3 +2691,27 @@ fieldset.shipGrid > legend {
   -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
 }
+
+/* ===== training scaffold: DOM rendered by shared code (results notes, results tags) ===== */
+.resultsNotes { list-style: none; margin: var(--sp-2) 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 14px;
+  font-family: var(--font-mono); font-size: var(--fs-sm); letter-spacing: 0.12em; text-transform: uppercase; color: var(--c-text); }
+.resultsHead .resultsTag { align-self: center; }
+/* ===== end training scaffold ===== */
+
+/* ===== track:ONBOARD (17-onboarding.js) ===== */
+/* ===== end track:ONBOARD ===== */
+
+/* ===== track:MEASURE (32-typist.js) ===== */
+/* ===== end track:MEASURE ===== */
+
+/* ===== track:PACE (42-pacing.js) ===== */
+/* ===== end track:PACE ===== */
+
+/* ===== track:WORDS (25-lexicon.js) ===== */
+/* ===== end track:WORDS ===== */
+
+/* ===== track:MODES (52-modes.js) ===== */
+/* ===== end track:MODES ===== */
+
+/* ===== track:ARCADE (50-boss.js, 82-overdrive.js) ===== */
+/* ===== end track:ARCADE ===== */

@@ -363,7 +363,8 @@ Object.assign(Game.prototype, {
     };
     const geo = this.plateGeometry();
     ctx.font = geo.font;
-    const maxLen = clamp((cfg.wordMax || 8) + 3, 4, 14);
+    // One cap for MEASURE (+1 typo glyph) and WORDS (two-word plates up to 15 chars, cfg.maxTextLen).
+    const maxLen = clamp(Math.max((cfg.wordMax || 8) + 3, (cfg.maxTextLen | 0) + 1), 4, 17);
     for (let len = 1; len <= maxLen; len++) {
       const tw = ctx.measureText("m".repeat(len)).width;
       const w = len === 1 ? geo.h : Math.ceil(tw + PLATE_PAD);
@@ -374,6 +375,9 @@ Object.assign(Game.prototype, {
       const w = Math.ceil(ctx.measureText(label).width + CAPSULE_PAD);
       add("capsule", bucket(w), CAPSULE_H, "power");
       add("capsule", bucket(w), CAPSULE_H, "locked");
+      const wt = Math.ceil(ctx.measureText(label + "m").width + CAPSULE_PAD);   // MEASURE: the capsule carrying a typo glyph
+      add("capsule", bucket(wt), CAPSULE_H, "power");
+      add("capsule", bucket(wt), CAPSULE_H, "locked");
     }
     add("chip", bucket(geo.minionH), geo.minionH, "minion");
     add("chip", bucket(geo.minionH), geo.minionH, "locked");
@@ -807,7 +811,13 @@ Object.assign(Game.prototype, {
     const h = minion ? geo.minionH : geo.h;
     this.measurePlateText(ctx, en, en.text, font, h);
     const state = this.enemyState(en);
-    const w = en.plateW;
+    // MEASURE (D4): a locked hard miss shows the typed glyph struck through inside the plate for TYPIST_PAIR_MS (the drawn
+    // plate widens by that glyph; en.plateW, targeting and leaks are untouched); leadPulseAt bumps the lead glyph once.
+    const now = nowMs();
+    const typoCh = (typeof TYPIST_PAIR_MS === "number" && en.typoCh && now - (en.typoAt || 0) < TYPIST_PAIR_MS) ? en.typoCh : null;
+    const pulseK = (typeof TYPIST_PULSE_MS === "number" && en.leadPulseAt) ? clamp(1 - (now - en.leadPulseAt) / TYPIST_PULSE_MS, 0, 1) : 0;
+    let w = en.plateW;
+    if (typoCh) { ctx.font = font; w += ctx.measureText(typoCh).width; }
     const rm = !!this.reduceMotion;
     const shape = en.text.length === 1 ? "chip" : "pill";
 
@@ -844,7 +854,11 @@ Object.assign(Game.prototype, {
       remColor: locked ? PALETTE.rgba("lime", 0.92) : PALETTE.rgba("text", 0.92),
       leadColor: locked ? null : PALETTE.rgba("lime", 1),
       caret: locked,
-      caretAlpha: this.caretAlpha()
+      caretAlpha: this.caretAlpha(),
+      typo: typoCh,
+      leadUnderline: !locked && typeof TYPIST_PAIR_MS === "number",   // D4 colour-blind cue, on once MEASURE has landed
+      leadUnderlinePx: (rm && pulseK > 0) ? 4 : 2,
+      leadPulse: (!locked && !rm) ? pulseK : 0
     });
     ctx.restore();
     this.lastPlateDrawn = en;
@@ -857,7 +871,11 @@ Object.assign(Game.prototype, {
     const h = CAPSULE_H;
     this.measurePlateText(ctx, p, p.label, font, h);
     p.labelW = p.textW;
-    const w = p.plateW;
+    const now = nowMs();
+    const typoCh = (typeof TYPIST_PAIR_MS === "number" && p.typoCh && now - (p.typoAt || 0) < TYPIST_PAIR_MS) ? p.typoCh : null;
+    const pulseK = (typeof TYPIST_PULSE_MS === "number" && p.leadPulseAt) ? clamp(1 - (now - p.leadPulseAt) / TYPIST_PULSE_MS, 0, 1) : 0;
+    let w = p.plateW;
+    if (typoCh) { ctx.font = font; w += ctx.measureText(typoCh).width; }   // the plate grows symmetrically; the label centre stays
     const rm = !!this.reduceMotion;
     const accentName = (typeof POWER_ACCENT === "object" && POWER_ACCENT[p.type]) || "violet";
     const accent = PALETTE.has(accentName) ? accentName : "violet";
@@ -901,7 +919,7 @@ Object.assign(Game.prototype, {
     ctx.restore();
 
     // label, centred in the cell right of the divider
-    const lx = p.x - w / 2 + CAPSULE_DIVIDER_X + 4 + p.textW / 2;
+    const lx = p.x - p.plateW / 2 + CAPSULE_DIVIDER_X + 4 + p.textW / 2;
     const done = p.label.slice(0, p.progress);
     const remaining = p.label.slice(p.progress);
     this.drawSplitText(ctx, done, remaining, lx, p.y, {
@@ -910,7 +928,11 @@ Object.assign(Game.prototype, {
       remColor: p.locked ? PALETTE.rgba("lime", 0.92) : PALETTE.rgba("text", 0.92),
       leadColor: p.locked ? null : PALETTE.rgba("lime", 1),
       caret: !!p.locked,
-      caretAlpha: this.caretAlpha()
+      caretAlpha: this.caretAlpha(),
+      typo: typoCh,
+      leadUnderline: !p.locked && typeof TYPIST_PAIR_MS === "number",
+      leadUnderlinePx: (rm && pulseK > 0) ? 4 : 2,
+      leadPulse: (!p.locked && !rm) ? pulseK : 0
     });
     ctx.restore();
   },
@@ -1211,15 +1233,18 @@ Object.assign(Game.prototype, {
     const seg = boss.segment || "";
     const done = seg.slice(0, boss.progress);
     const rem = seg.slice(boss.progress);
+    const typoCh = (typeof TYPIST_PAIR_MS === "number" && boss.typoCh && nowMs() - (boss.typoAt || 0) < TYPIST_PAIR_MS) ? boss.typoCh : null;
     ctx.font = FONT.target(40, 700);
-    fitText(ctx, seg, SLAB.centreW - 24, 26, 2, (px) => FONT.target(px, 700));
+    const tw = typoCh ? ctx.measureText(typoCh).width : 0;
+    fitText(ctx, seg, SLAB.centreW - 24 - tw, 26, 2, (px) => FONT.target(px, 700));
     const segFont = ctx.font;
     this.drawSplitText(ctx, done, rem, ccx, s.y + 38, {
       font: segFont,
       doneColor: PALETTE.rgba("text", 0.45),
       remColor: PALETTE.rgba("lime", 0.92),
       caret: true,
-      caretAlpha: this.caretAlpha()
+      caretAlpha: this.caretAlpha(),
+      typo: typoCh   // MEASURE (D4): the pair sits in the slab's centre cell
     });
     const next = boss.nextSegment;
     ctx.textAlign = "center";
@@ -1319,6 +1344,9 @@ Object.assign(Game.prototype, {
     // L15: banners / callouts / letterbox / sector card, unshaken (45-feedback.js)
     if (typeof this.drawBanner === "function") this.drawBanner(ctx);
     if (typeof this.redrawActiveTarget === "function") this.redrawActiveTarget(ctx); // L16 (D1): locked plate over a centre banner; uses this.shakeNow / this.bannerRect
+    const ro = this._evtOverlay || (this._evtOverlay = { ctx: null });
+    ro.ctx = ctx;
+    this.hook("renderOverlay", ro);   // MEASURE: the unlocked-miss glyph popping off the gun (unshaken; listeners apply shakeNow)
 
     this.drawVignette(ctx);                                    // L17
   },

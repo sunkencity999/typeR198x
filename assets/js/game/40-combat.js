@@ -39,7 +39,7 @@ Object.assign(Game.prototype, {
       if (newest[l] !== null && newest[l] > this.w - 280) continue;
       candidates.push(l);
     }
-    if (candidates.length) return choice(candidates);
+    if (candidates.length) return this.randPick(candidates);
     let best = 0, bx = Infinity;
     for (let l = 0; l < n; l++) {
       const v = newest[l] === null ? -Infinity : newest[l];
@@ -71,8 +71,8 @@ Object.assign(Game.prototype, {
   pickWord(cfg, wave) {
     const pool = wordsForWave(cfg, wave);
     if (!this.recentWords) this.recentWords = [];
-    let w = choice(pool);
-    for (let i = 0; i < 6 && this.recentWords.includes(w); i++) w = choice(pool);
+    let w = this.randPick(pool);
+    for (let i = 0; i < 6 && this.recentWords.includes(w); i++) w = this.randPick(pool);
     this.recentWords.push(w);
     if (this.recentWords.length > 12) this.recentWords.shift();
     return w;
@@ -82,11 +82,18 @@ Object.assign(Game.prototype, {
   makeEnemyText(cfg, wave = this.wave, avoidSet = null) {
     const letterRatio = waveLetterRatio(cfg, wave);
     const letters = letterSetForWave(cfg, wave);
+    // enemyTextWillPick (scaffold): WORDS (25-lexicon.js) picks, MODES overrides in endless / drill; with evt.text still
+    // null the table pick below runs. Reused payload; every draw goes through this.rand().
+    const evt = this._evtPick || (this._evtPick = { cfg: null, wave: 0, avoid: null, attempt: 0, text: null });
+    evt.cfg = cfg; evt.wave = wave; evt.avoid = avoidSet;
     let text = null;
     for (let attempt = 0; attempt < 9; attempt++) {
-      text = Math.random() < letterRatio ? letters[randi(0, letters.length - 1)] : this.pickWord(cfg, wave);
+      evt.text = null; evt.attempt = attempt;
+      this.hook("enemyTextWillPick", evt);
+      text = evt.text != null ? evt.text : (this.rand() < letterRatio ? this.randPick(letters) : this.pickWord(cfg, wave));
       if (!avoidSet || !avoidSet.has(text[0])) break;
     }
+    evt.cfg = null; evt.avoid = null; evt.text = null;
     return text;
   },
 
@@ -120,28 +127,42 @@ Object.assign(Game.prototype, {
 
   spawnEnemy() {
     const cfg = LEVELS[this.levelIndex];
-    if (this.countAliveEnemies() >= waveMaxEnemies(cfg, this.wave, this.phoneProfile())) return null;
+    const t = this.waveTuningNow();
+    if (this.countAliveEnemies() >= waveMaxEnemies(cfg, this.wave, this.phoneProfile()) + (t ? t.maxEnemiesAdd : 0)) return null;
     const text = this.makeEnemyText(cfg, this.wave, this.liveFirstChars());
     const lane = this.pickSpawnLane();
     const y = this.laneYs()[lane];
     const len = text.length;
-    let speed = waveSpeed(cfg, this.wave) * rand(0.92, 1.08);
+    let speed = waveSpeed(cfg, this.wave) * this.randRange(0.92, 1.08) * (t ? t.speedMul : 1);
     if (len >= LONG_WORD_LEN) speed *= LONG_WORD_SPEED_MUL;
-    else if (len === 1) speed *= rand(LETTER_SPEED_MUL[0], LETTER_SPEED_MUL[1]);
+    else if (len === 1) speed *= this.randRange(LETTER_SPEED_MUL[0], LETTER_SPEED_MUL[1]);
     const en = new Enemy({ text, x: this.w, y, speed, lane });
-    en.x = this.w + en.plateW / 2 + rand(10, 90);   // plate fully off-screen, targetable ~0.3 s later
+    en.x = this.w + en.plateW / 2 + this.randRange(10, 90);   // plate fully off-screen, targetable ~0.3 s later (PACE P2: 10-30)
     this.enemies.push(en);
+    this.hook("enemySpawned", { en, cfg, wave: this.wave });   // WORDS: first two-word tip
     this.lastSpawnLane = lane;
     this._noteSpawn(len);
     return en;
   },
 
+  // The tuning of the wave in progress (beginWave resets it, waveWillStart listeners rewrite it), or null when it
+  // belongs to another wave / sector.
+  waveTuningNow() {
+    const t = this.waveTuning;
+    return (t && t.levelIndex === this.levelIndex && t.wave === (this.wave | 0)) ? t : null;
+  },
+  waveQuota() {
+    const t = this.waveTuningNow();
+    return (t && t.quota > 0) ? t.quota : (LEVELS[this.levelIndex].quota[this.wave] || 1);
+  },
+
   // Regular stream + hungry spawner + pressure valve. Never spawns more than the wave still needs.
   tickSpawner(dt, cfg) {
     const alive = this.countAliveEnemies();
-    const quota = cfg.quota[this.wave] || 1;
-    this.spawnAcc += dt * waveSpawnRate(cfg, this.wave, this.waveKills);
-    if (alive < HUNGRY_MIN_ALIVE) {
+    const t = this.waveTuningNow();
+    const quota = this.waveQuota();
+    this.spawnAcc += dt * waveSpawnRate(cfg, this.wave, this.waveKills, quota) * (t ? t.spawnMul : 1);
+    if (alive < (t ? t.hungryMinAlive : HUNGRY_MIN_ALIVE)) {
       this.hungryT = (this.hungryT || 0) + dt;
       if (this.hungryT >= HUNGRY_SPAWN_S) {
         this.hungryT = 0;
@@ -151,7 +172,7 @@ Object.assign(Game.prototype, {
       this.hungryT = 0;
     }
     if (this.waveKills + alive >= quota) { this.spawnAcc = Math.min(this.spawnAcc, 1); return; }
-    if (this.liveChars() > pressureCap(cfg)) { this.spawnAcc = Math.min(this.spawnAcc, 1); return; }
+    if (this.liveChars() > (t ? t.pressureCap : pressureCap(cfg))) { this.spawnAcc = Math.min(this.spawnAcc, 1); return; }
     while (this.spawnAcc >= 1) {
       this.spawnAcc -= 1;
       if (!this.spawnEnemy()) { this.spawnAcc = Math.min(this.spawnAcc, 0.999); break; }
@@ -195,13 +216,15 @@ Object.assign(Game.prototype, {
       case "spawn": {
         this.waveT += dt;
         this.tickSpawner(dt, cfg);
-        if (this.waveKills >= (cfg.quota[this.wave] || 1) || this.waveT >= cfg.cap) this.endWave();
+        const wt = this.waveTuningNow();
+        if (this.waveKills >= this.waveQuota() || this.waveT >= (wt ? wt.cap : cfg.cap)) this.endWave();
         break;
       }
       case "drain": {
         const alive = this.countAliveEnemies();
         if ((alive === 0 && this.phaseT >= DRAIN_MIN_S) || this.phaseT >= DRAIN_MAX_S) {
-          if (alive) this.detonateLeftovers();
+          const detonated = alive ? this.detonateLeftovers() : 0;
+          this.hook("waveDrained", { wave: this.wave, level: cfg.level, byQuota: this._waveByQuota !== false, detonated });
           if (this.wave < 2) {
             this.setWavePhase("banner");
             this.showBanner({ kind: "wave", eyebrow: `WAVE ${this.wave + 2} / 3` });
@@ -219,6 +242,7 @@ Object.assign(Game.prototype, {
         if (this.phaseT >= BOSS_APPROACH_S) this.beginBossFight();
         break;
       }
+      case "modeEnd": break;   // MODES: a finished mode run's outro (no spawns, no powerup floor)
       default:
         this.setWavePhase("spawn");
     }
@@ -232,6 +256,14 @@ Object.assign(Game.prototype, {
     this._waveFinished = false;
     this.hungryT = 0;
     this.spawnAcc = SPAWN_ACC_PRIME;
+    // Per-wave tuning (scaffold): table defaults, then waveWillStart listeners (PACE pace, MODES streams) rewrite it.
+    const cfg = LEVELS[this.levelIndex];
+    this._waveByQuota = true;
+    const t = this.waveTuning || (this.waveTuning = { levelIndex: -1, wave: -1, quota: 1, spawnMul: 1, maxEnemiesAdd: 0, speedMul: 1, hungryMinAlive: HUNGRY_MIN_ALIVE, cap: 0, pressureCap: 0 });
+    t.levelIndex = this.levelIndex; t.wave = this.wave;
+    t.quota = cfg.quota[this.wave] || 1; t.spawnMul = 1; t.maxEnemiesAdd = 0; t.speedMul = 1; t.hungryMinAlive = HUNGRY_MIN_ALIVE;
+    t.cap = cfg.cap; t.pressureCap = pressureCap(cfg);
+    this.hook("waveWillStart", { wave: this.wave, level: cfg.level, levelIndex: this.levelIndex, cfg, tuning: t });
     this.setWavePhase("spawn");
     this.sfx.waveStart(this.wave + 1);
     if (this.wave === 0) {
@@ -245,14 +277,20 @@ Object.assign(Game.prototype, {
   endWave() {
     if (this.wavePhase !== "spawn") return;
     const cfg = LEVELS[this.levelIndex];
+    const quota = this.waveQuota();
+    const byQuota = this.waveKills >= quota;
     this._waveFinished = true;
-    this.sfx.waveClear(this.wave + 1);
-    if ((this.waveDmg || 0) === 0 && this.waveKills > 0) {
+    this._waveByQuota = byQuota;
+    // waveWillEnd (scaffold): PACE pays PERFECT WAVE only by quota (D3) and mutes the clear sting on a timeout.
+    const evt = this.hook("waveWillEnd", { wave: this.wave, level: cfg.level, byQuota, quota, kills: this.waveKills, dmg: this.waveDmg || 0,
+      alive: this.countAliveEnemies(), waveT: this.waveT, perfect: (this.waveDmg || 0) === 0 && this.waveKills > 0, clearSfx: true });
+    if (evt.clearSfx) this.sfx.waveClear(this.wave + 1);
+    if (evt.perfect) {
       this.levelStats.perfectWaves = (this.levelStats.perfectWaves | 0) + 1;
       const bonus = Math.round(SCORE.perfectWave(cfg.level) * SCORE.retryMul(this.levelStats.retries | 0));
-      this.levelStats.perfectWaveBonus = (this.levelStats.perfectWaveBonus | 0) + bonus;   // what the results card lists as banked
-      this.addScore(bonus, { kind: "bonus", x: this.w / 2, y: this.hudSafeTop + 96 });
-      this.showBanner({ kind: "callout", title: "PERFECT WAVE", sub: `+${formatInt(bonus)}`, color: "amber" });
+      const gained = this.addScore(bonus, { kind: "bonus", x: this.w / 2, y: this.hudSafeTop + 96 });   // diff().score applies once
+      this.levelStats.perfectWaveBonus = (this.levelStats.perfectWaveBonus | 0) + gained;   // what the results card lists as banked
+      this.showBanner({ kind: "callout", title: "PERFECT WAVE", sub: `+${formatInt(gained)}`, color: "amber" });
     }
     this.setWavePhase("drain");
   },
@@ -260,6 +298,10 @@ Object.assign(Game.prototype, {
   // 3 s danger callout, then the boss. Also the hard cap for levelT >= duration (harness forceBoss).
   beginBossApproach() {
     if (this.inBoss || this.wavePhase === "approach") return;
+    const ba = this._evtApproach || (this._evtApproach = { cancel: false });
+    ba.cancel = false;
+    this.hook("bossWillApproach", ba);   // MODES: no boss in a mode run; the daily sortie ends here after wave 3
+    if (ba.cancel) return;
     const cfg = LEVELS[this.levelIndex];
     this.levelIntro = null;
     this.detonateLeftovers();
@@ -312,9 +354,9 @@ Object.assign(Game.prototype, {
     let base = minion ? SCORE.minion : (len <= 1 ? SCORE.letter : SCORE.word(len));
     if (secondary) base *= SCORE.secondaryMul;
     else if (!minion && len > 1 && en.cleanSoFar) base *= SCORE.cleanMul;
-    const gained = this.addScore(base * mult);
+    const gained = this.addScore(base * mult, { kind: "kill" });
     if (gained > 0) {
-      const tier = (typeof this.tierColor === "function") ? this.tierColor(this.stats.mult | 0) : "text";
+      const tier = typeof this.scoreFloaterColor === "function" ? this.scoreFloaterColor() : (typeof this.tierColor === "function" ? this.tierColor(this.stats.mult | 0) : "text");
       this.addFloater(en.x, en.y - ((en.plateH || 40) / 2 + 14), `+${formatInt(gained)}`, tier, len >= 8 ? 26 : 20);
     }
     if (typeof this.notePlateDeath === "function") this.notePlateDeath(en, "kill");
@@ -397,6 +439,7 @@ Object.assign(Game.prototype, {
     en.dying = true;
     if (this.lock && this.lock.ref === en) { this.lock = null; this.lockMisses = 0; }
     if (this.bossClear) return;
+    this.hook("leak", { en, kind: en.kind, len: en.text.length });
     this._noteLeak();
     this.sfx.impact();
     // Contact slam (JUICE-06): the plate itself is the hit (danger plate 90 ms, struck through), the ship kicks,
@@ -413,6 +456,10 @@ Object.assign(Game.prototype, {
   // ------------------------- HP, shield, i-frames -------------------------
   // source: 'leak' | 'minion' | 'surge'. Returns the HP actually lost.
   takeDamage(amount, source = "leak") {
+    const dw = this._evtDamage || (this._evtDamage = { amount: 0, source: "", cancel: false });
+    dw.amount = amount; dw.source = source; dw.cancel = false;
+    this.hook("damageWillApply", dw);   // MODES: endless / drill have no hull
+    if (dw.cancel) return 0;
     if (this.bossClear) return 0;
     if ((this.invulnT || 0) > 0) return 0;
     const dmg = Math.round(Math.max(0, amount) * (this.diff().damage || 1));
@@ -434,6 +481,7 @@ Object.assign(Game.prototype, {
     ls.damageTaken = (ls.damageTaken | 0) + dmg;
     if (this.inBoss) ls.bossDamage = (ls.bossDamage | 0) + dmg;
     else { ls.waveDamage = (ls.waveDamage | 0) + dmg; this.waveDmg = (this.waveDmg || 0) + dmg; }
+    this.hook("hullDamage", { dmg, source, hpAfter: this.player.hp, inBoss: !!this.inBoss, wave: this.wave | 0, phase: this.boss ? (this.boss.phase | 0) : -1 });
     this.onComboBreak(this.stats.combo | 0);
     if (source !== "surge") this.sfx.damage();   // surgeFire() carries its own damage() hit
     this.player.hitT = 0.12;   // white hull overlay (VIS-06)
@@ -478,7 +526,7 @@ Object.assign(Game.prototype, {
     if (!entries.length) entries = POWERUP_ORDER.map((id) => [id, weights[id] || 0]).filter(([, w]) => w > 0);
     if (!entries.length) return null;
     const total = entries.reduce((a, [, w]) => a + w, 0);
-    let r = Math.random() * total;
+    let r = this.rand() * total;
     for (const [id, w] of entries) {
       r -= w;
       if (r < 0) return id;
@@ -493,7 +541,7 @@ Object.assign(Game.prototype, {
     if (en.kind === "bossMinion") p = POWERUP_DROP.pMinion;
     else if (en.text.length >= POWERUP_DROP.wordMinLen) p = POWERUP_DROP.pWord(cfg.level);
     else p = POWERUP_DROP.pLetter;
-    if (Math.random() < p) return this.spawnPowerup({ x: en.x, y: en.y, fromKill: true });
+    if (this.rand() < p) return this.spawnPowerup({ x: en.x, y: en.y, fromKill: true });
     return null;
   },
 
@@ -502,8 +550,13 @@ Object.assign(Game.prototype, {
   spawnPowerup(opts = {}) {
     const cfg = LEVELS[this.levelIndex];
     if (this.countAlivePowerups() >= POWERUP_DROP.maxAlive) return null;
-    const type = (opts.type && POWERUP_TYPES[opts.type]) ? opts.type : this.rollPowerupType();
+    let type = (opts.type && POWERUP_TYPES[opts.type]) ? opts.type : this.rollPowerupType();
     if (!type) return null;
+    const pw = this._evtPowerup || (this._evtPowerup = { type: "", fromKill: false, cancel: false });
+    pw.type = type; pw.fromKill = !!opts.fromKill; pw.cancel = false;
+    this.hook("powerupWillSpawn", pw);   // ONBOARD: none during the check; MODES: none in a drill, no SHIELD / REPAIR in endless
+    if (pw.cancel) return null;
+    if (pw.type !== type && POWERUP_TYPES[pw.type]) type = pw.type;
     const def = POWERUP_TYPES[type];
     const fromKill = !!opts.fromKill && Number.isFinite(opts.x) && Number.isFinite(opts.y);
     const speed = cfg.speed * POWERUP_DROP.homingSpeedMul;
@@ -516,7 +569,7 @@ Object.assign(Game.prototype, {
     } else {
       lane = this.pickSpawnLane();
       y = ys[lane];
-      x = this.w + 60 + rand(0, 80);
+      x = this.w + 60 + this.randRange(0, 80);
     }
     const homing = fromKill ? { tx: this.player.x + 140, ty: this.player.y } : null;
     const pu = new Powerup({ type, label: def.label, x, y, speed, lane, fromKill, ttl: POWERUP_DROP.lifetimeS, homing });
@@ -552,7 +605,7 @@ Object.assign(Game.prototype, {
     if (typeof this.notePlateDeath === "function") this.notePlateDeath(p, "collect");
     if (typeof this.addShockwave === "function") this.addShockwave(p.x, p.y, 60, accent === "text" ? "cyan" : accent, 0.24);
     this.addExplosion(p.x, p.y, 16);
-    const gained = this.addScore(SCORE.pickup * mult);
+    const gained = this.addScore(SCORE.pickup * mult, { kind: "pickup" });
     this.addFloater(p.x, p.y - ((p.plateH || 36) / 2 + 14), `${def.label.toUpperCase()} +${formatInt(gained)}`, accent, 20);
     if (typeof this.announce === "function") this.announce(`${def.label} collected`); // review R48: the floater is canvas-only
     if (!this.powerMax) this.powerMax = {};
@@ -600,6 +653,7 @@ Object.assign(Game.prototype, {
   maybePrefetchNext() {
     if (this._prefetched) return;
     this._prefetched = true;
+    if (this.runMode() !== "campaign") return;   // MODES (G17)
     if (typeof this.prefetchNextSector === "function") this.prefetchNextSector();
     const sfx = this.sfx;
     if (sfx && typeof sfx.prefetchMusic === "function" && typeof sfx.trackForLevel === "function" && this.levelIndex < LEVELS.length - 1) {
@@ -632,6 +686,10 @@ Object.assign(Game.prototype, {
     const cfg = LEVELS[this.levelIndex];
     if (!Game.prototype._feedbackHooked) this.installFeedbackHooks();
     if (!this.chainTargets) this.chainTargets = [];
+    const fe = this._evtFrame || (this._evtFrame = { dt: 0, claimed: false });
+    fe.dt = dt; fe.claimed = false;
+    this.hook("frameWillUpdate", fe);   // ONBOARD: the Flight Check claims the frame and runs its reduced update
+    if (fe.claimed) return;
 
     const intro = !!this.levelIntro;
     if (!intro) this.levelT += dt;
@@ -695,6 +753,9 @@ Object.assign(Game.prototype, {
     this.updateFloaters(dt);
     this.updateBanner(dt);
     if (typeof this.tickPresentation === "function") this.tickPresentation(dt);
+    const tk = this._evtTick || (this._evtTick = { dt: 0 });
+    tk.dt = dt;
+    this.hook("tick", tk);   // MODES clocks, ARCADE Overdrive meter
 
     if (!this._prefetched && this.levelT >= 0.25 * cfg.duration) this.maybePrefetchNext();
 

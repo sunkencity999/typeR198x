@@ -225,10 +225,10 @@ export async function openProbe(name, opts = {}) {
         if (until && until(st)) break;
         if (st.mode !== "playing") { await sleep(80); continue; }
         const k = await P.nextKey();
-        if (k && /^[a-z]$/.test(k)) {
+        if (k && /^[a-z ]$/.test(k)) {
           const wrong = Math.random() > accuracy;
           const key = wrong ? "abcdefghijklmnopqrstuvwxyz".replace(k, "")[Math.floor(Math.random() * 25)] : k;
-          await page.keyboard.press(key);
+          await page.keyboard.press(key === " " ? "Space" : key);
         }
         await sleep(50 + Math.random() * 30);
       }

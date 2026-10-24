@@ -740,9 +740,10 @@ Object.assign(Game.prototype, {
       ctx.globalAlpha = u < 0.7 ? 1 : (1 - u) / 0.3;
       ctx.lineWidth = 3;
       ctx.strokeStyle = PALETTE.rgba("bg0", 0.85);
-      ctx.strokeText(g.ch, ref.x, y);
+      const gl = typeof lexiconGlyphFor === "function" ? lexiconGlyphFor(g.ch) : g.ch;   // WORDS: the gap shows as "·"
+      ctx.strokeText(gl, ref.x, y);
       ctx.fillStyle = PALETTE.rgba("danger", 1);
-      ctx.fillText(g.ch, ref.x, y);
+      ctx.fillText(gl, ref.x, y);
     }
     ctx.globalAlpha = 1;
     ctx.textAlign = "start";

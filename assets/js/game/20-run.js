@@ -3,11 +3,14 @@
 // One checkpoint model (SYS-08): a 'level' checkpoint is taken on every fresh sector entry and a 'boss'
 // checkpoint when a boss fight begins. Restart sector / Retry sector / Retry boss / Continue after a death
 // all restore one of those two snapshots, so every button on Pause and Game Over does what its label says.
+const DIFF_STANDARD = Object.freeze({ id: "standard", score: 1, damage: 1 });
+
 Object.assign(Game.prototype, {
   // ------------------------- Run identity -------------------------
-  // Difficulty is deferred this release: the standard row is the only one.
+  // Difficulty row: standard, or PACE's Cadet row while that sector is flown at Cadet pace (42-pacing.js paceDiffRow).
   diff() {
-    return { id: "standard", score: 1 };
+    const row = typeof this.paceDiffRow === "function" ? this.paceDiffRow() : null;
+    return row || DIFF_STANDARD;
   },
 
   newRunRecord(levelIndex, startLevel) {
@@ -29,6 +32,7 @@ Object.assign(Game.prototype, {
       levelStats: { ...this.levelStats },
       shipId: this.player.shipId || this.getSelectedShipId(),
       difficulty: "standard",
+      mode: "campaign",   // MODES (D9): beginModeRun sets its own mode on its own record
       retries: 0,
       // review R3: the headline before this run. newHigh (results cards) compares against this snapshot, never
       // the live save.highScore, which the autosave and the sector-10 clear raise before the card is built.
@@ -73,8 +77,11 @@ Object.assign(Game.prototype, {
   },
 
   // Shared by startNewRun (sector 1) and startSector(i): bank the abandoned run, reset player/stats, new run record.
-  beginRunAt(levelIndex) {
+  beginRunAt(levelIndex, opts = null) {
     const i = clamp(levelIndex | 0, 0, 9);
+    // runWillStart (scaffold): ONBOARD holds a fresh save's first run for the Flight Check and calls beginRunAt(0) again.
+    const rs = this.hook("runWillStart", { levelIndex: i, mode: (opts && opts.mode) || "campaign", hold: false });
+    if (rs.hold) return;
     const L = i + 1;
     this.bankAbandonedRun(); // bank whatever run is being abandoned (F009), stored or live (review R22)
     this.setPlayerShip(this.getSelectedShipId());
@@ -127,6 +134,8 @@ Object.assign(Game.prototype, {
     const fromMenu = !!(opts && opts.fromMenu);
     const restoredRun = (opts && opts.restoredRun) || null;
     const fresh = !!(opts && opts.fresh);
+    const carryHp = !!(opts && opts.carryHp);   // PACE (D3): Level Complete -> Next keeps the repaired hull
+    this.hook("levelWillStart", { levelIndex: clamp(levelIndex | 0, 0, 9), fresh, restored: !!restoredRun, fromMenu });
 
     this.levelIndex = clamp(levelIndex, 0, 9);
     const cfg = LEVELS[this.levelIndex];
@@ -172,7 +181,7 @@ Object.assign(Game.prototype, {
       this.power = { spread: 0, pierce: 0, rapid: 0, multiplier: 0 };
       this.player.shield = 0;
       this.player.maxHp = Math.max(this.player.maxHp, getHpBonusForLevel(cfg.level));
-      this.player.hp = this.player.maxHp;
+      this.player.hp = carryHp ? clamp(Math.round(this.player.hp) || this.player.maxHp, 1, this.player.maxHp) : this.player.maxHp;
       this.levelStats = defaultLevelStats();
       run.levelIndex = this.levelIndex;
       run.levelT = 0;
@@ -216,8 +225,17 @@ Object.assign(Game.prototype, {
       this.showBanner({ kind: "sector", eyebrow: "ENTERING", title: `SECTOR ${cfg.level}`, sub: `3 WAVES // ${cfg.bossName}` });
     }
 
+    const modeBefore = this.mode;
     if (fromMenu) this.setMode("playing");
+    // Sector-card lines (PACE / WORDS) are spoken by announceMode("playing"), which is silent after a pause and absent
+    // without fromMenu: speak them here in those two cases (Restart sector from pause, direct startLevel calls).
+    if (this._sectorCardSay && (modeBefore === "paused" || modeBefore === "playing")) {
+      this.announce(`Sector ${cfg.level}. ${this._sectorCardSay}`);
+      this._sectorCardSaid = this._sectorCardSay;
+      this._sectorCardSay = "";
+    }
     this.updateHUD();
+    this.hook("sectorStart", { levelIndex: this.levelIndex, level: cfg.level, fresh, restored: !!restoredRun, inBoss: !!this.inBoss });
     this.saveRun(true);
   },
 
@@ -255,6 +273,8 @@ Object.assign(Game.prototype, {
   // Pause "Restart sector" / Game Over "Retry sector": back to the level checkpoint.
   restartLevel() {
     if (this.bossClear) return; // the finale is banking the clear; Restart is hidden meanwhile (F039)
+    const rw = this.hook("restartWillRun", { kind: "level", cancel: false });   // MODES: a mode run restarts itself
+    if (rw.cancel) return;
     const run = this.run || this.save.run;
     const cp = run && run.checkpoint;
     if (!run || !cp) {
@@ -272,6 +292,8 @@ Object.assign(Game.prototype, {
 
   // Game Over "Retry boss": back to the boss checkpoint, same boss rebuilt at its phase start, intro replayed.
   retryBoss() {
+    const rw = this.hook("restartWillRun", { kind: "boss", cancel: false });
+    if (rw.cancel) return;
     const run = this.run || this.save.run;
     const cp = run && run.bossCheckpoint;
     if (!run || !cp || !run.boss) {
@@ -298,7 +320,7 @@ Object.assign(Game.prototype, {
   advanceLevel() {
     if (this.levelIndex >= 9) return;
     this.levelIndex++;
-    this.startLevel(this.levelIndex, { fromMenu: true, fresh: true });
+    this.startLevel(this.levelIndex, { fromMenu: true, fresh: true, carryHp: true });
   },
 
   stopToMenu(saveRun = true) {
@@ -332,7 +354,9 @@ Object.assign(Game.prototype, {
     const ls = this.levelStats || {};
     // The live-banked counters the results card lists ride along so Retry boss keeps them (restoreCheckpoint resets levelStats).
     const extra = kind === "boss" ? { bossPhase: (this.boss ? this.boss.phase : 0) | 0, perfectWaves: ls.perfectWaves | 0, perfectWaveBonus: ls.perfectWaveBonus | 0, surgesCancelled: ls.surgesCancelled | 0 } : null;
-    return snapshotCheckpoint(kind, levelIndex, this.stats, this.player.maxHp, retries, extra);
+    const cp = snapshotCheckpoint(kind, levelIndex, this.stats, this.player.maxHp, retries, extra);
+    this.hook("checkpoint", { kind, levelIndex, cp });   // ARCADE adds lvSurgesFired / lvOverdriveMs to boss checkpoints
+    return cp;
   },
 
   // stats <- snapshot, combo 0, mult recomputed, full HP, no shield/power, retries + 1 on the run and the level.
@@ -357,6 +381,7 @@ Object.assign(Game.prototype, {
     this.stats.retries = (this.stats.retries | 0) + 1;
     this.levelStats = { ...defaultLevelStats(), retries: run ? run.retries : 1 };
     this.levelIndex = clamp(cp.levelIndex | 0, 0, 9);
+    this.hook("checkpointRestored", { kind: cp.kind, levelIndex: this.levelIndex, cp });
   },
 
   // ------------------------- Level clear -------------------------
@@ -375,14 +400,19 @@ Object.assign(Game.prototype, {
     this.lastTally = tally;
 
     this.save.lastUnlockedLevel = Math.max(this.save.lastUnlockedLevel || 1, Math.min(10, L + 1));
+    const hpBefore = this.player.hp, maxHpBefore = this.player.maxHp;
     const nextMax = getHpBonusForLevel(Math.min(L + 1, 10));
     if (nextMax > this.player.maxHp) this.player.maxHp = nextMax;
-    this.player.hp = this.player.maxHp;
+    // clearWillRepair (scaffold): PACE carries the hull from sector 4 (evt.hp); the default is the full refill.
+    const he = this.hook("clearWillRepair", { level: L, levelIndex: i, hpBefore, maxHpBefore, maxHp: this.player.maxHp, hp: this.player.maxHp });
+    this.player.hp = clamp(Math.round(Number(he.hp) || this.player.maxHp), 1, this.player.maxHp);
 
     const results = this.buildResults("level");
     this.lastResults = results;
     this.recordSectorBest(L, results);
-    if (results.wpm > (this.save.bestWpm | 0)) this.save.bestWpm = results.wpm;
+    // sectorEnd (scaffold): MEASURE logs the session and Best WPM and sets handled; otherwise the legacy bestWpm write.
+    const se = this.hook("sectorEnd", { results, outcome: "clear", level: L, levelIndex: i, handled: false });
+    if (!se.handled && results.wpm > (this.save.bestWpm | 0)) this.save.bestWpm = results.wpm;
 
     const run = this.run;
     if (L >= 10) {
@@ -401,7 +431,7 @@ Object.assign(Game.prototype, {
       run.boss = null;
       run.bossCheckpoint = null;
       run.retries = 0;
-      run.hp = this.player.maxHp;
+      run.hp = this.player.hp;   // PACE (D3): the repaired hull is what Continue resumes with
       run.maxHp = this.player.maxHp;
       run.shield = 0;
       run.power = { spread: 0, pierce: 0, rapid: 0, multiplier: 0 };
@@ -422,6 +452,19 @@ Object.assign(Game.prototype, {
     return Math.round(((chars | 0) / 5) / (timeMs / 60000));
   },
 
+  // Announcement tail of a results card: MEASURE's speech lines, then ARCADE's notes (aria text); "" or " ...".
+  resultsSpeech(r) {
+    const parts = [];
+    if (r && Array.isArray(r.speech)) for (const s of r.speech) if (s) parts.push(String(s));
+    if (r && Array.isArray(r.notes)) for (const n of r.notes) { const t = n && (n.aria || n.text); if (t) parts.push(String(t)); }
+    return parts.length ? " " + parts.join(" ") : "";
+  },
+  // Notes a WillShow listener pushed (PACE: hull, Cadet offer); "" or " ...".
+  notesSpeech(notes) {
+    const list = Array.isArray(notes) ? notes.filter(Boolean) : [];
+    return list.length ? " " + list.join(" ") : "";
+  },
+
   // scope: 'level' (this sector; Level Complete) | 'over' (the run so far; Game Over) | 'run' (whole run; Victory).
   // Flags (newHigh / newSectorBest / newWpm) compare against the save as it stands when called, so call before
   // recordSectorBest / commitHighScore.
@@ -433,7 +476,9 @@ Object.assign(Game.prototype, {
     const level = scope === "level";
     const src = level ? ls : st;
     const timeMs = Math.round(src.timeMs || 0);
-    const wpm = this.grossWpm(src.chars | 0, timeMs);
+    // results.wpm is MEASURE's hand speed for the scope (D1) when present; the gross figure stays as results.throughput.
+    const throughput = this.grossWpm(src.chars | 0, timeMs);
+    const wpm = typeof this.typistScopeWpm === "function" ? this.typistScopeWpm(scope) : throughput;
     const acc = level ? this.getLevelAccuracyPct() : ((st.total | 0) > 0 ? Math.round((st.correct / st.total) * 10000) / 100 : 100);
     const hpPts = (ls.damageTaken | 0) === 0 ? 1 : clamp(1 - (ls.damageTaken | 0) / Math.max(1, this.player.maxHp), 0, 1);
     const rank = rankFor(acc, wpm, hpPts, L);   // level-aware speed window for sectors 1-3 (B10)
@@ -448,23 +493,24 @@ Object.assign(Game.prototype, {
     const bonusLines = [];
     const bankedLines = [];
     if (tally) {
-      const m = tally.retryMul;
+      const sm = Number.isFinite(tally.scoreMul) ? tally.scoreMul : 1;   // PACE: Cadet x0.8 folded into the tally
+      const m = tally.retryMul * sm;
       const time = Math.round(tally.time * m), accuracy = Math.round(tally.accuracy * m), flawless = Math.round(tally.flawless * m);
       bonusLines.push({ label: "Clear", value: (tally.total | 0) - time - accuracy - flawless });
       bonusLines.push({ label: "Time", value: time });
       bonusLines.push({ label: "Accuracy", value: accuracy });
       bonusLines.push({ label: "Flawless boss", value: flawless });
-      if ((tally.retries | 0) > 0) bonusLines.push({ label: "Retry penalty", value: `x${m}` });
+      if ((tally.retries | 0) > 0) bonusLines.push({ label: "Retry penalty", value: `x${tally.retryMul}` });
       bankedLines.push({ label: "Perfect waves", value: tally.perfectWaves | 0 });
       bankedLines.push({ label: "Boss phases", value: tally.phases | 0 });
-      bankedLines.push({ label: "Surges countered", value: tally.surges | 0 });
+      bankedLines.push({ id: "surges", label: "Counter-signal bonus", value: tally.surges | 0 });   // ARCADE (D10 copy)
     }
     // review R3: the badge means "beat the headline this run started against", not the live save.highScore.
     // The second term keeps it off a Retry / Restart that ends above that baseline but below a record this same run
     // already banked (a death or an autosave raised save.highScore): the menu headline would contradict the card.
     const baselineHigh = Number.isFinite(meta.baselineHigh) ? meta.baselineHigh : (this.save.highScore | 0);
     const title = scope === "run" ? "RUN COMPLETE" : scope === "over" ? "SIGNAL LOST" : `SECTOR ${L} CLEAR`;
-    return {
+    const out = {
       title,
       scope,
       level: L,
@@ -473,6 +519,7 @@ Object.assign(Game.prototype, {
       bonusLines,
       bankedLines,
       wpm,
+      throughput,
       acc,
       maxCombo: (level ? ls.maxCombo : st.maxCombo) | 0,
       words: (level ? ls.words : st.words) | 0,
@@ -483,8 +530,14 @@ Object.assign(Game.prototype, {
       newSectorBest: level && (!prevBest || levelScore > (prevBest.score | 0)),
       newWpm: wpm > (this.save.bestWpm | 0),
       retries: ls.retries | 0,
-      date: Date.now()
+      date: Date.now(),
+      notes: [],    // ARCADE: { id, text, aria } card lines
+      speech: [],   // MEASURE: strings appended to the screen's one announcement
+      tags: []      // PACE: "CADET", "PACE x1.6"
     };
+    // results filter (scaffold): MEASURE (speed, rank line, Best WPM), PACE (tags, Cadet row), ARCADE (notes).
+    this.hook("results", { results: out, scope });
+    return out;
   },
 
   recordSectorBest(level, results) {
@@ -500,7 +553,8 @@ Object.assign(Game.prototype, {
         wpm: results.wpm | 0,
         acc: results.acc,
         maxCombo: results.maxCombo | 0,
-        date: results.date || Date.now()
+        date: results.date || Date.now(),
+        tags: Array.isArray(results.tags) && results.tags.length ? results.tags.slice(0, 3) : undefined   // PACE: CADET
       };
     }
   },
@@ -531,15 +585,20 @@ Object.assign(Game.prototype, {
         ? `Max HP ${this.player.maxHp}`
         : `Next: Sector ${L + 1} — ${nextCfg.bossName} · Max HP ${this.player.maxHp}`;
     }
+    // levelCompleteWillShow (scaffold): PACE appends the hull note to the text and pushes announce notes.
+    const le = this.hook("levelCompleteWillShow", { level: L, results: r, textEl: this.ui.levelCompleteText || null, notes: [] });
     if (typeof this.renderResultsCard === "function" && r) this.renderResultsCard($("resultsLevel"), r, { animate: true });
     if (typeof this.announce === "function" && r) {
-      this.announce(`Sector ${L} cleared. Rank ${r.rank}. Score ${formatInt(this.stats.score)}. Press Enter for Sector ${L + 1}.`);
+      this.announce(`Sector ${L} cleared. Rank ${r.rank}. Score ${formatInt(this.stats.score)}.${this.resultsSpeech(r)} Press Enter for Sector ${L + 1}.${this.notesSpeech(le.notes)}`);
     }
     if (typeof this.focusPrimary === "function") this.focusPrimary("levelComplete");
   },
 
   onGameOver() {
     if (this.mode === "gameOver") return;
+    // gameOverWillStart (scaffold): MODES ends a daily sortie with its own result (and cancels in endless / drill).
+    const gs = this.hook("gameOverWillStart", { inBoss: !!(this.inBoss && this.boss), cancel: false });
+    if (gs.cancel) return;
     const cfg = LEVELS[this.levelIndex];
     const lvl = cfg.level;
     this.deathsBySector[lvl] = (this.deathsBySector[lvl] || 0) + 1;
@@ -550,9 +609,14 @@ Object.assign(Game.prototype, {
     this.clearBanners();
     const r = this.buildResults("over");
     this.lastResults = r;
-    if (r.wpm > (this.save.bestWpm | 0)) this.save.bestWpm = r.wpm;
+    const se = this.hook("sectorEnd", { results: r, outcome: "death", level: lvl, levelIndex: this.levelIndex, handled: false });
+    if (!se.handled && r.wpm > (this.save.bestWpm | 0)) this.save.bestWpm = r.wpm;
     // Sector-1 deaths below 70 % accuracy queue the accuracy tip for the next sector start (C8).
     if (lvl === 1 && r.acc < 70) this._accuracyTipPending = true;
+    const run = this.run || this.save.run;                                    // moved up from the Game Over copy below
+    const canRetryBoss = this.deathInBoss && !!(run && run.bossCheckpoint && run.boss);   // moved up (gameOverWillShow reads it)
+    // gameOverWillShow (scaffold): PACE counts the death and offers Cadet pace before the dead save.
+    const ge = this.hook("gameOverWillShow", { level: lvl, levelIndex: this.levelIndex, inBoss: this.deathInBoss, canRetryBoss, results: r, notes: [] });
     // Keep the real run (no resume stub): hp 0 tells Continue to restore the checkpoint (F030).
     if (this.run) this.writeRunSave({ dead: true });
     if (this.sfx) {
@@ -560,7 +624,6 @@ Object.assign(Game.prototype, {
       this.sfx.fanfare("gameOver");
     }
     this.setMode("gameOver");
-    const run = this.run || this.save.run;
     const cp = run && run.checkpoint;
     const cpLevel = cp ? (cp.levelIndex | 0) + 1 : lvl;
     const cpScore = cp ? (cp.score | 0) : 0;
@@ -568,7 +631,6 @@ Object.assign(Game.prototype, {
       this.ui.gameOverText.textContent = `Sector ${lvl} · ${this.deathInBoss ? `boss ${bossName}` : `wave ${waveNo}/3`}`;
     }
     if (this.btnTryAgain) this.btnTryAgain.textContent = `Retry sector ${cpLevel}`;
-    const canRetryBoss = this.deathInBoss && !!(run && run.bossCheckpoint && run.boss);
     if (this.btnRetryBoss) this.btnRetryBoss.classList.toggle("hidden", !canRetryBoss);
     const note = document.getElementById("retryNote");
     if (note) {
@@ -579,7 +641,7 @@ Object.assign(Game.prototype, {
     if (typeof this.renderResultsCard === "function") this.renderResultsCard(document.getElementById("resultsOver"), r, { animate: true });
     this.commitHighScore();
     if (typeof this.announce === "function") {
-      this.announce(`Game over in Sector ${lvl}. Score ${formatInt(this.stats.score)}. Rank ${r.rank}. Press Enter to retry.`);
+      this.announce(`Game over in Sector ${lvl}. Score ${formatInt(this.stats.score)}. Rank ${r.rank}.${this.resultsSpeech(r)} Press Enter to retry.${this.notesSpeech(ge.notes)}`);
     }
     if (typeof this.focusPrimary === "function") this.focusPrimary("gameOver");
   },
@@ -588,7 +650,8 @@ Object.assign(Game.prototype, {
     // Bank the score first: the dialogue below must never stand between a win and the high score (F001).
     const r = this.buildResults("run");
     this.lastResults = r;
-    if (r.wpm > (this.save.bestWpm | 0)) this.save.bestWpm = r.wpm;
+    const se = this.hook("sectorEnd", { results: r, outcome: "victory", level: 10, levelIndex: 9, handled: false });
+    if (!se.handled && r.wpm > (this.save.bestWpm | 0)) this.save.bestWpm = r.wpm;
     this.commitHighScore();
     this.save.run = null;
     this.run = null;
@@ -606,7 +669,7 @@ Object.assign(Game.prototype, {
     if (typeof this.announce === "function") {
       // One message (review R49): the summary, then the first line advanceEndingDialogue() just showed (announce() keeps only its last write).
       const first = this.endingScript[0];
-      this.announce(`Victory. All ten sectors cleared. Score ${formatInt(this.stats.score)}. Rank ${r.rank}.${first ? ` ${this.endingLineSpeech(first)}` : ""}`);
+      this.announce(`Victory. All ten sectors cleared. Score ${formatInt(this.stats.score)}. Rank ${r.rank}.${this.resultsSpeech(r)}${first ? ` ${this.endingLineSpeech(first)}` : ""}`);
     }
   },
 
@@ -765,6 +828,7 @@ Object.assign(Game.prototype, {
   // Headline high score only for runs that started at sector 1 (or were migrated from v1); the top-10 table
   // gets one row per run. Idempotent per (run id, score).
   commitHighScore(opts = {}) {
+    if (this.runMode() !== "campaign") return false;   // MODES (G5): a mode run never reaches the records
     const meta = this.runMeta;
     if (!meta) return false;
     const score = this.stats.score | 0;
@@ -803,13 +867,17 @@ Object.assign(Game.prototype, {
       score,
       levelReached: reached,
       startLevel: meta.startLevel,
-      wpm: this.grossWpm(this.stats.chars | 0, this.stats.timeMs | 0),
+      wpm: typeof this.typistScopeWpm === "function" ? Math.round(this.typistScopeWpm("run")) : this.grossWpm(this.stats.chars | 0, this.stats.timeMs | 0),
       acc: this.getAccuracyPct(),
       maxCombo: this.stats.maxCombo | 0,
       ship: meta.ship,
       difficulty: "standard",
       date: Date.now()
     };
+    if (typeof this.typistScopeWpm === "function") row.wpmLegacy = false;   // MEASURE: hand speed
+    row.tags = [];
+    this.hook("recordWillSave", { row, meta });   // PACE: difficulty "cadet" + tags ["CADET"]
+    if (!row.tags.length) delete row.tags;
     const idx = list.findIndex(h => h && h.runId === meta.id);
     if (idx >= 0) {
       const prev = list[idx];
@@ -841,6 +909,7 @@ Object.assign(Game.prototype, {
   // ------------------------- Save state -------------------------
   // Serialise the live run into run (=== save.run) and persist. opts.dead writes hp 0 (a saved death).
   writeRunSave(opts = {}) {
+    if (this.runMode() !== "campaign") return false;   // MODES (G4): the one guard whose absence corrupts save.run
     if (!this.run) return false;
     const run = this.run;
     const cfg = LEVELS[this.levelIndex];

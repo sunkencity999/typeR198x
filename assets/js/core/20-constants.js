@@ -92,15 +92,17 @@ function waveCharsPerEnemy(cfg, wave) {
     const win = waveLengthWindow(cfg, wave);
     avg = (win.min + win.max) / 2;
   }
+  const textLen = cfg.waveTextLen && cfg.waveTextLen[waveIndex(wave)];
+  if (textLen > 0) avg = textLen;   // WORDS: the mixed pools' real mean (common / themed / two-word)
   return lr + (1 - lr) * avg;
 }
 
 // Enemies per second so that the wave's stream carries targetCps x WAVE_SPAWN_MUL[w] characters per second
 // whatever its mix (B10: paced by cfg.spawnRate alone, wave 3's longer words made it 1.5-2x the target).
-function waveSpawnRate(cfg, wave, waveKills = 0) {
+function waveSpawnRate(cfg, wave, waveKills = 0, quota = 0) {
   const w = waveIndex(wave);
-  const quota = cfg.quota[w] || 1;
-  const ramp = lerp(WAVE_RAMP[0], WAVE_RAMP[1], clamp(waveKills / quota, 0, 1));
+  const q = quota > 0 ? quota : (cfg.quota[w] || 1);   // PACE / MODES: the ramp runs over the wave's effective quota
+  const ramp = lerp(WAVE_RAMP[0], WAVE_RAMP[1], clamp(waveKills / q, 0, 1));
   const nominalChars = cfg.letterRatio + (1 - cfg.letterRatio) * cfg.avgWordLen;
   const mix = nominalChars / Math.max(1, waveCharsPerEnemy(cfg, wave));
   return cfg.spawnRate * mix * WAVE_SPAWN_MUL[w] * ramp;

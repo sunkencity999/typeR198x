@@ -153,11 +153,11 @@ for (let s = 0; s < SECTORS; s++) {
 
     const k = st.levelIntro || st.introLocked ? null : await nextKey(MINIONS);
     const inSpawn = !st.inBoss && st.wavePhase === "spawn" && !st.levelIntro;
-    if (k && /^[a-z]$/.test(k)) {
+    if (k && /^[a-z ]$/.test(k)) {
       if (idle.since !== null) { const gap = st.playClock - idle.since; rec.idleMaxS = Math.max(rec.idleMaxS, gap); rec.idleByWave[idle.wave] = Math.max(rec.idleByWave[idle.wave], gap); idle.since = null; }
       const wrong = Math.random() > ACC;
       const key = wrong ? "abcdefghijklmnopqrstuvwxyz".replace(k, "")[Math.floor(Math.random() * 25)] : k;
-      await P.page.keyboard.press(key);
+      await P.page.keyboard.press(key === " " ? "Space" : key);
       rec.keys++;
       if (wrong) rec.wrongKeys++;
       // next key when the PLAY clock has advanced one jittered interval (falls back to wall time if the clock stalls)

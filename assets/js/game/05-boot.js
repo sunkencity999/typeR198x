@@ -405,6 +405,7 @@ Object.assign(Game.prototype, {
 
   // Next sector's bg/fg/boss at low priority plus its music; idempotent per sector. Feeds #sectorPrefetch.
   prefetchNextSector() {
+    if (this.runMode() !== "campaign") return;   // MODES: practice / daily runs never fetch the next sector (G17)
     const i = this.levelIndex;
     if (this.prefetchedFor === i) return;
     this.prefetchedFor = i;

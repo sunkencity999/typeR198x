@@ -165,7 +165,7 @@ Object.assign(Game.prototype, {
         this.onCorrectKey(lock.ref);
       } else {
         this.lockMisses = (this.lockMisses | 0) + 1;
-        this.onHardMiss(lock.ref);
+        this.onHardMiss(lock.ref, ch);
         if (this.lockMisses >= 3) this.releaseLock("lost");
       }
       return;
@@ -183,6 +183,7 @@ Object.assign(Game.prototype, {
       this.noteCorrectKey();
       this.countCorrect();
       minion.progress++;
+      this.emitKeyCorrect("minion", minion, ch, minion.progress - 1, minion.text.length, -1);
       minion.flash = 0.18;
       this.fireLaserTo(minion.x, minion.y, "cyan");
       this.sfx.zap(1);
@@ -200,7 +201,7 @@ Object.assign(Game.prototype, {
       this.onCorrectKey(pu);
       return;
     }
-    this.onHardMiss(null);
+    this.onHardMiss(null, ch);
   },
 
   // Where the lasers go: the art's content centre (artRect until D6 supplies contentRect).
@@ -225,10 +226,11 @@ Object.assign(Game.prototype, {
     this.addSparks(aim.x, aim.y + rand(-40, 40), 10);
     const mult = this.scoringMult();
     const slab = boss.slabRect;
+    this.emitKeyCorrect("boss", boss, boss.nextChar, boss.progress | 0, segLen, boss.segmentIndex);
     const r = boss.advance();
-    this.addScore(SCORE.bossChar * mult);
+    this.addScore(SCORE.bossChar * mult, { kind: "bossChar" });
     if (r.segmentDone) {
-      this.addScore(SCORE.segment(segLen) * mult, { x: slab.x + slab.w / 2, y: slab.y - 14 });
+      this.addScore(SCORE.segment(segLen) * mult, { kind: "segment", x: slab.x + slab.w / 2, y: slab.y - 14 });
       this.sfx.segmentDown();
       boss.flash = Math.max(boss.flash, 0.5);
       if (typeof this.addShockwave === "function") this.addShockwave(aim.x, aim.y, 120, "magenta");
@@ -259,7 +261,7 @@ Object.assign(Game.prototype, {
     const letters = letterSetForWave(cfg, 2);
     const taken = this.liveFirstChars();
     const pool = [...letters].filter((c) => !taken.has(c) && c !== boss.nextChar);
-    const text = pool.length ? choice(pool) : letters[randi(0, letters.length - 1)];
+    const text = pool.length ? this.randPick(pool) : this.randPick(letters);
     const ys = this.laneYs();
     const lanes = MINION_LANES.filter((l) => l < ys.length);
     const x = boss.artRect.x + (Number.isFinite(cfg.minionSpawnDx) ? cfg.minionSpawnDx : MINION_SPAWN_DX);
@@ -268,7 +270,7 @@ Object.assign(Game.prototype, {
     let cands = lanes.filter((l) => !busy.has(l) && l !== this.lastMinionLane);
     if (!cands.length) cands = lanes.filter((l) => !busy.has(l));
     if (!cands.length) cands = lanes;
-    const lane = choice(cands);
+    const lane = this.randPick(cands);
     const en = new Enemy({ text, x, y: ys[lane], speed: cfg.speed * MINION_SPEED_MUL, kind: "bossMinion", lane });
     this.enemies.push(en);
     this.lastMinionLane = lane;
@@ -633,8 +635,9 @@ Object.assign(Game.prototype, {
     const surges = SCORE.surgeCountered(L) * (ls.surgesCancelled | 0);
     // The money actually banked (each wave at the multiplier of its moment). Retries only grow inside a sector, so the
     // product at the current multiplier never exceeds that sum; it wins only for a run record saved before the sum existed.
-    const perfectWaves = Math.max(ls.perfectWaveBonus | 0, Math.round(SCORE.perfectWave(L) * retryMul) * (ls.perfectWaves | 0));
-    const total = Math.round(retryMul * (clear + time + flawless + accuracy));
-    return { clear, time, flawless, phases, surges, accuracy, perfectWaves, retryMul, retries, accPct, par, elapsed, total };
+    const scoreMul = (typeof this.diff === "function" && this.diff().score) || 1;   // PACE: Cadet x0.8
+    const perfectWaves = Math.max(ls.perfectWaveBonus | 0, Math.round(Math.round(SCORE.perfectWave(L) * retryMul) * scoreMul) * (ls.perfectWaves | 0));
+    const total = Math.round(retryMul * scoreMul * (clear + time + flawless + accuracy));
+    return { clear, time, flawless, phases, surges, accuracy, perfectWaves, retryMul, scoreMul, retries, accPct, par, elapsed, total };
   },
 });
