@@ -42,7 +42,7 @@ const TYPIST_SECTOR_ACC_MIN_KEYS = 50;  // sector best accuracy needs 50 keys
 const TYPIST_SPARK_N = 20;
 const TYPIST_GOAL_N = 5;
 const TYPIST_PROFILE_MAX_BYTES = 16384;
-const TYPIST_RANK_LINE_AT_MS = 700;     // the rank line fades in with the stamp (15-screens.js RESULTS_RANK_AT_MS)
+const TYPIST_RANK_LINE_AT_MS = 700;     // fallback for 15-screens.js RESULTS_RANK_AT_MS: the rank line fades in with the stamp
 const TYPIST_SESSION_FIELDS = Object.freeze(["t", "mode", "sector", "speed", "acc", "rank", "score", "misses", "steady", "weak"]);
 const TYPIST_MODES = Object.freeze(["campaign", "daily", "endless", "drill"]);
 const TYPIST_LETTERS = "abcdefghijklmnopqrstuvwxyz";
@@ -992,7 +992,8 @@ Object.assign(Game.prototype, {
       why.classList.remove("is-in");
       why.classList.toggle("is-pending", !!(text && evt.animate));
       if (text && evt.animate && cardEl._resultsAnim) {
-        cardEl._resultsAnim.timers.push(setTimeout(() => { why.classList.remove("is-pending"); why.classList.add("is-in"); }, TYPIST_RANK_LINE_AT_MS));
+        const at = typeof RESULTS_RANK_AT_MS === "number" ? RESULTS_RANK_AT_MS : TYPIST_RANK_LINE_AT_MS;   // with the stamp
+        cardEl._resultsAnim.timers.push(setTimeout(() => { why.classList.remove("is-pending"); why.classList.add("is-in"); }, at));
       }
     }
     const cap = q('[data-typist="accCaption"]');
