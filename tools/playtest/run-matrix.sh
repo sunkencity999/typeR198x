@@ -6,7 +6,8 @@
 #
 # Rows: dpr1, dpr2, reduced-motion (DPR 2), mobile, native-ua (the WKWebView UA served over HTTP),
 #       no-music (perf-only, media transport stubbed), fixture-fresh, fixture-legacy-midwave,
-#       fixture-legacy-inboss, fixture-legacy-postvictory, fixture-legacy-levelcomplete, fixture-legacy-gameover
+#       fixture-legacy-inboss, fixture-legacy-postvictory, fixture-legacy-levelcomplete, fixture-legacy-gameover,
+#       flight-check (smoke that plays the first-run Flight Check instead of skipping it)
 # --quick  runs every row with --scenario smoke (minutes instead of tens of minutes)
 # --only   comma-separated row names to run
 # Extra environment: PLAY_ARGS="..." is appended to every row (e.g. PLAY_ARGS="--wpm 60 --cpu 4").
@@ -26,7 +27,7 @@ while [[ $# -gt 0 ]]; do
     --out) OUT="$2"; shift 2 ;;
     --root) ROOT="$2"; shift 2 ;;
     --seconds) SECS="$2"; shift 2 ;;
-    -h|--help) sed -n '2,13p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,14p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -48,6 +49,7 @@ ROWS=(
   "fixture-legacy-postvictory|--scenario smoke --fixture legacy-postvictory"
   "fixture-legacy-levelcomplete|--scenario smoke --fixture legacy-levelcomplete"
   "fixture-legacy-gameover|--scenario smoke --fixture legacy-gameover"
+  "flight-check|--scenario smoke --flight-check"
 )
 
 selected() { [[ -z "$ONLY" ]] && return 0; [[ ",$ONLY," == *",$1,"* ]]; }

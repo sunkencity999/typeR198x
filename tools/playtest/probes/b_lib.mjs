@@ -66,14 +66,15 @@ export async function waitFor(P, fn, timeoutMs = 10000, arg = null) {
   try { await P.page.waitForFunction(fn, arg, { timeout: timeoutMs }); return true; } catch { return false; }
 }
 
-// Fresh save, Start, wait until the sector card is gone.
+// Fresh save, Start, wait until the sector card is gone. The Flight Check never runs here: openProbe's default
+// harness flag is "skip" (window.TypeRHarness.flightCheck, _lib.mjs harnessFlags).
 export async function startFresh(P, name = "PROBE") {
   await P.goto("fresh");
   await P.startRun(name);
   await waitFor(P, () => window.game && !window.game.levelIntro, 6000);
 }
 
-// Jump to a sector (0-based) with a fresh run and wait past the sector card.
+// Jump to a sector (0-based) with a fresh run and wait past the sector card (the Flight Check is skipped, as above).
 export async function jumpTo(P, levelIndex) {
   await P.g((i) => { const g = window.game; g.stopToMenu(true); g.startNewRun(); g.startLevel(i, { fromMenu: true, fresh: true }); }, levelIndex);
   await waitFor(P, () => window.game && !window.game.levelIntro, 6000);
