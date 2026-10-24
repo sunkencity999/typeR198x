@@ -1,4 +1,4 @@
-// Type-R 198X — save schema v2, migration, checkpoint snapshots and resume helpers. Classic script; load order is defined in index.html.
+// Type-R 198X — save schema v3, migration, checkpoint snapshots and resume helpers. Classic script; load order is defined in index.html.
 // Key stays typesmup198x.save.v1; every change is additive (CONTRACT §9). Legacy v1 blobs are migrated on load.
 
 function getResumeLevelIndex(save) {
@@ -84,7 +84,7 @@ function byScoreThenNewest(a, b) {
 
 // ----------------------------- Storage -----------------------------
 const LS_KEY = "typesmup198x.save.v1";
-const SAVE_SCHEMA = 2;
+const SAVE_SCHEMA = 3;   // MEASURE (D6): save.profile; pre-3 WPM rows flagged wpmLegacy (32-typist.js saveMigrate)
 // Set when localStorage cannot be read or written; the game keeps playing from memory (F044).
 const SAVE_STATE = { unavailable: false };
 

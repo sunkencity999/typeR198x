@@ -226,15 +226,14 @@ const RANK = {
   weights: { acc: 0.5, speed: 0.3, hp: 0.2 },
   accFloorPct: 80,
   accSpanPct: 18,
-  wpmFloor: 20,
+  wpmFloor: 20,                 // level-less calls only (b9 / content-tables pure assertions)
   wpmSpan: 40,
-  // Early sectors cap a typist's gross WPM near the incoming stream (targetCps x 12 = 14 / 20 / 28 WPM at L1-3),
-  // so the speed term there is measured against that nominal rate instead of the absolute 20..60 window (B10):
-  // s = 0 at speedFloorMul x nominal, s = 1 at (speedFloorMul + speedSpanMul) x nominal, never wider than the
-  // absolute window. From speedNormLevels + 1 on the absolute window applies unchanged.
-  speedNormLevels: 3,
+  // Speed is the pilot's hand speed (32-typist.js, D1). Every sector measures it against its nominal stream rate
+  // (targetCps x 12): s = 0 at speedFloorMul x nominal, s = 1 at (speedFloorMul + speedSpanMul) x nominal, never wider
+  // than the absolute 20..60 window. A typist at the sector's nominal WPM with >= 98 % accuracy and no damage reaches S.
+  speedNormLevels: 10,
   speedFloorMul: 0.5,
-  speedSpanMul: 1.2,
+  speedSpanMul: 0.72,
   thresholds: [["S", 0.90], ["A", 0.75], ["B", 0.55], ["C", 0.35]],   // below the last one is D
   order: ["S", "A", "B", "C", "D"],
   colors: { S: "amber", A: "cyan", B: "violet", C: "text", D: "danger" }

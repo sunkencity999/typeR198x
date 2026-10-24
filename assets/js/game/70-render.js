@@ -365,17 +365,21 @@ Object.assign(Game.prototype, {
     ctx.font = geo.font;
     // One cap for MEASURE (+1 typo glyph) and WORDS (two-word plates up to 15 chars, cfg.maxTextLen).
     const maxLen = clamp(Math.max((cfg.wordMax || 8) + 3, (cfg.maxTextLen | 0) + 1), 4, 17);
+    const mw = ctx.measureText("m").width;   // MEASURE: drawEnemy widens a plate carrying a typo by one (monospace) glyph
     for (let len = 1; len <= maxLen; len++) {
       const tw = ctx.measureText("m".repeat(len)).width;
       const w = len === 1 ? geo.h : Math.ceil(tw + PLATE_PAD);
-      for (const state of ["idle", "locked", "danger", "dangerBase"]) add(len === 1 ? "chip" : "pill", Math.max(geo.h, bucket(w)), geo.h, state);
+      for (const state of ["idle", "locked", "danger", "dangerBase"]) {
+        add(len === 1 ? "chip" : "pill", Math.max(geo.h, bucket(w)), geo.h, state);
+        if (len > 1) add("pill", Math.max(geo.h, bucket(w + mw)), geo.h, state);   // same arithmetic as the typo draw path
+      }
     }
     ctx.font = FONT.target(18, 600);
     for (const label of ["spread", "pierce", "rapid", "shield", "multi", "heal"]) {
       const w = Math.ceil(ctx.measureText(label).width + CAPSULE_PAD);
       add("capsule", bucket(w), CAPSULE_H, "power");
       add("capsule", bucket(w), CAPSULE_H, "locked");
-      const wt = Math.ceil(ctx.measureText(label + "m").width + CAPSULE_PAD);   // MEASURE: the capsule carrying a typo glyph
+      const wt = Math.ceil(ctx.measureText(label).width + CAPSULE_PAD) + ctx.measureText("m").width;   // MEASURE: drawPowerup's typo widening
       add("capsule", bucket(wt), CAPSULE_H, "power");
       add("capsule", bucket(wt), CAPSULE_H, "locked");
     }
