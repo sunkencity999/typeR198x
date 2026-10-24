@@ -44,8 +44,11 @@ version), then the bump. Commit the bump.
 bash tools/deploy-check.sh --local                            # source checks + native sync dry run, FAIL 0
 ```
 
-Look at `tools/playtest/out/matrix/summary.tsv`: zero page errors on every row, fps >= 58, non-media MB
-before the first keystroke <= 2.5, every `fixture-*` row `pass`.
+Look at `tools/playtest/out/matrix/summary.tsv`: zero page errors on every row, fps >= 58, every `fixture-*` row
+`pass`, and non-media MB before the first keystroke <= 2.5 on the DPR 1 rows and <= 2.75 on the DPR 2 rows (CONTRACT
+8.y W2). `fixture-legacy-inboss` continues a run inside a boss, so it loads the boss art before its first keystroke
+and is gated at 2.75 too (2.46 at a0a3845; 2.61 with this release's JS/CSS; 2.69 with the stale-shell guard's
+revalidation of the four pages, which every fixture row with a save does after load, about +0.07 MB).
 
 ## 3. Dry run
 
@@ -55,8 +58,9 @@ node tools/deploy/deploy.mjs --dry-run --user <ftp-user>
 
 Prints the local set in upload order (about 200 files, 199 for 20261024a, ~370 MB listed; on a real run the
 ~341 MB of PNG/WAV masters are skipped when the remote size matches) and exits without connecting, so no password
-is needed. Check that `index.html` is last, `assets/opt/manifest.js` just before it, and that `privacy-policy.html`
-and every `assets/opt` file are in the list.
+is needed. Check that `index.html` is last, `assets/opt/manifest.js` just before it, the other pages (`info.html`,
+`privacy-policy.html`, `privacy.html`, `support.html`) just before that and after `style.css`, and that
+`privacy-policy.html` and every `assets/opt` file are in the list.
 
 ## 4. Backup and deploy with the cache policy
 
@@ -75,7 +79,9 @@ certificate failure aborts with exit 1, and `--secure false` is the only way to 
 which it warns about before connecting), web-root detection, backup of the deploy set (the web root's own files plus `assets/`; other directories that
 may sit there, such as an old `native/` copy or a `.venv`, are neither crawled nor backed up) to
 `tools/deploy/backups/<timestamp>/` (`light` skips files over 4 MB; use `--backup full` before a risky
-release), upload of `assets/` first, then CSS/JS, then `assets/opt/manifest.js`, then `index.html` last, `.htaccess` cache policy merged
+release), upload of `assets/` first, then CSS/JS, then the other pages (they link `?v=<new token>` CSS, and a visit
+before that CSS is on the host would cache the old `style.css` under the new URL for a year), then
+`assets/opt/manifest.js`, then `index.html` last, `.htaccess` cache policy merged
 into the existing file (the host's file is downloaded first and kept as
 `tools/deploy/backups/htaccess-<ms>.previous.txt`; the uploaded text is `htaccess-<ms>.merged.txt`; the download
 is attempted even when the listing shows no `.htaccess`, because some servers hide dotfiles, and a new file is
@@ -84,6 +90,15 @@ unlisted one fails for any other reason, the step is skipped, the run exits 1 an
 `tools/deploy/htaccess-cache.txt` by hand), then an
 HTTPS verification that `index.html` and `game.js` match the local files and a print of their cache
 headers. Add `--force` only if a size-equal binary must be re-uploaded.
+
+## 4b. Flush the host's dynamic cache
+
+Right after the upload, flush the dynamic cache in Site Tools (Speed → Caching), then run step 5 straight away. The
+dynamic cache stores 404 responses keyed by the full URL (measured 2026-10-24: a GET of a missing `?v=` URL answered
+404 MISS, then 404 HIT), so a GET of a new release URL before its file was uploaded can leave a cached 404 behind.
+Existing files are served from disk by direct delivery and are not affected, so this is a precaution; step 5
+fetches every script the served shell references and fails on a 404. Verifiers: do not GET `?v=20261024a` URLs on
+the live host before the deploy.
 
 ## 5. Go/no-go
 
