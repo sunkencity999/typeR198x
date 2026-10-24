@@ -207,6 +207,21 @@ const sz = await flyCounted({ v: 1, daily: { today: { date: 20261001, sector: 10
 const size = await P.g((k) => { const m = JSON.parse(localStorage.getItem(k)).modes; return { len: JSON.stringify(m).length, days: Object.keys(m.daily.days).length, newest: Object.keys(m.daily.days).includes("20261027") }; }, "typesmup198x.save.v1");
 P.check("save.modes after 61 injected days + one counted sortie: pruned to the newest 60 (today's kept), JSON.stringify(save.modes).length <= 8192", size.len <= 8192 && size.days === 60 && size.newest, { ...size, meta: sz.meta });
 
+// D5b review fix: the printed accuracy never rounds up past an accuracy-medal threshold. 96.67 % (first days, no
+// rated prior day in the window) is SILVER, so the card, the share line and the announcement say 96 %, not 97 %.
+await setNow(P, await localMs(P, 2026, 10, 28));
+await startMode(P, "daily");
+await typeWords(P, WORDS6, 150);
+await P.g(() => { const g = window.game; g.levelStats.correct = 290; g.levelStats.total = 300; g.modesDebug().finish("clear"); });
+await waitMode(P, "modeResults", 4000);
+await sleep(2600);
+const c5b = await card(P);
+await P.g(() => window.game.stopToMenu(false));
+await sleep(150);
+P.check("D5b 96.67 % accuracy in the first days: badge SILVER under FIRST DAYS · GOLD AT 97%, ACC tile 96%, share line · 96% ·, announce 'at 96 percent' (never a printed 97 % beside a SILVER)",
+  c5b.result && c5b.result.acc === 96.67 && c5b.badge === "SILVER" && c5b.sub === "FIRST DAYS · GOLD AT 97% · SILVER AT 93%" && tileOf(c5b, "ACC") === "96%" && c5b.share.includes(" · 96% · RATING ") &&
+  / at 96 percent\./.test(c5b.said), { acc: c5b.result && c5b.result.acc, badge: c5b.badge, sub: c5b.sub, acc_tile: tileOf(c5b, "ACC"), share: c5b.share, said: c5b.said });
+
 const iso3 = await isolation(P);
 P.check("isolation over the whole probe: campaign fields of the blob unchanged since the quit test (records, bests, unlocks, bestWpm, victories, run)", iso3.blob === iso2.blob && iso3.mem === iso2.mem, { same: iso3.blob === iso2.blob });
 

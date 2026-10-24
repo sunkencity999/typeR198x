@@ -128,7 +128,7 @@ const drillAgain = async (ms) => {
 };
 const worse = await drillAgain(320);
 const better = await drillAgain(140);
-P.check("L6c a slower drill reads DRILL BEST nn WPM AT nn% (the first drill's); a faster one NEW DRILL BEST", worse.sub === `DRILL BEST ${speed6} WPM AT ${Math.round(b6.modes.best.acc)}%` && better.sub === "NEW DRILL BEST" &&
+P.check("L6c a slower drill reads DRILL BEST nn WPM AT nn% (the first drill's, accuracy floored); a faster one NEW DRILL BEST", worse.sub === `DRILL BEST ${speed6} WPM AT ${Math.floor(b6.modes.best.acc)}%` && better.sub === "NEW DRILL BEST" &&
   (await P.g(() => window.game.save.modes.drill.runs)) === 3, { worse: worse.sub, better: better.sub });
 
 // L7 isolation

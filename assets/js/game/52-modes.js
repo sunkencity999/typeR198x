@@ -159,7 +159,7 @@ function modesShareLine(r) {
   if (!r) return "";
   const rating = Number.isFinite(r.rating) ? `RATING ${Math.round(r.rating)}${r.medal ? ` · ${r.medal}` : ""}` : "NO RATING";
   return `TYPE-R 198X · DAILY ${modesIsoDate(r.dateKey)} · S${r.sector | 0} ${String(r.bossName || "").toUpperCase()} · ${Number.isFinite(r.speed) ? Math.round(r.speed) : "--"} WPM · ` +
-    `${Math.round(Number(r.acc) || 0)}% · ${rating}${(r.streak | 0) >= 2 ? ` · STREAK ${r.streak | 0}` : ""} · typer198x.com`;
+    `${Math.floor(Number(r.acc) || 0)}% · ${rating}${(r.streak | 0) >= 2 ? ` · STREAK ${r.streak | 0}` : ""} · typer198x.com`;
 }
 
 // save.modes normalised (CONTRACT 3.1): unknown fields dropped, the newest 60 days kept in ascending key order.
@@ -619,6 +619,7 @@ Object.assign(Game.prototype, {
   },
 
   // The result every screen / save / session uses: read first, record second (typistEndSession last).
+  // accInt is floored (here and in the share line): a printed 97% always meets the accuracy medal's GOLD AT 97%.
   modesSnapshot(reason) {
     const M = this._modes;
     const ls = this.levelStats || {};
@@ -632,7 +633,7 @@ Object.assign(Game.prototype, {
     const m = this.modesRead();
     const r = {
       mode: M.mode, reason, sector: M.sector, bossName: LEVELS[M.levelIndex].bossName, dateKey: M.dateKey, iso: modesIsoDate(M.dateKey),
-      counted: !!M.counted, attempt: M.attempt, speed, speedN, acc, accInt: Math.round(acc), keys: ls.total | 0, timeMs: Math.round(ls.timeMs || 0),
+      counted: !!M.counted, attempt: M.attempt, speed, speedN, acc, accInt: Math.floor(acc), keys: ls.total | 0, timeMs: Math.round(ls.timeMs || 0),
       score: this.stats.score | 0, words: ls.words | 0, misses: this.stats.misses | 0, correct: ls.correct | 0, maxCombo: ls.maxCombo | 0,
       rating: null, medal: null, rule: null, rank: null, ceiling: 0, peak10: M.peak10, cps0: M.cps0, steps: M.step, leaks: M.leaks,
       lostWave: Math.min((this.wave | 0) + 1, 3), weakLines: [], bigramLine: "", weakSpeech: [], newBest: false, prevBest: null,
@@ -783,7 +784,7 @@ Object.assign(Game.prototype, {
     set(q(".resultsHead .resultsSub"), daily
       ? (rule.none ? "TOO FEW KEYS TO RATE" : rule.acc ? "FIRST DAYS · GOLD AT 97% · SILVER AT 93%" : `7-DAY MEDIAN ${Math.round(rule.median)} · GOLD AT ${rule.goldAt} · SILVER AT ${rule.silverAt}`)
       : endless ? (r.newBest ? (p ? `NEW CEILING · WAS ${p} WPM` : "FIRST CEILING") : `BEST CEILING ${p} WPM`)
-        : (r.newBest && p ? "NEW DRILL BEST" : p ? `DRILL BEST ${p.speed} WPM AT ${Math.round(p.acc)}%` : "FIRST DRILL"));
+        : (r.newBest && p ? "NEW DRILL BEST" : p ? `DRILL BEST ${p.speed} WPM AT ${Math.floor(p.acc)}%` : "FIRST DRILL"));
     const n = (v) => String(Math.round(v)), pct = (v) => `${Math.round(v)}%`, big = (v) => formatInt(Math.round(v)), combo = (v) => `x${Math.round(v)}`;
     const tiles = daily ? [["Rating", r.rating, n], ["WPM", r.speed, n], ["Acc", r.accInt, pct], ["Time", r.timeMs, time], ["Score", r.score, big], ["Words", r.words, n]]
       : endless ? [["Time", r.timeMs, time], ["Ceiling", r.ceiling, n], ["Peak 10 s", r.peak10 || null, n], ["Acc", r.accInt, pct], ["Score", r.score, big], ["Combo", r.maxCombo, combo]]
