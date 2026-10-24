@@ -191,6 +191,10 @@ function modesRating(speed, acc) {
   return Number(speed) * Math.pow((Number(acc) || 0) / 100, 2);
 }
 
+function modesPick(g, list) {
+  return list[Math.floor(g.rand() * list.length)];
+}
+
 function modesMeanLen(pool) {
   let s = 0;
   for (const w of pool) s += w.length;
@@ -455,7 +459,7 @@ Object.assign(Game.prototype, {
     const set = (el, s) => this.modesSetText(el, s);
     const [t1, t2, t3] = E.tiles;
     for (const t of E.tiles) set(t.l, t.orig);
-    set(this.btnRestart, M ? `Restart ${M.mode === "daily" ? "sortie" : M.mode}` : E.restartOrig);
+    set(this.btnRestart, M ? `Restart ${{ daily: "sortie", endless: "drift", drill: "drill" }[M.mode]}` : E.restartOrig);
     set(E.quit, M ? "Quit to menu" : E.quitOrig);
     if (!M) return;
     if (M.mode === "daily") set(E.eyebrow, `Paused // Daily sortie · Sector ${modesPad2(M.sector)}`);
@@ -535,16 +539,15 @@ Object.assign(Game.prototype, {
   // H6 (endless / drill): indexes into prebuilt arrays / strings, no allocation, every draw this.rand().
   modesPickText() {
     const M = this._modes;
-    const pick = (list) => list[Math.floor(this.rand() * list.length)];
-    if (this.rand() < M.letterRatio) return pick((M.weakLetters.length && this.rand() < M.weakShare) ? M.weakLetters : M.letters);
+    if (this.rand() < M.letterRatio) return modesPick(this, (M.weakLetters.length && this.rand() < M.weakShare) ? M.weakLetters : M.letters);
     let pool;
     if (M.weakWords.length && this.rand() < M.weakShare) pool = M.weakWords;
     else if (M.commonPool.length >= MODES_POOL_MIN && this.rand() < M.commonShare) pool = M.commonPool;
     else pool = M.themedPool.length ? M.themedPool : M.commonPool;
-    if (!pool.length) return pick(M.letters);
+    if (!pool.length) return modesPick(this, M.letters);
     const recent = this.recentWords || (this.recentWords = []);
-    let w = pick(pool);
-    for (let i = 0; i < 6 && recent.includes(w); i++) w = pick(pool);
+    let w = modesPick(this, pool);
+    for (let i = 0; i < 6 && recent.includes(w); i++) w = modesPick(this, pool);
     recent.push(w);
     if (recent.length > 12) recent.shift();
     return w;
