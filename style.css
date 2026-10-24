@@ -2935,4 +2935,21 @@ body[data-flight-check="on"] .tapToType:not(.hidden) ~ .fcPanel .fcStep { visibi
 /* ===== end track:MODES ===== */
 
 /* ===== track:ARCADE (50-boss.js, 82-overdrive.js) ===== */
+/* Counter-Signal charge bar (D10) under the boss hull meter: the fill is written at 5 Hz (50-boss.js csTickBar), each
+   write 200 ms ahead and eased by a 200 ms linear transition once the surge is live; transform / opacity only.
+   Out of flow (absolute, in the meter's grid area): 1 px under the meter, no HUD growth. */
+#bossBar { position: relative; }
+.bossCharge { position: absolute; grid-column: 1 / -1; grid-row: 2; left: 0; right: 0; top: 100%; margin-top: 1px; height: 3px; border-radius: var(--r-pill);
+  background: rgba(255,77,109,0.12); overflow: hidden; opacity: 0; transition: opacity var(--dur-1); }
+.bossCharge.isCharging, .bossCharge.isCountered, .bossCharge.isFired { opacity: 1; }
+#bossChargeFill { position: absolute; inset: 0; transform-origin: left center; transform: scaleX(0);
+  background: var(--c-danger); box-shadow: 0 0 8px rgba(255,77,109,0.55); }
+.bossCharge.isLive #bossChargeFill { transition: transform 200ms linear; }
+.bossCharge.isCountered #bossChargeFill { background: var(--c-ui); box-shadow: 0 0 8px rgba(57,245,255,0.55); }
+.bossCharge.isFired { animation: bossChargeFired 240ms var(--ease-out); }
+@keyframes bossChargeFired { from { filter: brightness(2.2); } to { filter: brightness(1); } }
+body[data-mode="paused"] #bossChargeFill { transition: none; }
+:root.reduce-motion .bossCharge.isFired { animation: none; }
+@media (orientation: portrait) and (max-width: 640px) { .bossCharge { height: 2px; } }
+@media (max-height: 520px) and (orientation: landscape) { .bossCharge { grid-column: 2; grid-row: 1; top: 50%; margin-top: 6px; } }
 /* ===== end track:ARCADE ===== */

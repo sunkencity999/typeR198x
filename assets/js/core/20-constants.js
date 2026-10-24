@@ -129,15 +129,26 @@ function pressureCap(cfg) {
 const FINAL_MESSAGE_SEGMENTS = 9;              // FINAL_MESSAGE (30-content.js) is appended to the L10 boss as phase 4
 const MINION_SPEED_MUL = 1.1;
 const MINION_SPAWN_DX = -40;                   // minions appear at boss.artRect.x + cfg.minionSpawnDx
-const SURGE_BASE_S = 1.5;
-const SURGE_PER_CHAR_S = 0.25;
+// Counter-Signal (ARCADE D10): surges from sector 2; the first of a fight arms min(firstAtS, surgeEvery) s after the intro
+// unlock, then every surgeEvery (LEVEL_TABLE); it starts at a segment start with the whole segment. Window =
+// baseS + chars x perChar(L) (perChar .30 s at S2 down to .12 s at S10, linear), x slowWiden when the pilot's live speed
+// is under slowWpm (or unknown); at most maxFiredPerPhase fired surges per phase. scrambleS: the fail scramble of the
+// reset word; barCommitS: the DOM charge bar's write cadence (a 200 ms linear CSS transition eases between writes).
+const COUNTER_SIGNAL = Object.freeze({ fromLevel: 2, firstAtS: 6, baseS: 0.6, perCharFromS: 0.30, perCharToS: 0.12,
+  slowWpm: 35, slowWiden: 1.2, maxFiredPerPhase: 2, scrambleS: 0.3, barCommitS: 0.2 });
 
 function bossSegmentCount(level) {
   return 6 + 3 * (level - 1);
 }
 
-function surgeDuration(remainingChars) {
-  return SURGE_BASE_S + SURGE_PER_CHAR_S * Math.max(0, remainingChars | 0);
+function counterSignalPerChar(level) {            // linear S2 .30 -> S10 .12
+  const L = clamp(level | 0, 2, 10);
+  return COUNTER_SIGNAL.perCharFromS + (COUNTER_SIGNAL.perCharToS - COUNTER_SIGNAL.perCharFromS) * (L - 2) / 8;
+}
+
+function surgeDuration(chars, level = 2, slow = false) {
+  const d = COUNTER_SIGNAL.baseS + Math.max(0, chars | 0) * counterSignalPerChar(level);
+  return slow ? d * COUNTER_SIGNAL.slowWiden : d;
 }
 
 // ----------------------------- Scoring -----------------------------
@@ -165,7 +176,9 @@ const SCORE = {
   segment: (len) => len * 30,
   phase: (level) => 300 * level,
   bossClear: (level) => 1500 + 350 * level,
-  parDivisor: 3,                               // boss par seconds = totalChars / parDivisor
+  // boss par: 90 % of the sector's nominal pace (ARCADE D10); the time bonus is a tie-breaker, not the top line.
+  // LEVELS is read at call time (it is built below).
+  par: (totalChars, level) => (totalChars || 0) / (0.9 * LEVELS[clamp(level | 0, 1, 10) - 1].targetCps),
   timeBonus: (parS, elapsedS, level) => Math.max(0, parS - elapsedS) * 25 * level,
   flawless: (level) => 500 * level,            // bossDamage === 0
   surgeCountered: (level) => 150 * level,
@@ -277,17 +290,18 @@ const BOSS_NAMES = [
 
 // Master table (CONTRACT section 7). Columns:
 // level | wave quotas W1/W2/W3 | cap s per wave | targetCps | speed px/s | letterRatio | wordMin | wordMax | maxEnemies | surgeEvery s | minionRate /s | minionMax
+// (surgeEvery: Counter-Signal cadence; first surge of a fight at min(COUNTER_SIGNAL.firstAtS, surgeEvery))
 const LEVEL_TABLE = [
   [1,  [8, 10, 12],  22, 1.2, 72,  0.70, 3, 5,  6,  null, 0.20, 1],
-  [2,  [10, 12, 14], 24, 1.7, 82,  0.60, 3, 6,  7,  null, 0.24, 1],
-  [3,  [12, 14, 16], 26, 2.3, 92,  0.50, 4, 7,  8,  16,   0.28, 2],
-  [4,  [14, 16, 18], 28, 3.0, 102, 0.42, 4, 8,  9,  15,   0.32, 2],
-  [5,  [15, 18, 21], 30, 3.7, 112, 0.36, 5, 9,  10, 14,   0.36, 2],
-  [6,  [16, 19, 22], 32, 4.3, 122, 0.30, 5, 9,  10, 13,   0.39, 3],
-  [7,  [17, 20, 23], 34, 4.9, 132, 0.26, 6, 10, 11, 12,   0.43, 3],
-  [8,  [18, 21, 24], 36, 5.5, 142, 0.22, 6, 11, 12, 11,   0.47, 3],
-  [9,  [19, 22, 25], 38, 6.0, 152, 0.18, 7, 12, 13, 10,   0.51, 4],
-  [10, [20, 24, 28], 40, 6.5, 162, 0.15, 7, 13, 14, 9,    0.55, 4]
+  [2,  [10, 12, 14], 24, 1.7, 82,  0.60, 3, 6,  7,  20,   0.24, 1],
+  [3,  [12, 14, 16], 26, 2.3, 92,  0.50, 4, 7,  8,  20,   0.28, 2],
+  [4,  [14, 16, 18], 28, 3.0, 102, 0.42, 4, 8,  9,  14,   0.32, 2],
+  [5,  [15, 18, 21], 30, 3.7, 112, 0.36, 5, 9,  10, 13,   0.36, 2],
+  [6,  [16, 19, 22], 32, 4.3, 122, 0.30, 5, 9,  10, 12,   0.39, 3],
+  [7,  [17, 20, 23], 34, 4.9, 132, 0.26, 6, 10, 11, 11,   0.43, 3],
+  [8,  [18, 21, 24], 36, 5.5, 142, 0.22, 6, 11, 12, 10,   0.47, 3],
+  [9,  [19, 22, 25], 38, 6.0, 152, 0.18, 7, 12, 13, 9,    0.51, 4],
+  [10, [20, 24, 28], 40, 6.5, 162, 0.15, 7, 13, 14, 8,    0.55, 4]
 ];
 
 // Enemies per second that deliver targetCps characters per second, given the letter/word mix.
