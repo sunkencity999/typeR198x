@@ -11,7 +11,21 @@ const { page } = P;
 // Per-frame sampler (registered before the game's loop) + toast / live-region logs. Samples only while a check runs.
 const SAMPLER = () => {
   const S = window.__fc = { frames: 0, maxPowerups: 0, plus: [], hpLoss: 0, mult: [], minXFrac: 9, sectorBanner: false,
-    toasts: [], says: [], startAt: null, endAt: null };
+    toasts: [], says: [], startAt: null, endAt: null, writes: [] };
+  // Every localStorage write with the check state at that moment and the function that called storeSave. The start
+  // task's storySeen write (startGameplayFlow) lands while the check exists but before its first frame (active 0);
+  // fcFinish clears the check before its own storeSave, and the hand-off's run save follows inside beginRunAt.
+  const setItem = Storage.prototype.setItem;
+  Storage.prototype.setItem = function (k, v) {
+    if (this === window.localStorage) {
+      const fc = window.game && window.game.flightCheck;
+      const lines = (new Error().stack || "").split("\n");
+      const at = lines.findIndex((l) => /\bstoreSave\b/.test(l));
+      const by = at >= 0 && lines[at + 1] ? (lines[at + 1].match(/at (?:Game\.)?([\w$.]+)/) || [])[1] || "?" : "?";
+      S.writes.push({ key: k, check: !!fc, active: fc ? fc.active : null, phase: fc ? fc.phase + fc.step : null, by });
+    }
+    return setItem.call(this, k, v);
+  };
   const tick = () => {
     const g = window.game;
     if (g && g.flightCheck) {
@@ -106,6 +120,19 @@ P.check("2 one plate 'j' within 3 s on the middle lane, |x - 0.62 w| <= 1 after 
   (await P.g(() => window.__fc.minXFrac)) > 0.35 && s2.toast === "TYPE J" && /toast--tip/.test(s2.kind || ""),
   JSON.stringify({ spawnMs, ...s2, minXFrac: await P.g(() => window.__fc.minXFrac) }));
 await P.shot("step1");
+// Direct calls while the check runs: a kill drop of a real type is cancelled by the hook (not by the alive cap or an empty
+// roll), and score is cancelled. Reported in check 8, which samples the random drop path frame by frame.
+const cancels = await P.g(() => {
+  const g = window.game;
+  const type = Object.keys(POWERUP_TYPES)[0];
+  const before = g.countAlivePowerups();
+  const pw = g.spawnPowerup({ type, x: 900, y: 320, fromKill: true });
+  const evt = g._evtPowerup || null;
+  const score0 = g.stats.score;
+  const added = g.addScore(100, {});
+  return { type, aliveBefore: before, powerup: pw === null ? null : typeof pw, hookCancel: !!(evt && evt.cancel && evt.type === type),
+    powerups: g.powerups.length, added, scoreDelta: g.stats.score - score0 };
+});
 const blobStep1 = await P.g((k) => localStorage.getItem(k), LS_KEY);
 
 // ---- 3. A miss does nothing to the hull; j kills it; step 2 within 1 s; no save write ----
@@ -148,19 +175,23 @@ const s5b = await P.g(() => { const g = window.game; const s = g.flightCheckStat
 await P.shot("release");
 await press(" ");
 await sleep(80);
-const s5c = await P.g(() => { const g = window.game; const s = g.flightCheckState(); return { lock: g.lock ? g.lock.ref.text : null, farProgress: s.plates[0].progress, wantRelease: s.wantRelease }; });
-for (const k of "lase") { await press(k); await sleep(60); }
+const s5c = await P.g(() => { const g = window.game; const s = g.flightCheckState(); return { lock: g.lock ? g.lock.ref.text : null, farProgress: s.plates[0].progress, wantRelease: s.wantRelease, toast: s.toast }; });
+await press("l");
+await sleep(60);
+const s5l = await P.g(() => { const g = window.game; const s = g.flightCheckState(); return { lock: g.lock ? g.lock.ref.text : null, toast: s.toast }; });
+for (const k of "ase") { await press(k); await sleep(60); }
 await press("r");
 const t5d = Date.now();
 const doneCallout = await waitFor(() => { const g = window.game; return g.callout && g.callout.title === "FLIGHT CHECK COMPLETE" ? true : null; }, 1000);
 const doneMs = Date.now() - t5d;
 const s5d = await P.g(() => { const g = window.game; const s = g.flightCheckState(); return s ? { phase: s.phase, far: s.plates[0], near: s.plates[1] } : null; });
 await P.shot("complete");
-P.check("5 comet at 0.80 w; 'c' -> laser at 0.50 w within 200 ms + the release toast; Space -> no lock, comet progress 0; 'laser' -> FLIGHT CHECK COMPLETE within 300 ms, comet detonated",
+P.check("5 comet at 0.80 w; 'c' -> laser at 0.50 w within 200 ms + the release toast; Space -> no lock, comet progress 0, toast TYPE L; 'l' -> laser locked, no toast; 'aser' -> FLIGHT CHECK COMPLETE within 300 ms, comet detonated",
   s5a.far.text === "comet" && Math.abs(s5a.far.x - 0.8 * s5a.w) <= 1 && !!nearUp && nearMs <= 200 && s5b.near.text === "laser" &&
   Math.abs(s5b.near.x - 0.5 * s5b.w) <= 1 && s5b.toast === "PRESS SPACE TO LET GO, THEN TAKE THE NEARER ONE" && s5b.wantRelease &&
-  s5c.lock === null && s5c.farProgress === 0 && !!doneCallout && doneMs <= 300 && !!s5d && s5d.phase === "done" && s5d.far.alive === false,
-  JSON.stringify({ farX: s5a.far.x, nearMs, nearX: s5b.near.x, toast: s5b.toast, after: s5c, doneMs, s5d }));
+  s5c.lock === null && s5c.farProgress === 0 && s5c.toast === "TYPE L" && s5l.lock === "laser" && s5l.toast === null &&
+  !!doneCallout && doneMs <= 300 && !!s5d && s5d.phase === "done" && s5d.far.alive === false,
+  JSON.stringify({ farX: s5a.far.x, nearMs, nearX: s5b.near.x, toast: s5b.toast, after: s5c, onLaser: s5l, doneMs, s5d }));
 
 // ---- 6. Sector card within 1.4 + 2.5 s of the last kill, then wave play ----
 const card = await waitFor(() => {
@@ -179,7 +210,10 @@ const s7 = await P.g((k) => {
   return { done: b && b.onboardingDone, seen: b && b.tutorialSeen, records: b && b.highScores.length, mem: g.save.onboardingDone, last: g.flightCheckLastResult() };
 }, LS_KEY);
 const last = s7.last || {};
-P.check("7 onboardingDone stored; tutorialSeen lock/finish true, release false; no records; card stats score 0 / correct 0, run in sector 1; result passed / space / 1 miss / >= 13 keys / 2-60 s",
+const w7 = await P.g(() => { const W = window.__fc.writes; return { inCheck: W.filter((x) => x.check && x.active > 0), finish: W.filter((x) => x.by === "fcFinish").length, all: W.map((x) => `${x.phase || "-"}:${x.by}`) }; });
+s7.writes = w7;
+P.check("7 onboardingDone stored; tutorialSeen lock/finish true, release false; no records; card stats score 0 / correct 0, run in sector 1; result passed / space / 1 miss / >= 13 keys / 2-60 s; no storage write from the check's first frame to its end (every key, the miss, the release), one storeSave from fcFinish",
+  w7.inCheck.length === 0 && w7.finish === 1 &&
   typeof s7.done === "number" && s7.done > 0 && s7.mem === s7.done && s7.seen && s7.seen.lock === true && s7.seen.finish === true && s7.seen.release === false &&
   s7.records === 0 && !!card && card.score === 0 && card.correct === 0 && card.levelIndex === 0 && last.result === "passed" && last.releasedBy === "space" &&
   last.misses === 1 && last.keys >= 13 && last.ms >= 2000 && last.ms <= 60000, JSON.stringify({ ...s7, card }));
@@ -187,9 +221,10 @@ P.check("7 onboardingDone stored; tutorialSeen lock/finish true, release false; 
 // ---- 8. Every frame of the check: no powerups, no + floaters, no hull loss, no multiplier callout; no tutorial toasts ----
 const s8 = await P.g(() => { const S = window.__fc; return { frames: S.frames, maxPowerups: S.maxPowerups, plus: S.plus, hpLoss: S.hpLoss, mult: S.mult, sectorBanner: S.sectorBanner,
   toasts: S.toasts.filter((x) => x.check).map((x) => x.text) }; });
-P.check("8 sampled every check frame: 0 powerups, no '+' floater, hull full, no multiplier callout, no sector card; no TYPE SHIELD / LOCK ON toast",
+P.check("8 sampled every check frame: 0 powerups, no '+' floater, hull full, no multiplier callout, no sector card; no TYPE SHIELD / LOCK ON toast; in step 1 spawnPowerup(kill drop of a real type) -> null by the hook's cancel, addScore(100) -> 0",
   s8.frames > 60 && s8.maxPowerups === 0 && s8.plus.length === 0 && s8.hpLoss === 0 && s8.mult.length === 0 && !s8.sectorBanner &&
-  !s8.toasts.some((t) => /TYPE SHIELD|LOCK ON/.test(t)), JSON.stringify(s8));
+  !s8.toasts.some((t) => /TYPE SHIELD|LOCK ON/.test(t)) && !!cancels.type && cancels.aliveBefore === 0 && cancels.powerup === null && cancels.hookCancel &&
+  cancels.powerups === 0 && cancels.added === 0 && cancels.scoreDelta === 0, JSON.stringify({ ...s8, cancels }));
 
 // ---- 9. First 6 s of sector 1: neither the lock tip nor FINISH (the check taught both) ----
 await P.g(() => { window.game.invulnT = 1000; });

@@ -34,8 +34,9 @@ const BLOCK_STORAGE = () => {
   };
 };
 
-async function openCase(name, { flightCheck = "auto", save = undefined, mobile = false, reducedMotion = false, blockStorage = false } = {}) {
-  const ctxOpts = mobile ? { ...devices["iPhone 13 landscape"], deviceScaleFactor: 2 }
+async function openCase(name, { flightCheck = "auto", save = undefined, mobile = false, phone = null, reducedMotion = false, blockStorage = false } = {}) {
+  const ctxOpts = phone ? { viewport: phone, deviceScaleFactor: 2, isMobile: true, hasTouch: true }
+    : mobile ? { ...devices["iPhone 13 landscape"], deviceScaleFactor: 2 }
     : { viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1, reducedMotion: reducedMotion ? "reduce" : "no-preference" };
   const ctx = await P.browser.newContext(ctxOpts);
   await harnessFlags(ctx, { flightCheck });
@@ -82,8 +83,9 @@ async function openCase(name, { flightCheck = "auto", save = undefined, mobile =
 }
 
 // Types through the check. how: "space" (release then laser), "finish" (type comet out), "novice" (types l a s on the
-// comet lock, loses it, then laser). send(k) defaults to a hardware key press.
-async function drive(c, how = "space", send = null) {
+// comet lock, loses it, then laser). send(k) defaults to a hardware key press. onNear (optional) runs once laser is up;
+// a string it returns replaces the rest of the key sequence.
+async function drive(c, how = "space", send = null, { onNear = null } = {}) {
   const key = send || ((k) => c.press(k));
   for (const k of "j") { await c.atStep(1); await key(k); }
   await c.atStep(2);
@@ -94,7 +96,7 @@ async function drive(c, how = "space", send = null) {
     await key("c");
     await c.waitFor(() => { const s = window.game.flightCheckState(); return s && s.plates.length === 2 ? true : null; }, 1000);
     await sleep(60);
-    const seq = how === "novice" ? "laslaser" : " laser";
+    const seq = (onNear && await onNear()) || (how === "novice" ? "laslaser" : " laser");
     for (const k of seq) { await key(k); await sleep(70); }
   }
   return c.waitFor(() => { const g = window.game; return !g.flightCheck && g.levelIntro ? true : null; }, 4500);
@@ -147,11 +149,43 @@ async function drive(c, how = "space", send = null) {
 {
   const c = await openCase("novice", { save: null });
   await c.start();
-  const ok = await drive(c, "novice");
+  // The shared nudge cap is already spent (an idle pilot): losing the comet lock must still say what to type now.
+  let lost = null;
+  const ok = await drive(c, "novice", null, { onNear: async () => {
+    await c.g(() => { window.game.flightCheck.nudges = 2; });
+    for (const k of "las") { await c.press(k); await sleep(70); }
+    lost = await c.waitFor(() => { const g = window.game; const s = g.flightCheckState(); return s && !g.lock && s.toast === "TYPE L" ? { toast: s.toast, nudges: s.nudges } : null; }, 300);
+    return "laser";
+  } });
   const last = await c.last();
   const toasts = await c.g(() => window.__fc.toasts.slice());
-  P.check("4 novice types 'las' on the comet lock -> lock lost, then 'laser' -> passed, releasedBy lost", !!ok && last.result === "passed" && last.releasedBy === "lost" && last.misses >= 3,
-    JSON.stringify({ last, toasts }));
+  P.check("4 novice types 'las' on the comet lock with the nudge cap spent -> lock lost and TYPE L within 300 ms (not a nudge), then 'laser' -> passed, releasedBy lost",
+    !!ok && !!lost && lost.nudges === 2 && last.result === "passed" && last.releasedBy === "lost" && last.misses >= 3, JSON.stringify({ lost, last, toasts }));
+  await c.close();
+}
+
+// ---- 4b. Once laser is up the step-3 toast follows the lock ----
+{
+  const c = await openCase("relock", { save: null });
+  await c.start();
+  const fcToast = (want, lock) => c.waitFor(([want, lock]) => { const g = window.game; const s = g.flightCheckState(); const l = g.lock ? g.lock.ref.text : null; return s && s.toast === want && l === lock ? true : null; }, 300, [want, lock]);
+  const REL = "PRESS SPACE TO LET GO, THEN TAKE THE NEARER ONE";
+  const seen = {};
+  const ok = await drive(c, "space", null, { onNear: async () => {
+    seen.release = await fcToast(REL, "comet");
+    for (const k of "xyz") { await c.press(k); await sleep(70); }
+    seen.lost = await fcToast("TYPE L", null);
+    await c.press("c");
+    seen.relock = await fcToast(REL, "comet");
+    await c.press(" ");
+    seen.space = await fcToast("TYPE L", null);
+    await c.press("l");
+    seen.laser = await fcToast(null, "laser");
+    return "aser";
+  } });
+  const last = await c.last();
+  P.check("4b laser up: comet locked -> release copy; 3 misses drop it -> TYPE L; 'c' re-locks -> release copy again; Space -> TYPE L; 'l' -> laser locked, no toast; 'aser' -> passed",
+    !!ok && Object.keys(seen).length === 5 && Object.values(seen).every(Boolean) && last.result === "passed", JSON.stringify({ seen, last }));
   await c.close();
 }
 
@@ -325,6 +359,69 @@ async function drive(c, how = "space", send = null) {
     focused === "typeInput" && !!ok && last.result === "passed" && last.releasedBy === "space" && geo.skipText === "Skip",
     JSON.stringify({ geo, pill: !!pill, focused, last }));
   await c.close();
+}
+
+// ---- 11b. Phone layouts: the tap pill and the toasts never overprint the Skip button or the step count ----
+// Rects in CSS px of everything visible in the bottom band: the pill (+6 px for its ring), each fc toast, Skip, the step
+// count. Measured in step 1 with the pill up, then (pill down, typing) on the FINISH toast and the two-line release toast,
+// then the release toast with the pill forced back up (a pilot who closed the soft keyboard).
+{
+  const BAND = () => {
+    const vis = (el) => { if (!el) return null; const cs = getComputedStyle(el); const b = el.getBoundingClientRect(); return cs.display === "none" || cs.visibility === "hidden" || b.width === 0 ? null : b; };
+    const box = (b, pad = 0) => b && { l: b.left - pad, t: b.top - pad, r: b.right + pad, b: b.bottom + pad };
+    const main = document.getElementById("main").getBoundingClientRect();
+    const pill = box(vis(document.getElementById("tapToType")), 6);
+    const toasts = [...document.querySelectorAll('#toastStack .toast[data-key="fc"]:not(.is-leaving)')].map((t) => ({ text: t.textContent, ...box(vis(t)) }));
+    const skip = box(vis(document.getElementById("btnFlightSkip")));
+    const step = box(vis(document.querySelector("#flightCheck .fcStep")));
+    const hit = (a, b) => !!(a && b && a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b);
+    const front = [pill, ...toasts].filter(Boolean), panel = [skip, step].filter(Boolean);
+    const overlaps = [];
+    for (const a of front) for (const b of panel) if (hit(a, b)) overlaps.push([a === pill ? "pill" : a.text, b === skip ? "skip" : "step"]);
+    for (const t of toasts) if (hit(t, pill)) overlaps.push([t.text, "pill"]);
+    const inside = [pill, ...toasts, skip, step].filter(Boolean).every((r) => r.l >= main.left - 0.5 && r.r <= main.right + 0.5);
+    const round = (r) => r && { l: Math.round(r.l), t: Math.round(r.t), r: Math.round(r.r), b: Math.round(r.b) };
+    return { overlaps, inside, pill: round(pill), skip: round(skip), step: round(step), toasts: toasts.map((t) => ({ text: t.text, ...round(t) })), skipText: document.getElementById("btnFlightSkip").textContent };
+  };
+  const out = {};
+  for (const [name, phone] of [["p390x844", { width: 390, height: 844 }], ["l844x390", { width: 844, height: 390 }]]) {
+    const c = await openCase("layout-" + name, { save: null, phone });
+    const send = (k) => c.page.keyboard.insertText(k);
+    await c.page.fill("#playerName", "THUMB").catch(() => {});
+    await c.page.tap("#btnStart");
+    try { await c.page.locator("#btnStoryLaunch").waitFor({ state: "visible", timeout: 2000 }); await sleep(250); await c.page.tap("#btnStoryLaunch"); } catch {}
+    await c.waitFor(() => window.game.mode === "playing" ? true : null, 15000);
+    await c.atStep(1);
+    const pillUp = await c.waitFor(() => { const p = document.getElementById("tapToType"); return p && !p.classList.contains("hidden") ? true : null; }, 4000);
+    await sleep(250);
+    const r = { pillUp: !!pillUp, step1: await c.g(BAND) };
+    await c.page.tap("#game");
+    await sleep(200);
+    await send("j");
+    await c.atStep(2);
+    await send("s");
+    await c.waitFor(() => { const s = window.game.flightCheckState(); return s && s.toast === "KEEP TYPING TO FINISH IT" ? true : null; }, 1000);
+    await sleep(250);
+    r.finish = await c.g(BAND);
+    for (const k of "park") { await send(k); await sleep(60); }
+    await c.atStep(3);
+    await send("c");
+    await c.waitFor(() => { const s = window.game.flightCheckState(); return s && s.plates.length === 2 && s.toast ? true : null; }, 1000);
+    await sleep(250);
+    r.release = await c.g(BAND);
+    await c.g(() => window.game.tapToType.classList.remove("hidden"));
+    await sleep(100);
+    r.releasePill = await c.g(BAND);
+    await c.g(() => window.game.tapToType.classList.add("hidden"));
+    for (const k of " laser") { await send(k); await sleep(70); }
+    r.passed = !!(await c.waitFor(() => { const g = window.game; return !g.flightCheck && g.levelIntro ? true : null; }, 4500));
+    out[name] = r;
+    await c.close();
+  }
+  const frames = Object.values(out).flatMap((r) => [r.step1, r.finish, r.release, r.releasePill]);
+  P.check("11b 390x844 and 844x390 touch: no overlap between the tap pill (+ring) / fc toasts and Skip / the step count, toasts clear of the pill, all inside #main (step 1 with the pill, FINISH, release, release with the pill); both pass",
+    Object.values(out).every((r) => r.pillUp && r.passed) && frames.every((f) => f && f.overlaps.length === 0 && f.inside) &&
+    frames.every((f) => f.toasts.length > 0) && !!out.p390x844.step1.pill && !!out.l844x390.releasePill.pill, JSON.stringify(out));
 }
 
 // ---- 12. An external level start aborts it ----
