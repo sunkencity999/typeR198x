@@ -193,6 +193,16 @@ P.check("8 sampled every check frame: 0 powerups, no '+' floater, hull full, no 
 
 // ---- 9. First 6 s of sector 1: neither the lock tip nor FINISH (the check taught both) ----
 await P.g(() => { window.game.invulnT = 1000; });
+// Wave 1 is ~80 % letters: a scripted word plate (speed 0, nearest of its lead letter) guarantees a word lock in the window.
+const scripted = await P.g(() => {
+  const g = window.game;
+  const near = new Set(g.enemies.filter((e) => e.alive && !e.dying && e.x < 760).map((e) => e.nextChar()));
+  const text = ["orbit", "pulse", "vector", "quartz", "zenith"].find((w) => !near.has(w[0])) || "orbit";
+  g.enemies.push(new Enemy({ text, x: 760, y: LANE_YS[2], speed: 0, lane: 2 }));
+  return text;
+});
+await sleep(120);
+await press(scripted[0]);
 let wordLocked = false;
 const t9 = Date.now();
 while (Date.now() - t9 < 6000) {
@@ -209,7 +219,7 @@ while (Date.now() - t9 < 6000) {
 }
 const s9 = await P.g(() => { const S = window.__fc; return S.toasts.filter((x) => S.endAt !== null && x.t >= S.endAt).map((x) => x.text); });
 P.check("9 first 6 s of sector 1 (a word locked): no 'TYPE THE FIRST LETTER' and no FINISH toast", wordLocked && !s9.some((t) => /TYPE THE FIRST LETTER|FINISH/.test(t)),
-  JSON.stringify({ wordLocked, toasts: s9 }));
+  JSON.stringify({ scripted, wordLocked, toasts: s9 }));
 
 // ---- 10. Never again: Start in-session, and a new context seeded with the saved blob ----
 await P.g(() => window.game.stopToMenu(true));
