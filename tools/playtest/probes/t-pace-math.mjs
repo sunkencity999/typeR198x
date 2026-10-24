@@ -12,7 +12,7 @@ await startFresh(P, "PACE");
 const c = await P.g(() => ({ PACE: { ...PACE }, hs: HUNGRY_SPAWN_S, hma: HUNGRY_MIN_ALIVE, roll: SPAWN_ROLLIN_PX.slice(), std: { ...PACE_DIFF_STANDARD }, cadet: { ...PACE_DIFF_CADET },
   frozen: Object.isFrozen(PACE_DIFF_STANDARD) && Object.isFrozen(PACE_DIFF_CADET) }));
 const WANT = { pilotFactor: 0.85, mulMin: 1, mulMax: 2.5, stepMax: 0.35, runMinIntervals: 20, profileMinIntervals: 60, maxEnemiesPerMul: 2, maxEnemiesAddMax: 3,
-  speedPerMul: 0.15, hungryMin2AtMul: 1.5, cadetMul: 0.75, cadetDamage: 0.75, cadetScore: 0.8, cadetAfterDeaths: 2, hullCarryFromLevel: 4, hullRepairFrac: 0.5,
+  speedPerMul: 0.15, hungryMin2AtMul: 1.35, cadetMul: 0.75, cadetDamage: 0.75, cadetScore: 0.8, cadetAfterDeaths: 2, hullCarryFromLevel: 4, hullRepairFrac: 0.5,
   timeoutCalloutS: 1.6, paceTagMin: 1.1 };
 const constOk = Object.entries(WANT).every(([k, v]) => c.PACE[k] === v);
 P.check("1. PACE constants as spec-pace 1; HUNGRY_SPAWN_S 0.1, HUNGRY_MIN_ALIVE 1, SPAWN_ROLLIN_PX [10, 30]; frozen diff rows standard {1, 1} / cadet {0.8, 0.75}",
@@ -34,11 +34,13 @@ const tu = await P.g(() => {
   const cfg = LEVELS[4];
   const rows = [1.0, 1.25, 1.75, 2.25, 2.5, 0.75].map((m) => { const t = paceApplyTuning({}, cfg, 1, m, 0); return [t.quota, t.maxEnemiesAdd, Math.round(t.speedMul * 1e4) / 1e4, t.hungryMinAlive, Object.is(t.maxEnemiesAdd, -0)]; });
   const carry = paceApplyTuning({}, cfg, 1, 1.25, 3).quota;
-  const h16 = paceApplyTuning({}, cfg, 1, 1.6, 0).hungryMinAlive, h14 = paceApplyTuning({}, cfg, 1, 1.4, 0).hungryMinAlive;
-  return { rows, carry, h16, h14 };
+  // the 2-alive top-up switches on exactly at the knob (spec 1.5, shipped 1.35 after the balance pass)
+  const k = PACE.hungryMin2AtMul;
+  const h16 = paceApplyTuning({}, cfg, 1, k, 0).hungryMinAlive, h14 = paceApplyTuning({}, cfg, 1, paceRound2(k - 0.01), 0).hungryMinAlive;
+  return { rows, carry, h16, h14, k };
 });
 const wantRows = [[18, 0, 1, 1], [23, 1, 1.0375, 1], [32, 2, 1.1125, 2], [41, 3, 1.1875, 2], [45, 3, 1.225, 2], [14, 0, 0.9625, 1]];
-P.check("4. tuning at mul 1 / 1.25 / 1.75 / 2.25 / 2.5 / 0.75 on S5 W2: quota 18/23/32/41/45/14, add 0/1/2/3/3/0 (never -0), speed x1/1.0375/1.1125/1.1875/1.225/0.9625, hungry 1/1/2/2/2/1; carry 3 adds 3; hungry 2 at 1.6 not 1.4",
+P.check("4. tuning at mul 1 / 1.25 / 1.75 / 2.25 / 2.5 / 0.75 on S5 W2: quota 18/23/32/41/45/14, add 0/1/2/3/3/0 (never -0), speed x1/1.0375/1.1125/1.1875/1.225/0.9625, hungry 1/1/2/2/2/1; carry 3 adds 3; hungry 2 from the knob (1.35), 1 just below (spec: 1.5)",
   tu.rows.every((r, i) => r.slice(0, 4).join() === wantRows[i].join() && r[4] === false) && tu.carry === 26 && tu.h16 === 2 && tu.h14 === 1, tu);
 
 // ---- 5. pilot sources ----

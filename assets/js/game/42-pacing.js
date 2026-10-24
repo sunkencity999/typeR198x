@@ -9,7 +9,7 @@
 // the previous wave of the run; pilotCps = MEASURE's run speed (>= 20 intervals), else the profile's lifetime speed
 // (>= 60 intervals, so a Flight Check alone never moves a fresh pilot's S1 W1 off 1.0), else the table. The wave's
 // tuning (scaffold, 40-combat.js beginWave) gets quota x mul (+ escaped carry), spawn rate x mul, maxEnemies +
-// min(3, round(2 (mul - 1))), plate speed x (1 + 0.15 (mul - 1)) and, from paceMul 1.5, an empty-field top-up to 2 alive.
+// min(3, round(2 (mul - 1))), plate speed x (1 + 0.15 (mul - 1)) and, from paceMul 1.35, an empty-field top-up to 2 alive.
 // Stakes (D3): a wave that ends by its cap pays no PERFECT WAVE and plays no clear sting; at its drain end the leftovers
 // detonate as before and "WAVE TIMED OUT · N ESCAPED" counts them into the next wave of the sector. Clears of sectors
 // 4-9 repair half of the missing hull and carry the rest. Cadet (D2): from the second death in one sector the Game Over
@@ -30,7 +30,9 @@ const PACE = {
   maxEnemiesPerMul: 2,        // maxEnemies + min(3, round(2 x (paceMul - 1)))
   maxEnemiesAddMax: 3,
   speedPerMul: 0.15,          // plate speed x (1 + 0.15 x (paceMul - 1))
-  hungryMin2AtMul: 1.5,       // knob (C4 / R29): from this paceMul the empty-field rule tops the field up to 2 alive
+  hungryMin2AtMul: 1.35,      // knob (C4 / R29): from this paceMul the empty-field rule tops the field up to 2 alive.
+                              // Spec 1.5 -> 1.35 (balance pass, spec 14.3 knob 1): a returning pilot's first wave runs at
+                              // 1.35 and read 13-19 % S1 idle at 1.5 (target 15 %); the 35 WPM pilot's S2 peaks at 1.34.
   cadetMul: 0.75,             // CADET: paceMul fixed at 0.75
   cadetDamage: 0.75,
   cadetScore: 0.8,

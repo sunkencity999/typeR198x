@@ -1,6 +1,6 @@
 // t-pace-spawner (PACE, D2 spawner side; CONTRACT 6 PACE): the 10-30 px roll-in, the 0.1 s empty-field spawn and the
 // first targetable plate, a pinned paceMul 2.0 on S5 W2 (alive cap +2, plate speeds x1.15, quota 36, stage bar), the
-// 2-alive top-up from paceMul 1.5 (on at 1.6, off at 1.4), the stream at a pinned 1.5 under an 80 WPM typist, and a fresh
+// 2-alive top-up from PACE.hungryMin2AtMul (1.35: on at +0.1, off at -0.1), the stream at a pinned 1.5 under an 80 WPM typist, and a fresh
 // pilot's S1 W1 at 1.0 with MEASURE present. ~90 s. PASS = the spawner delivers the paced stream.
 // Usage: node tools/playtest/probes/t-pace-spawner.mjs [--dpr 1|2]
 import { openProbe, sleep, waitFor, startFresh, jumpTo, paceType, errorsCheck } from "./pace_lib.mjs";
@@ -121,11 +121,12 @@ const top = await P.g(async () => {
     const alive = g.enemies.filter((e) => e.alive && !e.dying).length;
     return { mul, hungry: g.waveTuningNow().hungryMinAlive, alive };
   };
-  const a = await run(1.6), b = await run(1.4);
+  const k = PACE.hungryMin2AtMul;
+  const a = await run(paceRound2(k + 0.1)), b = await run(paceRound2(k - 0.1));
   g.pacePin(null);
   return { a, b };
 });
-P.check("4. one plate alive, stream off: pacePin(1.6) tops the field up to 2 within 0.5 s (hungryMinAlive 2); pacePin(1.4) does not (hungryMinAlive 1)",
+P.check("4. one plate alive, stream off: pacePin(knob + 0.1 = 1.45) tops the field up to 2 within 0.5 s (hungryMinAlive 2); pacePin(knob - 0.1 = 1.25) does not (hungryMinAlive 1)",
   top.a.hungry === 2 && top.a.alive >= 2 && top.b.hungry === 1 && top.b.alive === 1, top);
 
 // ---- 5. stream at a pinned 1.5 on S4 W2 under an 80 WPM typist ----

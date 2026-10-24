@@ -21,7 +21,7 @@ const IFRAMES_S = 0.8;
 // Hungry spawner (B10, PACE D2): an EMPTY field for this long spawns now. CONTRACT 7 had "fewer than 2 alive for 1.5 s",
 // which left an 80 WPM typist idle for up to 2 s; B10's 0.5 s plus a 10-90 px roll-in still left a fast typist idle
 // 35-50 % of sectors 1-3. PACE (D2): 0.1 s plus a 10-30 px roll-in makes the next plate lockable ~0.3-0.6 s after the
-// last kill, and 42-pacing.js raises the alive threshold to 2 per wave from paceMul 1.5 (waveTuning.hungryMinAlive).
+// last kill, and 42-pacing.js raises the alive threshold to 2 per wave from paceMul 1.35 (waveTuning.hungryMinAlive).
 const HUNGRY_SPAWN_S = 0.1;
 const HUNGRY_MIN_ALIVE = 1;
 const SPAWN_ROLLIN_PX = [10, 30];  // PACE: a new plate starts this far past the right edge (targetable 4 px later)
