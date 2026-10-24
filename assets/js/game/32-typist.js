@@ -209,6 +209,7 @@ function typistNewState() {
     lastMissAt: 0,
     scratch26: new Float64Array(26), scratch676: new Float64Array(676), bIdx: new Uint16Array(676), bKeep: new Uint8Array(676),
     speedOut: { wpm: null, n: 0 },
+    rSeq: 0, wsSeq: -1, wsWin: -1, wsUntil: 0, wsN: 0, wsMs: 0,   // window-speed cache (rSeq: ring writes + resets)
     intervalEvt: { ms: 0, t: 0, kind: "" },
     recordsTab: "hall", tabsWired: false,
     popFont: "", dangerFill: "", haloStroke: ""
@@ -267,7 +268,7 @@ Object.assign(Game.prototype, {
       run.spd = { n: 0, ms: 0 };
       ty.runN = 0; ty.runMs = 0;
     }
-    ty.rHead = 0; ty.rCount = 0;
+    ty.rHead = 0; ty.rCount = 0; ty.rSeq++;
   },
 
   // Run figures stay readable after the sector-10 clear nulls this.run (runMeta outlives it).
@@ -342,6 +343,7 @@ Object.assign(Game.prototype, {
     ty.rEnd[ty.rHead] = t;
     ty.rHead = (ty.rHead + 1) & (TYPIST_RING - 1);
     if (ty.rCount < TYPIST_RING) ty.rCount++;
+    ty.rSeq++;
     ty.sN++; ty.sMs += ms; ty.sSq += ms * ms;
     const ls = this.levelStats;
     if (ls) { ls.spdN = ty.sN; ls.spdMs = ty.sMs; ls.spdSq = ty.sSq; }
@@ -539,12 +541,21 @@ Object.assign(Game.prototype, {
       return out;
     }
     if (scope === "window") {
-      const since = nowMs() - (Number(windowMs) || 0);
-      let idx = ty.rHead;
-      for (let i = 0; i < ty.rCount; i++) {
-        idx = (idx - 1) & (TYPIST_RING - 1);
-        if (ty.rEnd[idx] < since) break;
-        n++; ms += ty.rMs[idx];
+      const win = Number(windowMs) || 0;
+      const now = nowMs();
+      // Cached while no interval was added and the oldest counted one is still inside the window (O(1) per call).
+      if (ty.wsSeq === ty.rSeq && ty.wsWin === win && now < ty.wsUntil) {
+        n = ty.wsN; ms = ty.wsMs;
+      } else {
+        const since = now - win;
+        let idx = ty.rHead, oldest = Infinity;
+        for (let i = 0; i < ty.rCount; i++) {
+          idx = (idx - 1) & (TYPIST_RING - 1);
+          if (ty.rEnd[idx] < since) break;
+          n++; ms += ty.rMs[idx]; oldest = ty.rEnd[idx];
+        }
+        ty.wsSeq = ty.rSeq; ty.wsWin = win; ty.wsN = n; ty.wsMs = ms;
+        ty.wsUntil = n > 0 ? oldest + win : Infinity;
       }
       out.n = n;
       out.wpm = n > 0 && ms > 0 ? 12000 * n / ms : null;
