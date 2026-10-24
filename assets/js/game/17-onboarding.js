@@ -43,6 +43,7 @@ const FC_COPY = Object.freeze({
   step: (n) => `FLIGHT CHECK ${n}/3`,
   pauseEyebrow: "Paused // Flight check",
   pauseWave: (n) => `CHECK ${n}/3`,
+  quit: "Quit to menu", quitTitle: "Leave the flight check",   // the check has no run to save (release finding CT-05)
   skip: "Skip", skipKbd: "Skip · Esc", skipLabel: "Skip flight check",
   srStart: "Flight check: three quick drills before Sector 1. Nothing can hit you. Press Escape to skip.",
   srWord: (w) => `Word: ${w}. Type ${w[0].toUpperCase()} to lock on.`,
@@ -181,8 +182,15 @@ Object.assign(Game.prototype, {
     this.fcEnsureUi();
     this.fcSetStepUi(1);
     this.fcShowPanel(true);
+    this.fcQuitLabels(true);
 
     this.setMode("playing");
+    // Phone portrait: the 1280-wide canvas draws the banner's sub-line at about 4 CSS px, and it is the only statement
+    // that the check is safe and unscored, so the step-toast slot carries it until step 1 replaces it (release finding
+    // J6). Before srStart: announce() keeps the last write.
+    try {
+      if (this.canvas && this.canvas.getBoundingClientRect().width < 560) this.showToast(FC_COPY.bannerSub, { kind: "tip", key: FC_TOAST_KEY, ms: FC_TOAST_MS });
+    } catch (_) { /* no DOM */ }
     this.announce(FC_COPY.srStart);   // same task as setMode's sector line: announce() keeps the last write
     this.showBanner({ kind: "wave", eyebrow: FC_COPY.banner, sub: FC_COPY.bannerSub, dur: 1.6 });
     if (sfx && typeof sfx.waveStart === "function") { try { sfx.waveStart(1); } catch (_) { /* audio is optional */ } }
@@ -208,6 +216,7 @@ Object.assign(Game.prototype, {
     const reason = opts.reason || null;
     this.dismissToast(FC_TOAST_KEY);
     this.fcShowPanel(false);
+    this.fcQuitLabels(false);
     try { delete document.body.dataset.flightCheck; } catch (_) { /* no DOM */ }
 
     const st = this.stats || {};
@@ -304,7 +313,29 @@ Object.assign(Game.prototype, {
     set("pauseWave", FC_COPY.pauseWave(clamp(fc.step | 0 || 1, 1, 3)));
     set("pauseSector", "—");
     set("pauseScore", "—");
+    set("pauseAcc", "—");   // the HUD hides ACC during the check; getAccuracyPct() would say 100% before any key (CT-05)
     if (this.btnRestart) this.btnRestart.classList.add("hidden");   // setMode re-toggles it on every later pause
+  },
+
+  // "Save & quit" (pause card, top bar) saves nothing during the check and quitting replays it on the next Start, so
+  // both say "Quit to menu" while it runs; fcFinish restores the markup's text and title (release finding CT-05).
+  fcQuitLabels(on) {
+    const quit = document.getElementById("btnPauseQuit");
+    const stop = document.getElementById("btnStop");
+    const label = stop && (stop.querySelector(".btnLabel") || stop);
+    if (on) {
+      if (quit && quit.dataset.fcText == null) { quit.dataset.fcText = quit.textContent; quit.textContent = FC_COPY.quit; }
+      if (label && stop.dataset.fcText == null) {
+        stop.dataset.fcText = label.textContent; stop.dataset.fcTitle = stop.title || "";
+        label.textContent = FC_COPY.quit; stop.title = FC_COPY.quitTitle;
+      }
+      return;
+    }
+    if (quit && quit.dataset.fcText != null) { quit.textContent = quit.dataset.fcText; delete quit.dataset.fcText; }
+    if (label && stop.dataset.fcText != null) {
+      label.textContent = stop.dataset.fcText; stop.title = stop.dataset.fcTitle;
+      delete stop.dataset.fcText; delete stop.dataset.fcTitle;
+    }
   },
 
   fcOnEscape(evt) {

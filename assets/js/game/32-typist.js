@@ -18,6 +18,10 @@ const TYPIST_GAP_MIN_MS = 10;           // touch paste / IME bursts deliver seve
 const TYPIST_LIVE_N = 30;               // HUD live window (intervals)
 const TYPIST_SHOW_MIN_N = 10;           // any speed is shown only from 10 intervals ("--" before)
 const TYPIST_BEST_MIN_N = 60;           // Best WPM / sector best speed need 60 intervals
+// Player-facing statement of that rule (help copy, menu row title, Flight Log tile caption; release finding CT-01).
+// WEAK SIGNAL chip tooltips by kind (release finding J5).
+const TYPIST_CHIP_TITLES = Object.freeze({ key: "The key you missed most", bigram: "Your slowest letter pair and its average time", steady: "How even your key rhythm was (higher is steadier)" });
+const TYPIST_BEST_RULE = `Best WPM counts a cleared sector with at least ${TYPIST_BEST_MIN_N} timed keys.`;
 const TYPIST_RING = 128;                // interval ring (power of two: index & 127)
 const TYPIST_EMA_SECTOR_K = 300;        // speedEma / thrEma weight w = n / (n + 300) per finished segment
 const TYPIST_KEY_MS_ALPHA = 0.15;
@@ -980,7 +984,9 @@ Object.assign(Game.prototype, {
     if (why.say) r.speech.push(why.say);
     r.speech.push(`${misses === 0 ? "No misses" : typistPlural(misses, "miss", "misses")}.`);
     if (says.length) r.speech.push(`Weak signal: ${says.join(". ")}.`);
-    if (r.newWpm) r.speech.push(`New best speed: ${r.newWpmValue} words per minute.`);
+    // The run card's WPM tile is the run's speed while Best WPM comes from the sector-10 stash (spec 4.5), so the run
+    // card names the sector (release finding CT-03).
+    if (r.newWpm) r.speech.push(scope === "run" ? `New best speed in Sector 10: ${r.newWpmValue} words per minute.` : `New best speed: ${r.newWpmValue} words per minute.`);
   },
 
   // resultsRender listener: the card DOM (rank line, ACC caption, WEAK SIGNAL chips, WPM "--", Best WPM text).
@@ -991,7 +997,7 @@ Object.assign(Game.prototype, {
     const wpmEl = q('.statTile__value[data-stat="wpm"]');
     if (wpmEl && !(Number(r.wpm) > 0)) wpmEl.textContent = "--";   // < 10 intervals: no count-up ran (its target is 0)
     const badge = q(".newWpm");
-    if (badge) badge.textContent = r.newWpm ? `BEST WPM ${r.newWpmValue | 0}` : "Best WPM";
+    if (badge) badge.textContent = r.newWpm ? (r.scope === "run" ? `BEST WPM ${r.newWpmValue | 0} · S10` : `BEST WPM ${r.newWpmValue | 0}`) : "Best WPM";
     const why = q('[data-typist="why"]');
     if (why) {
       const text = typeof r.rankWhy === "string" ? r.rankWhy : "";
@@ -1022,6 +1028,7 @@ Object.assign(Game.prototype, {
           li.className = "wsChip";
           li.dataset.kind = (Array.isArray(r.weakKinds) && r.weakKinds[i]) || "";
           li.textContent = text;
+          li.title = TYPIST_CHIP_TITLES[li.dataset.kind] || "";   // the help's Weak signal item says the same (J5)
           ul.appendChild(li);
         });
       }
@@ -1051,7 +1058,13 @@ Object.assign(Game.prototype, {
     const row = document.querySelector('[data-typist="bestWpm"]');
     if (row) row.classList.remove("hidden");
     const wpm = document.getElementById("statWpm");
-    if (wpm) wpm.textContent = best > 0 ? String(best) : "--";
+    if (wpm) {
+      // A measured speed without a Best WPM (no cleared sector reached TYPIST_BEST_MIN_N intervals yet) says so instead
+      // of a bare "--" above a goal line that quotes a WPM; the row's title states the rule (CT-01 / J2).
+      const measured = best > 0 ? false : this.typistSessions(TYPIST_SESSION_CAP).some((s) => s.mode === "campaign" && s.speed > 0);
+      wpm.textContent = best > 0 ? String(best) : (measured ? "not set yet" : "--");
+      if (row) row.title = best > 0 ? "" : TYPIST_BEST_RULE;
+    }
     const goal = document.getElementById("statGoal");
     if (goal) {
       goal.textContent = this.typistGoal().text;
@@ -1115,6 +1128,12 @@ Object.assign(Game.prototype, {
     hall.hidden = onLog;
     log.hidden = !onLog;
     if (focus) { try { (onLog ? tabLog : tabHall).focus({ preventScroll: true }); } catch (_) { /* not focusable */ } }
+    // The panels share one scroller: start the new one at its top and recompute the scroll cue (fade + pill), which
+    // openModal computed for the panel shown at open (release finding J3: the Flight Log overflowed with no cue).
+    const modal = document.getElementById("recordsModal");
+    const body = modal && modal.querySelector(".modalBody");
+    if (body) body.scrollTop = 0;
+    if (modal && typeof this.updateModalScroll === "function") this.updateModalScroll(modal);
   },
 
   // Key colour bucket for the Flight Log glyph (none under 15 attempts).
@@ -1133,15 +1152,15 @@ Object.assign(Game.prototype, {
     const head = `<p class="flGoal">${goal.text}</p>`;
     let anyKey = false;
     for (let i = 0; i < 26; i++) if (ty.kN[i] >= TYPIST_WEAK_MIN_N) anyKey = true;
-    const legacy = (this.save.bestWpm | 0) > 0 ? `<p class="flLegacy small">OLD BEST ${this.save.bestWpm | 0} · MEASURED BEFORE HONEST SPEED</p>` : "";
+    const legacy = (this.save.bestWpm | 0) > 0 ? `<p class="flLegacy small">OLD BEST ${this.save.bestWpm | 0} · OLD MEASURE</p>` : "";
     if (!sessions.length && !anyKey) {
-      return `${head}<p class="flEmpty">No flights logged yet. Clear a sector and your speed, accuracy and every key you type are logged here, on this device only.</p>${legacy}`;
+      return `${head}<p class="flEmpty">No flights logged yet. Fly a sector and your speed, accuracy and every key you type are logged here, on this device only.</p>${legacy}`;
     }
     const dash = (v) => (v > 0 ? String(v) : "--");
     const b = p.bests || {};
     const drill = b.drill && b.drill.speed > 0 ? `${b.drill.speed | 0} · ${typistRound(b.drill.acc, 1)}%` : "--";
     const stat = (label, value, cap) => `<div class="flStat"><span class="flStat__label">${label}</span><span class="flStat__value mono">${value}</span>${cap ? `<span class="flStat__cap">${cap}</span>` : ""}</div>`;
-    const stats = `<div class="flStats">${stat("Best WPM", dash(b.speed | 0))}${stat("Throughput", dash(Math.round(p.thrEma || 0)), "what the stream let you type")}${stat("Days flown", dash(this.typistDaysFlown()))}${(b.ceiling | 0) > 0 ? stat("Ceiling", b.ceiling | 0) : ""}${b.drill && b.drill.speed > 0 ? stat("Drill", drill) : ""}</div>`;
+    const stats = `<div class="flStats">${stat("Best WPM", dash(b.speed | 0), (b.speed | 0) > 0 ? "" : `needs a clear with ${TYPIST_BEST_MIN_N} timed keys`)}${stat("Throughput", dash(Math.round(p.thrEma || 0)), "what the stream let you type")}${stat("Days flown", dash(this.typistDaysFlown()))}${(b.ceiling | 0) > 0 ? stat("Ceiling", b.ceiling | 0) : ""}${b.drill && b.drill.speed > 0 ? stat("Drill", drill) : ""}</div>`;
     // release 20261024a: Endless drift / Drill are not in this build, so their best tiles show only once a value exists.
     // keyboard glyph
     const med = this.typistKeyMedianMs(ty);
@@ -1151,7 +1170,8 @@ Object.assign(Game.prototype, {
       for (const ch of rowKeys) {
         const i = typistCode(ch);
         const lat = med > 0 && ty.kMs[i] > 0 ? typistRound(clamp(ty.kMs[i] / (2 * med), 0, 1), 2) : 0;
-        row += `<span class="flKey" data-key="${ch}" data-err="${this.typistErrBucket(ty.kN[i], ty.kErr[i])}" style="--lat:${lat}">${ch.toUpperCase()}<i></i></span>`;
+        const tip = ty.kN[i] < TYPIST_WEAK_MIN_N ? `${ch.toUpperCase()} · under ${TYPIST_WEAK_MIN_N} tries` : `${ch.toUpperCase()} · ${Math.round(ty.kErr[i] * 100)}% missed${ty.kMs[i] > 0 ? ` · ${Math.round(ty.kMs[i] / 10) * 10} ms` : ""}`;
+        row += `<span class="flKey" data-key="${ch}" data-err="${this.typistErrBucket(ty.kN[i], ty.kErr[i])}" style="--lat:${lat}" title="${tip}">${ch.toUpperCase()}<i></i></span>`;
       }
       keyRows += `<div class="flKeys__row">${row}</div>`;
     }
@@ -1166,7 +1186,9 @@ Object.assign(Game.prototype, {
     const slowText = slowest.length ? slowest.map((i) => `${TYPIST_LETTERS[i].toUpperCase()} ${msOf(i)} MS`).join(" · ") : "NONE YET";
     const weakText = weakKeys.length ? weakKeys.map((c) => c.toUpperCase()).join(" · ") : "NONE YET";
     const sr = `Weak keys: ${weakKeys.length ? weakKeys.join(", ") : "none yet"}. Slowest keys: ${slowest.length ? slowest.map((i) => `${TYPIST_LETTERS[i]} ${msOf(i)} milliseconds`).join(", ") : "none yet"}. Most missed: ${missed.length ? missed.slice(0, 5).map((i) => `${TYPIST_LETTERS[i]} ${Math.round(ty.kErr[i] * 100)} percent`).join(", ") : "none yet"}.`;
-    const keys = `<div class="flKeys" aria-hidden="true">${keyRows}</div><p class="srOnly flSr">${sr}</p>`;
+    // Visible key to the glyph (release finding J4): the colours and the bar were explained only to screen readers.
+    const legend = `<p class="flKeys__legend" aria-hidden="true">Border: misses · red many · amber some · cyan few · dashed under ${TYPIST_WEAK_MIN_N} tries · Bar: slower</p>`;
+    const keys = `<div class="flKeys" aria-hidden="true">${keyRows}</div>${legend}<p class="srOnly flSr">${sr}</p>`;
     const lists = `<div class="flLists"><p class="flList"><span class="flList__label">Slowest keys</span> <span class="mono" data-fl="slowest">${slowText}</span></p><p class="flList"><span class="flList__label">Weak keys</span> <span class="mono" data-fl="weak">${weakText}</span></p></div>`;
     // sparkline: speed (cyan, min..max of the shown speeds, at least TYPIST_SPARK_MIN_SPAN tall; speed 0 leaves a gap),
     // accuracy (amber, 80..100 %; acc null, under 10 keys, leaves a gap). A lone point is drawn as a dot. The legend

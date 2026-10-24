@@ -205,6 +205,8 @@ async function drive(c, how = "space", send = null, { onNear = null } = {}) {
   await sleep(350);
   const paused = await c.g(() => ({ mode: window.game.mode, eyebrow: document.getElementById("pauseEyebrow").textContent, wave: document.getElementById("pauseWave").textContent,
     sector: document.getElementById("pauseSector").textContent, score: document.getElementById("pauseScore").textContent,
+    acc: document.getElementById("pauseAcc").textContent, quit: document.getElementById("btnPauseQuit").textContent,
+    stop: document.querySelector("#btnStop .btnLabel").textContent, stopTitle: document.getElementById("btnStop").title,
     restartHidden: document.getElementById("btnRestart").classList.contains("hidden"), toasts: document.querySelectorAll("#toastStack .toast").length,
     x: window.game.flightCheckState().plates[0].x }));
   await sleep(200);
@@ -221,10 +223,14 @@ async function drive(c, how = "space", send = null, { onNear = null } = {}) {
   await sleep(500);
   await c.page.click("#btnPause");
   await c.waitFor(() => window.game.mode === "paused" ? true : null, 1000);
-  const normal = await c.g(() => ({ restartHidden: document.getElementById("btnRestart").classList.contains("hidden"), eyebrow: document.getElementById("pauseEyebrow").textContent }));
-  P.check("5 pause in step 2: Paused // Flight check, CHECK 2/3, Restart hidden, no toast; Esc resumes, the toast is back within 200 ms, plate unmoved, check active; a later pause shows Restart",
+  const normal = await c.g(() => ({ restartHidden: document.getElementById("btnRestart").classList.contains("hidden"), eyebrow: document.getElementById("pauseEyebrow").textContent,
+    acc: document.getElementById("pauseAcc").textContent, quit: document.getElementById("btnPauseQuit").textContent,
+    stop: document.querySelector("#btnStop .btnLabel").textContent, stopTitle: document.getElementById("btnStop").title }));
+  P.check("5 pause in step 2: Paused // Flight check, CHECK 2/3, ACCURACY '—', 'Quit to menu' on the card and the top bar (title 'Leave the flight check'), Restart hidden, no toast; Esc resumes, the toast is back within 200 ms, plate unmoved, check active; a later pause shows Restart, 'Save & quit' and a % accuracy",
     paused.mode === "paused" && /Flight check/.test(paused.eyebrow) && paused.wave === "CHECK 2/3" && paused.restartHidden && paused.toasts === 0 &&
-    !!back && backMs <= 200 && xPaused === x0 && !!after && after.step === 2 && !normal.restartHidden && !/Flight check/.test(normal.eyebrow),
+    paused.acc === "—" && paused.quit === "Quit to menu" && paused.stop === "Quit to menu" && paused.stopTitle === "Leave the flight check" &&
+    !!back && backMs <= 200 && xPaused === x0 && !!after && after.step === 2 && !normal.restartHidden && !/Flight check/.test(normal.eyebrow) &&
+    normal.quit === "Save & quit" && normal.stop === "Save & quit" && normal.stopTitle === "Save the run and return to the menu" && /^\d+%$/.test(normal.acc),
     JSON.stringify({ paused, backMs, x0, xPaused, normal }));
   await c.close();
 }
@@ -396,10 +402,11 @@ async function drive(c, how = "space", send = null, { onNear = null } = {}) {
     await c.page.tap("#btnStart");
     try { await c.page.locator("#btnStoryLaunch").waitFor({ state: "visible", timeout: 2000 }); await sleep(250); await c.page.tap("#btnStoryLaunch"); } catch {}
     await c.waitFor(() => window.game.mode === "playing" ? true : null, 15000);
+    const intro = await c.waitFor(() => { const t = document.querySelector('#toastStack .toast[data-key="fc"]'); return t && t.textContent === "3 DRILLS · NOTHING CAN HIT YOU · NO SCORE" ? t.textContent : null; }, 1000);
     await c.atStep(1);
     const pillUp = await c.waitFor(() => { const p = document.getElementById("tapToType"); return p && !p.classList.contains("hidden") ? true : null; }, 4000);
     await sleep(250);
-    const r = { pillUp: !!pillUp, step1: await c.g(BAND) };
+    const r = { pillUp: !!pillUp, intro: !!intro, canvasW: await c.g(() => Math.round(document.getElementById("game").getBoundingClientRect().width)), step1: await c.g(BAND) };
     await c.page.tap("#game");
     await sleep(200);
     await send("j");
@@ -424,9 +431,10 @@ async function drive(c, how = "space", send = null, { onNear = null } = {}) {
     await c.close();
   }
   const frames = Object.values(out).flatMap((r) => [r.step1, r.finish, r.release, r.releasePill]);
-  P.check("11b 390x844, 844x390 and 320x568 touch: no overlap between the tap pill (+ring) / fc toasts and Skip / the step count, toasts clear of the pill, all inside #main (step 1 with the pill, FINISH, release, release with the pill); all pass",
+  P.check("11b 390x844, 844x390 and 320x568 touch: a canvas under 560 px shows the banner's '3 DRILLS · NOTHING CAN HIT YOU · NO SCORE' as the fc toast until step 1's TYPE J replaces it (J6); no overlap between the tap pill (+ring) / fc toasts and Skip / the step count, toasts clear of the pill, all inside #main (step 1 with the pill, FINISH, release, release with the pill); all pass",
     Object.values(out).length === LAYOUTS.length && Object.values(out).every((r) => r.pillUp && r.passed) && frames.every((f) => f && f.overlaps.length === 0 && f.inside) &&
-    frames.every((f) => f.toasts.length > 0) && !!out.p390x844.step1.pill && !!out.l844x390.releasePill.pill && !!out.p320x568.step1.pill, JSON.stringify(out));
+    frames.every((f) => f.toasts.length > 0) && !!out.p390x844.step1.pill && !!out.l844x390.releasePill.pill && !!out.p320x568.step1.pill &&
+    Object.values(out).every((r) => r.intro === (r.canvasW < 560)) && out.p390x844.intro && out.p320x568.intro && out.p390x844.step1.toasts.every((t) => t.text === "TYPE J"), JSON.stringify(out));
 }
 
 // ---- 12. An external level start aborts it ----

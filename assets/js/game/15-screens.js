@@ -781,6 +781,8 @@ Object.assign(Game.prototype, {
   resultsTitleFor(results) {
     if (results.scope === "run") return "LEGEND STATUS GRANTED";
     if (results.scope === "over") return "RUN REPORT";
+    // S is reachable with misses, and the ACC caption now counts them: FLAWLESS only when there were none (CT-08).
+    if (results.rank === "S" && results.misses > 0) return "S-CLASS SIGNAL";
     return RANK_TITLES[results.rank] || `SECTOR ${results.level} REPORT`;
   },
 

@@ -213,7 +213,7 @@
             <div class="metaTile"><span class="label">Sector</span><span id="pauseSector" class="mono">—</span></div>
             <div class="metaTile"><span class="label">Wave</span><span id="pauseWave" class="mono">—</span></div>
             <div class="metaTile"><span class="label">Score</span><span id="pauseScore" class="mono">—</span></div>
-            <div class="metaTile"><span class="label">Accuracy</span><span id="pauseAcc" class="mono">—</span></div>
+            <div class="metaTile"><span class="label">Run accuracy</span><span id="pauseAcc" class="mono">—</span></div>
           </div>
           <div class="pauseActions">
             <button id="btnResume" class="btn-arcade primary" type="button">Resume</button>
@@ -520,8 +520,9 @@
                 <li>Letters pay 50 pts, words 60 + 12 per letter, and a word typed without a miss pays ×1.2. Minions pay 40, pickups 100, boss letters 10, a boss segment 30 per letter and a boss phase 300 × sector. Kills made by SPREAD, PIERCE or RAPID pay half.</li>
                 <li>Combo tiers: ×2 at 10, ×3 at 25, ×4 at 50, ×5 at 100. MULTI adds two tiers (cap ×7). A hard miss or real hull damage resets the combo.</li>
                 <li>Sector clear pays 1,500 + 350 × sector, plus bonuses for time under par, accuracy (90 / 95 / 98%), perfect waves, a flawless boss and countered surges. Retrying a sector scales the clear, time, accuracy, flawless-boss and perfect-wave bonuses down 25% per retry (countered-surge and phase bonuses are not reduced).</li>
-                <li>Your rank (S, A, B, C, D) weighs accuracy 50%, speed 30% and hull 20%; the line under it names the one that held you back.</li>
-                <li>WPM is your hand speed: the time between correct keys inside a word or boss segment. The first key of each target and pauses over 1.5 s are left out; wrong keys count against you. Records → Flight log keeps your speed, misses and slowest keys on this device only.</li>
+                <li>Your rank (S, A, B, C, D) weighs accuracy 50%, speed 30% and hull 20%; the line under it names the one that held you back (on Game Over, what ended the run).</li>
+                <li>WPM is your hand speed: the time between correct keys inside a word or boss segment. The first key of each target and pauses over 1.5 s are left out; wrong keys count against you. Best WPM counts a cleared sector with at least 60 timed keys. Records → Flight log keeps your speed, misses and slowest keys on this device only.</li>
+                <li>Weak signal, under the tiles of each results card: the key you missed most, your slowest letter pair with its average time, and Steady, how even your rhythm was (higher is steadier).</li>
               </ul>
             </details>
             <details class="helpSection" open>
@@ -598,10 +599,11 @@
                   <tr class="hsRow hsEmpty"><td colspan="6">No runs recorded yet. Score in a run to enter the hall.</td></tr>
                 </tbody>
               </table>
-              <p id="hsLegacyNote" class="hsLegacyNote small hidden">Dimmed WPM was measured before honest speed.</p>
+              <p id="hsLegacyNote" class="hsLegacyNote small hidden">Dimmed WPM used the old measure, from before hand speed.</p>
             </div>
             <div id="panelLog" class="flightLog" hidden></div>
           </div>
+          <span class="modalScrollHint" aria-hidden="true">scroll</span>
         </div>
         <div class="modalActions">
           <button id="btnRecordsClose" class="btn-arcade" type="button">Close</button>
