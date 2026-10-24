@@ -252,6 +252,31 @@ const c11 = await P.g(async () => {
 });
 P.check("11. pause inside a pair window: no errors, the pair is gone after resume + 450 ms", c11.during === "locked" && c11.paused === "paused" && c11.after === null && P.errors.pageErrors.length === 0, c11);
 
+// ---- 12. the warm cache covers every typo-widened plate / capsule (no sprite bake, so no shadowBlur, mid-wave) ----
+const c12 = await P.g(async () => {
+  const g = window.game, T = window.__tp;
+  window.__ty.hold();
+  const bakes = [];
+  const orig = g.getPlateSprite;
+  g.getPlateSprite = function (shape, wb, h, state) { const key = `${shape}:${wb}:${h}:${state}:${this.spriteEpoch}`; if (!this.plateCache.has(key)) bakes.push(key); return orig.apply(this, arguments); };
+  let n = 0;
+  try {
+    for (const type of Object.keys(POWERUP_TYPES)) {
+      window.__ty.clear(); window.__ty.hold();
+      const p = window.__ty.capsule(type, 2, 800); p.age = 9;
+      await T.frame(); g.handleTyped(p.label[0]); g.handleTyped("q"); await T.frame(); n++;
+    }
+    const wordMax = LEVELS[g.levelIndex].wordMax || 8;
+    for (let len = 2; len <= wordMax; len++) {
+      window.__ty.clear(); window.__ty.hold();
+      window.__ty.plate("sabcdefghijklmn".slice(0, len), 2, 800);
+      await T.frame(); g.handleTyped("s"); g.handleTyped("q"); await T.frame(); n++;
+    }
+  } finally { g.getPlateSprite = orig; window.__ty.clear(); g.lock = null; }
+  return { cases: n, bakes, level: g.levelIndex + 1 };
+});
+P.check("12. a locked miss on every capsule label and on plates of every word length in the sector bakes no plate sprite (the warm cache covers the typo widening)", c12.cases >= 8 && c12.bakes.length === 0, c12);
+
 // ---- 6. boss: the pair sits in the slab's centre cell ----
 await P.g(() => { const g = window.game; g.levelT = LEVELS[g.levelIndex].duration + 0.01; g.wavePhase = "spawn"; g.spawnAcc = 0; });
 await waitFor(P, () => window.game.inBoss && window.game.boss && !(window.game.bossIntro && window.game.bossIntro.locked), 20000);
