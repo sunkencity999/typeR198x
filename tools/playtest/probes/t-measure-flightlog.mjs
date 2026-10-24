@@ -107,8 +107,8 @@ const panel = await P.g(() => {
   const weakText = (document.querySelector('#panelLog [data-fl="weak"]') || {}).textContent || "";
   const weak = g.typistWeakKeys();
   const svg = document.querySelector("#panelLog .flSpark svg");
-  const speedPts = [...document.querySelectorAll("#panelLog .flSpark__speed")].reduce((n, pl) => n + pl.getAttribute("points").trim().split(/\s+/).length, 0);
-  const accPts = (document.querySelector("#panelLog .flSpark__acc") || { getAttribute: () => "" }).getAttribute("points").trim().split(/\s+/).filter(Boolean).length;
+  const pts = (sel) => [...document.querySelectorAll(sel)].reduce((n, el) => n + (el.tagName === "polyline" ? el.getAttribute("points").trim().split(/\s+/).filter(Boolean).length : 1), 0);
+  const speedPts = pts("#panelLog .flSpark__speed"), accPts = pts("#panelLog .flSpark__acc");
   const rows = document.querySelectorAll("#panelLog .flSectors tbody tr");
   const stats = [...document.querySelectorAll("#panelLog .flStat")].map((s) => s.textContent);
   return {
@@ -173,7 +173,7 @@ P.check("6. menu: #statWpm === bests.speed (row shown), #statGoal === the goal t
 
 // ---- 7. phone portrait / landscape ----
 const phone = {};
-for (const [name, vp] of [["portrait", { width: 390, height: 844 }], ["landscape", { width: 844, height: 390 }]]) {
+for (const [name, vp] of [["portrait", { width: 390, height: 844 }], ["landscape", { width: 844, height: 390 }], ["desktop", { width: 1440, height: 900 }]]) {
   await page.setViewportSize(vp);
   await sleep(300);
   await openRecords();
@@ -186,14 +186,76 @@ for (const [name, vp] of [["portrait", { width: 390, height: 844 }], ["landscape
     const log = document.getElementById("panelLog");
     const keyW = Math.min(...[...log.querySelectorAll(".flKey")].map((k) => k.getBoundingClientRect().width));
     const over = (el) => el.scrollWidth - el.clientWidth;
-    return { inner: over(inner), scroll: over(scroll), log: over(log), doc: document.documentElement.scrollWidth - document.documentElement.clientWidth, keyW };
+    // every stat label ends inside its own tile's padding box and is not cut by its ellipsis
+    const labels = [...log.querySelectorAll(".flStat")].map((t) => {
+      const lab = t.querySelector(".flStat__label"), tr = t.getBoundingClientRect(), lr = lab.getBoundingClientRect();
+      return { label: lab.textContent, end: Math.round(lr.left + lab.scrollWidth), tileEnd: Math.round(tr.right - parseFloat(getComputedStyle(t).paddingRight)), cut: lab.scrollWidth > lab.clientWidth + 1 };
+    });
+    const badLabels = labels.filter((l) => l.cut || l.end > l.tileEnd + 1);
+    return { inner: over(inner), scroll: over(scroll), log: over(log), doc: document.documentElement.scrollWidth - document.documentElement.clientWidth, keyW, badLabels, labels: labels.length };
   });
   await P.shot(`flightlog-${name}`);
   await closeRecords();
 }
 await page.setViewportSize({ width: 1440, height: 900 });
-P.check("7. 390 x 844 and 844 x 390: no horizontal overflow in the Records modal or the Flight Log, keys >= 26 px wide",
-  Object.values(phone).every((p) => p.inner <= 1 && p.scroll <= 1 && p.log <= 1 && p.doc <= 1 && p.keyW >= 26), phone);
+P.check("7. 390 x 844, 844 x 390 and 1440 x 900: no horizontal overflow in the Records modal or the Flight Log, keys >= 26 px wide, every stat label (THROUGHPUT, DAYS FLOWN ...) ends inside its own tile, untruncated",
+  Object.values(phone).every((p) => p.inner <= 1 && p.scroll <= 1 && p.log <= 1 && p.doc <= 1 && p.keyW >= 26 && p.labels === 5 && p.badLabels.length === 0), phone);
+
+// ---- 9. sparkline: legend with the latest values, a dot for a lone point, gaps at speed 0 / acc null, one accessible text ----
+const sparkOf = async (sessions) => {
+  await P.g((sessions) => {
+    const g = window.game;
+    g.save.profile = { v: 1, keys: {}, bigrams: {}, speedEma: 50, thrEma: 20, speedN: 70, sessions, sectorBest: {}, bests: { speed: 66, ceiling: 0, drill: { speed: 0, acc: 0 } }, days: { n: 1, last: 20261024 } };
+    g._ty.saveRef = null;
+    g.typistState();
+  }, sessions);
+  await openRecords();
+  await P.g(() => document.getElementById("tabLog").click());
+  await sleep(150);
+  const r = await P.g(() => {
+    const box = document.querySelector("#panelLog .flSpark"), svg = box.querySelector("svg");
+    svg.scrollIntoView({ block: "center" });
+    const keys = [...box.querySelectorAll(".flSpark__key")];
+    const shape = (el) => (el.tagName === "polyline" ? el.getAttribute("points").trim().split(/\s+/).length : "dot");
+    const title = (svg.querySelector("title") || {}).textContent || "";
+    return {
+      legend: keys.map((k) => ({ text: k.textContent, color: getComputedStyle(k).color })), legendHidden: (box.querySelector(".flSpark__legend") || { getAttribute: () => null }).getAttribute("aria-hidden"),
+      speedColor: getComputedStyle(box.querySelector(".flSpark__speed")).stroke, accColor: getComputedStyle(box.querySelector(".flSpark__acc")).stroke,
+      speed: [...box.querySelectorAll(".flSpark__speed")].map(shape), acc: [...box.querySelectorAll(".flSpark__acc")].map(shape),
+      dots: [...box.querySelectorAll(".flSpark__dot")].map((d) => { const m = d.getAttribute("d").match(/^M([\d.]+),([\d.]+)h0$/); const b = svg.getBoundingClientRect(); return { x: b.left + Number(m[1]) / 200 * b.width, y: b.top + Number(m[2]) / 48 * b.height }; }),
+      role: svg.getAttribute("role"), aria: svg.getAttribute("aria-label"), title,
+      srCopies: box.querySelectorAll(".srOnly").length, titleCount: (box.textContent.split(title).length - 1)
+    };
+  });
+  // each dot paints: bright pixels in a 10 x 10 box around its centre (zero-length path, round cap)
+  r.dotPx = [];
+  for (const d of r.dots) {
+    const shot = await page.screenshot({ clip: { x: Math.max(0, d.x - 5), y: Math.max(0, d.y - 5), width: 10, height: 10 } });
+    r.dotPx.push(await P.g(async (b64) => {
+      const img = new Image();
+      await new Promise((res) => { img.onload = res; img.src = "data:image/png;base64," + b64; });
+      const c = document.createElement("canvas"); c.width = img.width; c.height = img.height;
+      const x = c.getContext("2d"); x.drawImage(img, 0, 0);
+      const px = x.getImageData(0, 0, c.width, c.height).data;
+      let n = 0;
+      for (let i = 0; i < px.length; i += 4) if (Math.max(px[i], px[i + 1], px[i + 2]) > 140) n++;
+      return n;
+    }, shot.toString("base64")));
+  }
+  r.dotsVisible = r.dotPx.length > 0 && r.dotPx.every((n) => n >= 8);
+  await P.shot(`spark-${sessions.length}`);
+  await closeRecords();
+  return r;
+};
+const one = await sparkOf([[1790000000, "campaign", 1, 66, 93.9, "A", 10000, 7, 71, "c"]]);
+const gap = await sparkOf([[1790000000, "campaign", 1, 66, 93.9, "A", 10000, 7, 71, "c"], [1790003600, "campaign", 2, 0, null, null, 0, 0, null, ""],
+  [1790007200, "campaign", 2, 68, 95.2, "A", 9000, 3, 80, ""], [1790010800, "campaign", 3, 67, 96.1, "A", 9000, 3, 80, ""], [1790014400, "campaign", 3, 0, null, null, 0, 0, null, ""]]);
+const legendOk = (r, sp, acc) => r.legend.length === 2 && r.legend[0].text === sp && r.legend[1].text === acc && r.legend[0].color === r.speedColor && r.legend[1].color === r.accColor && r.legendHidden === "true";
+P.check("9. sparkline: a legend names cyan SPEED / amber ACC with the latest values (66 WPM / 93.9%; after a keyless death the last measured 67 WPM / 96.1%); one session draws a visible dot per series; speed 0 and acc null leave gaps; the svg <title> is the only accessible text (no aria-label, no .srOnly copy) and says 'latest accuracy 96.1' not 100",
+  legendOk(one, "SPEED 66 WPM", "ACC 93.9%") && JSON.stringify(one.speed) === '["dot"]' && JSON.stringify(one.acc) === '["dot"]' && one.dotsVisible &&
+  legendOk(gap, "SPEED 67 WPM", "ACC 96.1%") && JSON.stringify(gap.speed) === '["dot",2]' && JSON.stringify(gap.acc) === '["dot",2]' && gap.dotsVisible &&
+  [one, gap].every((r) => r.role === "img" && r.aria === null && r.srCopies === 0 && r.titleCount === 1 && r.title.length > 10) && /latest 96\.1 percent/.test(gap.title) && !/100 percent/.test(gap.title),
+  { one, gap });
 
 // ---- 5. legacy rows and the old best ----
 const SAVE2 = {

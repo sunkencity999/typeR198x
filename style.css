@@ -2814,7 +2814,8 @@ fieldset.shipGrid > legend {
 .flGoal { font-family: var(--font-display); font-weight: 600; font-size: var(--fs-sm); letter-spacing: 0.12em; color: var(--c-ui); }
 .flEmpty { opacity: 0.8; }
 .flLegacy { opacity: 0.6; letter-spacing: 0.08em; }
-.flStats { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; }
+/* 128 px = THROUGHPUT / DAYS FLOWN at 10 px with .24em tracking (106 px) + padding + border: labels never overrun. */
+.flStats { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 8px; }
 .flStat { display: grid; gap: 2px; padding: 8px 10px; border: 1px solid var(--chrome1); border-radius: var(--r-sm); min-width: 0; }
 .flStat__label, .flList__label {
   font-family: var(--font-display);
@@ -2824,6 +2825,7 @@ fieldset.shipGrid > legend {
   text-transform: uppercase;
   opacity: 0.6;
 }
+.flStat__label { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .flStat__value { font-size: var(--fs-lg); font-variant-numeric: tabular-nums; }
 .flStat__cap { font-size: var(--fs-2xs); opacity: 0.6; }
 .flKeys { display: grid; gap: 4px; justify-content: center; }
@@ -2861,10 +2863,16 @@ fieldset.shipGrid > legend {
 .flLists { display: grid; gap: 4px; }
 .flList { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
 .flSpark { display: grid; gap: 4px; }
-.flSpark svg { width: 100%; height: 56px; display: block; }
-.flSpark polyline { fill: none; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.flSpark svg { width: 100%; height: 56px; display: block; overflow: visible; }   /* end dots are not clipped */
+.flSpark polyline, .flSpark path { fill: none; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.flSpark .flSpark__dot { stroke-width: 6; stroke-linecap: round; }
 .flSpark__speed { stroke: var(--c-ui); }
 .flSpark__acc { stroke: var(--c-score); opacity: 0.85; }
+.flSpark__legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-family: var(--font-mono); font-size: var(--fs-xs); letter-spacing: 0.08em; }
+.flSpark__key { display: inline-flex; align-items: center; gap: 6px; }
+.flSpark__key::before { content: ""; width: 14px; height: 2px; background: currentColor; }
+.flSpark__key--speed { color: var(--c-ui); }
+.flSpark__key--acc { color: var(--c-score); }
 .flSectors caption { text-align: left; padding-bottom: 4px; }
 .flSectors tr.is-locked td { opacity: 0.4; }
 

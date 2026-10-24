@@ -40,6 +40,7 @@ const TYPIST_ACC_BAD = 0.90;
 const TYPIST_ACC_PULSE_MS = 300;
 const TYPIST_SECTOR_ACC_MIN_KEYS = 50;  // sector best accuracy needs 50 keys
 const TYPIST_SPARK_N = 20;
+const TYPIST_SPARK_MIN_SPAN = 10;       // sparkline speed scale is at least 10 WPM tall (a 2 WPM wobble does not fill it)
 const TYPIST_GOAL_N = 5;
 const TYPIST_PROFILE_MAX_BYTES = 16384;
 const TYPIST_RANK_LINE_AT_MS = 700;     // fallback for 15-screens.js RESULTS_RANK_AT_MS: the rank line fades in with the stamp
@@ -1166,27 +1167,38 @@ Object.assign(Game.prototype, {
     const sr = `Weak keys: ${weakKeys.length ? weakKeys.join(", ") : "none yet"}. Slowest keys: ${slowest.length ? slowest.map((i) => `${TYPIST_LETTERS[i]} ${msOf(i)} milliseconds`).join(", ") : "none yet"}. Most missed: ${missed.length ? missed.slice(0, 5).map((i) => `${TYPIST_LETTERS[i]} ${Math.round(ty.kErr[i] * 100)} percent`).join(", ") : "none yet"}.`;
     const keys = `<div class="flKeys" aria-hidden="true">${keyRows}</div><p class="srOnly flSr">${sr}</p>`;
     const lists = `<div class="flLists"><p class="flList"><span class="flList__label">Slowest keys</span> <span class="mono" data-fl="slowest">${slowText}</span></p><p class="flList"><span class="flList__label">Weak keys</span> <span class="mono" data-fl="weak">${weakText}</span></p></div>`;
-    // sparkline: speed (cyan, min..max of the shown speeds; speed 0 leaves a gap), accuracy (amber, 80..100 %)
+    // sparkline: speed (cyan, min..max of the shown speeds, at least TYPIST_SPARK_MIN_SPAN tall; speed 0 leaves a gap),
+    // accuracy (amber, 80..100 %; acc null, under 10 keys, leaves a gap). A lone point is drawn as a dot. The legend
+    // names the colours with the latest values; the svg <title> is the one accessible text (the legend is aria-hidden).
     let spark = "";
     if (sessions.length) {
       const N = sessions.length;
       const xOf = (i) => (N > 1 ? typistRound(i * 200 / (N - 1), 1) : 100);
       const sp = sessions.map((s) => s.speed).filter((v) => v > 0);
       const lo = sp.length ? Math.min(...sp) : 0, hi = sp.length ? Math.max(...sp) : 0;
-      const ySp = (v) => typistRound(hi > lo ? 44 - (v - lo) / (hi - lo) * 40 : 24, 1);
+      const span = Math.max(hi - lo, TYPIST_SPARK_MIN_SPAN), base = (lo + hi - span) / 2;
+      const ySp = (v) => typistRound(44 - (v - base) / span * 40, 1);
       const yAcc = (v) => typistRound(44 - clamp((v - 80) / 20, 0, 1) * 40, 1);
-      const segs = [];
-      let cur = [];
-      sessions.forEach((s, i) => {
-        if (s.speed > 0) cur.push(`${xOf(i)},${ySp(s.speed)}`);
-        else if (cur.length) { segs.push(cur); cur = []; }
-      });
-      if (cur.length) segs.push(cur);
-      const speedLines = segs.map((pts) => `<polyline class="flSpark__speed" points="${pts.join(" ")}"/>`).join("");
-      const accLine = `<polyline class="flSpark__acc" points="${sessions.map((s, i) => `${xOf(i)},${yAcc(s.acc)}`).join(" ")}"/>`;
-      const lastS = sessions[N - 1];
-      const summary = `Last ${N} ${N === 1 ? "session" : "sessions"}: speed ${sp.length ? `${lo} to ${hi} words per minute` : "not measured"}, latest accuracy ${typistRound(lastS.acc, 1)} percent.`;
-      spark = `<div class="flSpark"><p class="flList__label">Speed and accuracy · last ${N}</p><svg viewBox="0 0 200 48" role="img" aria-label="${summary}" preserveAspectRatio="none"><title>${summary}</title>${accLine}${speedLines}</svg><p class="srOnly">${summary}</p></div>`;
+      const series = (cls, ok, y) => {
+        let svg = "", run = [];
+        const close = () => {
+          if (run.length === 1) svg += `<path class="${cls} flSpark__dot" d="M${run[0]}h0"/>`;
+          else if (run.length > 1) svg += `<polyline class="${cls}" points="${run.join(" ")}"/>`;
+          run = [];
+        };
+        sessions.forEach((s, i) => { if (ok(s)) run.push(`${xOf(i)},${y(s)}`); else close(); });
+        close();
+        return svg;
+      };
+      const accLine = series("flSpark__acc", (s) => typeof s.acc === "number", (s) => yAcc(s.acc));
+      const speedLines = series("flSpark__speed", (s) => s.speed > 0, (s) => ySp(s.speed));
+      const lastSp = sp.length ? sp[sp.length - 1] : 0;
+      const accs = sessions.filter((s) => typeof s.acc === "number");
+      const lastAcc = accs.length ? typistRound(accs[accs.length - 1].acc, 1) : null;
+      const range = !sp.length ? "not measured" : (lo === hi ? `${lo} words per minute` : `${lo} to ${hi} words per minute, latest ${lastSp}`);
+      const summary = `Last ${N} ${N === 1 ? "session" : "sessions"}. Speed: ${range}. Accuracy: ${lastAcc === null ? "not measured" : `latest ${lastAcc} percent`}.`;
+      const legend = `<p class="flSpark__legend" aria-hidden="true"><span class="flSpark__key flSpark__key--speed">SPEED ${lastSp > 0 ? `${lastSp} WPM` : "--"}</span><span class="flSpark__key flSpark__key--acc">ACC ${lastAcc === null ? "--" : `${lastAcc}%`}</span></p>`;
+      spark = `<div class="flSpark"><p class="flList__label">Speed and accuracy · last ${N}</p>${legend}<svg viewBox="0 0 200 48" role="img" preserveAspectRatio="none"><title>${summary}</title>${accLine}${speedLines}</svg></div>`;
     }
     const unlocked = clamp((this.save.lastUnlockedLevel | 0) || 1, 1, 10);
     let rows = "";
