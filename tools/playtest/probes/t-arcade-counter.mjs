@@ -238,6 +238,19 @@ P.check("13. L3 clear with 1 countered + 1 fired: results.notes COUNTER-SIGNALS 
   !!note13 && note13.text === "COUNTER-SIGNALS 1/2" && note13.aria === "Counter-signals: 1 of 2 countered." && t13.cs && t13.cs.countered === 1 && t13.cs.fired === 1 && t13.dom === "COUNTER-SIGNALS 1/2" && t13.banked.includes("Counter-signal bonus") && t13.ann.some((a) => a.includes("Counter-signals: 1 of 2 countered.")),
   t13);
 
+// 13c. Scope: a sector card reads the sector, the Game Over card ("over", a RUN REPORT whose tiles are run totals) and the
+//      run card read the run, for both ARCADE notes (review fix: "over" used to read the sector's numbers).
+const t13c = await P.g(() => {
+  const g = window.game, st = g.stats, ls = g.levelStats, keep = [st.csCountered, st.csFired, st.overdriveMs, ls.surgesCancelled, ls.surgesFired, ls.overdriveMs];
+  st.csCountered = 5; st.csFired = 2; st.overdriveMs = 21400; ls.surgesCancelled = 1; ls.surgesFired = 1; ls.overdriveMs = 3000;
+  const txt = (s) => g.buildResults(s).notes.map((n) => n.text).join(" | ");
+  const out = { level: txt("level"), over: txt("over"), run: txt("run") };
+  [st.csCountered, st.csFired, st.overdriveMs, ls.surgesCancelled, ls.surgesFired, ls.overdriveMs] = keep;
+  return out;
+});
+P.check("13c. notes scope: sector card COUNTER-SIGNALS 1/2 | OVERDRIVE 3 S (levelStats); Game Over and run cards COUNTER-SIGNALS 5/7 | OVERDRIVE 21 S (run stats, like their tiles)",
+  t13c.level === "COUNTER-SIGNALS 1/2 | OVERDRIVE 3 S" && t13c.over === "COUNTER-SIGNALS 5/7 | OVERDRIVE 21 S" && t13c.run === t13c.over, t13c);
+
 // 7b. Reduced-motion context: the scramble is the static red word
 {
   const ctx = await P.browser.newContext({ viewport: { width: 1280, height: 800 }, reducedMotion: "reduce" });

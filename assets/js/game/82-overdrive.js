@@ -351,11 +351,11 @@ if (typeof onGameHook === "function") {
     if (this.overdriveOn === true && OVERDRIVE.scoreKinds[e.kind] === 1) e.mul *= OVERDRIVE.scoreMul;
   });
 
-  // Card note OVERDRIVE n S (sector cards: this sector; the run card: the whole run).
+  // Card note OVERDRIVE n S: sector cards this sector; Game Over / run cards (run reports) the whole run.
   onGameHook("results", function (e) {
     const r = e && e.results;
     if (!r) return;
-    const src = e.scope === "run" ? this.stats : this.levelStats;
+    const src = e.scope !== "level" ? this.stats : this.levelStats;
     const s = Math.round(((src && Number(src.overdriveMs)) || 0) / 1000);
     r.overdriveS = s;
     if (s >= 1 && Array.isArray(r.notes)) r.notes.push({ id: "overdrive", text: `OVERDRIVE ${s} S`, aria: `Overdrive: ${s} seconds.` });

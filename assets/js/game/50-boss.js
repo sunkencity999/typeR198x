@@ -854,11 +854,11 @@ if (typeof onGameHook === "function") {
     const cp = e && e.cp;
     if (cp && cp.kind === "boss" && this.levelStats) this.levelStats.surgesFired = cp.lvSurgesFired | 0;
   });
-  // Card note COUNTER-SIGNALS won/total (sector cards: this sector; the run card: the whole run).
+  // Card note COUNTER-SIGNALS won/total: sector cards this sector; Game Over / run cards (run reports) the whole run.
   onGameHook("results", function (e) {
     const r = e && e.results;
     if (!r) return;
-    const run = e.scope === "run";
+    const run = e.scope !== "level";
     const st = this.stats || {}, ls = this.levelStats || {};
     const won = (run ? st.csCountered : ls.surgesCancelled) | 0;
     const lost = (run ? st.csFired : ls.surgesFired) | 0;
