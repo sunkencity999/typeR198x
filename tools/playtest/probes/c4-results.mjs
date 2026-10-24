@@ -6,6 +6,31 @@ import { chromium } from "playwright";
 const P = await openProbe("c4");
 const { page } = P;
 
+// J1 (release 20261024a): the results actions stay inside the screen's visible rect on a 720 px window, a 1536 x 730
+// browser window (1920 x 1080 at 125 %) and a phone in portrait; the cards grew with the rank line, ACC caption and
+// WEAK SIGNAL strip, and the .screen scroller opens at scrollTop 0.
+const FOLD_SIZES = [{ width: 1280, height: 720 }, { width: 1536, height: 730 }, { width: 390, height: 844 }];
+async function foldCheck(label, screenId, btnIds) {
+  const res = [];
+  for (const vp of FOLD_SIZES) {
+    await page.setViewportSize(vp);
+    await sleep(450);
+    res.push(await P.g(({ screenId, btnIds }) => {
+      const scr = document.getElementById(screenId), sr = scr.getBoundingClientRect();
+      const top = Math.max(sr.top, 0), bottom = Math.min(sr.bottom, innerHeight);
+      const btns = btnIds.map((id) => {
+        const b = document.getElementById(id).getBoundingClientRect();
+        return { id, top: Math.round(b.top), bottom: Math.round(b.bottom), inView: b.height > 0 && b.top >= top - 0.5 && b.bottom <= bottom + 0.5 };
+      });
+      return { vp: `${innerWidth}x${innerHeight}`, scrollTop: scr.scrollTop, overflow: scr.scrollHeight - scr.clientHeight, top: Math.round(top), bottom: Math.round(bottom), btns };
+    }, { screenId, btnIds }));
+    await P.shot(`fold-${label.replace(/\s+/g, "-")}-${vp.width}x${vp.height}`);
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await sleep(300);
+  P.check(`${label}: the actions lie inside the screen's visible rect at 1280x720, 1536x730 and 390x844 (J1)`, res.every((r) => r.btns.every((b) => b.inView)), JSON.stringify(res));
+}
+
 await P.goto(null);
 await P.startRun("C4");
 await page.waitForFunction(() => window.game && !window.game.levelIntro, null, { timeout: 8000 }).catch(() => {});
@@ -50,6 +75,7 @@ P.check("sub 'Next: Sector 2 — VECTOR OGRE · Max HP 300'", lc.sub === "Next: 
 P.check("values counted up (early sample below the final)", early !== lc.bonus, `early=${early} final=${lc.bonus}`);
 P.check("first clear shows SECTOR BEST badge", lc.newBest === true, JSON.stringify({ newBest: lc.newBest, cardTitle: lc.cardTitle, cardSub: lc.cardSub }));
 await P.shot("level-complete");
+await foldCheck("level complete", "screenLevelComplete", ["btnNextLevel", "btnBackToMenu1"]);
 
 // Game over on sector 2: retry copy and the checkpoint restore.
 await page.click("#btnNextLevel");
@@ -73,6 +99,7 @@ P.check("game over: 'Retry sector 2' and the checkpoint note with its score", go
 P.check("game over sub 'Sector 2 · wave k/3' or boss", /^Sector 2 · (wave [123]\/3|boss .+)$/.test(go.sub), go.sub);
 P.check("game over card: score tile = stats.score, rank letter, no bonus rows", go.scoreTile === Number(go.score).toLocaleString() && /^[SABCD]$/.test(go.rank) && go.bonusRows === 0, JSON.stringify({ scoreTile: go.scoreTile, score: go.score, rank: go.rank, title: go.title }));
 await P.shot("game-over");
+await foldCheck("game over", "screenGameOver", ["btnTryAgain", "btnBackToMenu2"]);
 await page.click("#btnTryAgain");
 await page.waitForFunction(() => window.game.mode === "playing", null, { timeout: 10000 });
 const afterRetry = await P.g(() => ({ score: window.game.stats.score, cp: window.game.run.checkpoint.score, level: window.game.levelIndex }));
@@ -114,6 +141,7 @@ P.check("Escape -> #resultsRun visible, #btnNewRun visible and focused", v1.mode
 P.check("run card: LEGEND STATUS GRANTED, 'All ten sectors · NAME', rank + score", v1.title === "LEGEND STATUS GRANTED" && /^All ten sectors · /.test(v1.sub) && /^[SABCD]$/.test(v1.rank) && v1.scoreTile === Number(v1.score).toLocaleString(), JSON.stringify({ title: v1.title, sub: v1.sub, rank: v1.rank, scoreTile: v1.scoreTile }));
 P.check("credits shown, Next retired, window collapsed", v1.credits && v1.nextHidden && v1.collapsed, JSON.stringify({ credits: v1.credits, nextHidden: v1.nextHidden, collapsed: v1.collapsed }));
 await P.shot("victory-results");
+await foldCheck("victory", "screenVictory", ["btnNewRun", "btnBackToMenu3"]);
 P.check("no page errors through victory", P.errors.pageErrors.length === 0, JSON.stringify(P.errors.pageErrors));
 
 // Reduced motion: tile values are final on the first frame after the screen activates.

@@ -2923,6 +2923,30 @@ body[data-flight-check="on"] .tapToType:not(.hidden) ~ .fcPanel .fcStep { visibi
   .weakSignal, .weakSignal__chips { flex-wrap: nowrap; }
   .weakSignal__chips { overflow: hidden; }
 }
+/* Results screens (release 20261024a, J1): the rank line, ACC caption and WEAK SIGNAL strip make the cards taller, so on
+   a 720 px window or a phone the actions would sit below the fold of the .screen scroller (scrollTop stays 0). They
+   stick to its bottom edge instead; the negative inset and margin cancel the bar's own bottom padding, so the layout at
+   the end of the scroll is unchanged and nothing shows under the bar. Phones: an opaque fill (bonus rows show through). */
+.screen--clear .screenActions,
+.screen--over .screenActions,
+.screen--victory .endingActions {
+  position: sticky;
+  bottom: calc(-1 * var(--sp-5));
+  z-index: 1;
+  padding: var(--sp-3) 0 var(--sp-5);
+  margin-bottom: calc(-1 * var(--sp-5));
+  background: linear-gradient(180deg, rgba(10,16,32,0), rgba(10,16,32,0.94) var(--sp-3));
+}
+@media (max-width: 640px) {
+  .screen--clear .screenActions,
+  .screen--over .screenActions,
+  .screen--victory .endingActions {
+    bottom: -12px;
+    padding-bottom: 12px;
+    margin-bottom: -12px;
+    background: linear-gradient(180deg, rgba(5,6,11,0), rgb(5,6,11) var(--sp-3));
+  }
+}
 /* ===== end track:MEASURE ===== */
 
 /* ===== track:PACE (42-pacing.js) ===== */
