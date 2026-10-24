@@ -1,4 +1,5 @@
-// A3 acceptance (staged "at A3" per amendment C-5): save model v2, checkpoints, high-score commit.
+// A3 acceptance (staged "at A3" per amendment C-5): save model (schema 3 since MEASURE D6), checkpoints, high-score commit.
+// Clear-bonus sums compare against the real computeClearTally total (game.lastTally.total), not the A3-era 2500 + 450 x L.
 import { openProbe, sleep } from "./_lib.mjs";
 
 const P = await openProbe("a3");
@@ -6,6 +7,13 @@ const die = async () => {
   await P.g(() => { window.game.player.hp = 5; });
   await P.page.waitForFunction(() => window.game.mode === "gameOver", null, { timeout: 90000 });
   await sleep(300);
+};
+// Continue without a stored run: #btnContinue sits in the hidden #resumeCard then (C5), so click it programmatically.
+const continueProgrammatic = async () => {
+  await P.g(() => document.getElementById("btnContinue").click());
+  const story = P.page.locator("#btnStoryLaunch");
+  try { await story.waitFor({ state: "visible", timeout: 1500 }); await story.click(); } catch {}
+  await P.page.waitForFunction(() => window.game && window.game.mode === "playing", null, { timeout: 30000 });
 };
 const clearSector = async () => {
   await P.forceBoss();
@@ -17,12 +25,12 @@ const clearSector = async () => {
 await P.goto("legacy-midwave");
 const mig = await P.saveBlob();
 const migInfo = await P.g(() => ({ schema: window.game.save.schema, runId: window.game.save.run.id, cp: window.game.save.run.checkpoint, legacy: window.game.save.run.legacy, startLevel: window.game.save.run.startLevel, hazardAcc: window.game.save.run.hazardAcc, stats: window.game.save.run.stats }));
-P.check("legacy-midwave loads: schema 2, run.id, run.checkpoint (score 6000), stats deep-merged, hazardAcc tolerated", migInfo.schema === 2 && /^[a-z0-9]{8}$/.test(migInfo.runId) && migInfo.cp && migInfo.cp.score === 6000 && migInfo.cp.kind === "level" && migInfo.stats.maxCombo === 0 && migInfo.stats.score === 6000 && migInfo.hazardAcc === 0, migInfo);
+P.check("legacy-midwave loads: schema 3, run.id, run.checkpoint (score 6000), stats deep-merged, hazardAcc tolerated", migInfo.schema === 3 && /^[a-z0-9]{8}$/.test(migInfo.runId) && migInfo.cp && migInfo.cp.score === 6000 && migInfo.cp.kind === "level" && migInfo.stats.maxCombo === 0 && migInfo.stats.score === 6000 && migInfo.hazardAcc === 0, migInfo);
 await P.clickContinue();
 await sleep(400);
 const c1 = await P.state();
 const blob1 = await P.saveBlob();
-P.check("Continue resumes L3 at score 6000; persisted blob has schema 2 + run.id + run.checkpoint", c1.mode === "playing" && c1.levelIndex === 2 && c1.score === 6000 && blob1.schema === 2 && !!blob1.run.id && !!blob1.run.checkpoint, { c1, schema: blob1.schema, id: blob1.run.id });
+P.check("Continue resumes L3 at score 6000; persisted blob has schema 3 + run.id + run.checkpoint", c1.mode === "playing" && c1.levelIndex === 2 && c1.score === 6000 && blob1.schema === 3 && !!blob1.run.id && !!blob1.run.checkpoint, { c1, schema: blob1.schema, id: blob1.run.id });
 
 // ===== 2. raise to 9000, die, Retry sector -> checkpoint =====
 await P.g(() => { window.game.stats.score = 9000; window.game.stats.combo = 12; });
@@ -55,8 +63,9 @@ await P.page.waitForFunction(() => window.game.mode === "levelComplete", null, {
 await sleep(300);
 const blob4 = await P.saveBlob();
 const live4 = await P.state();
-P.check("after L1 clear: run.levelIndex 1, levelT 0, inBoss false, maxHp 300, checkpoint.score===stats.score, bonus once", blob4.run.levelIndex === 1 && blob4.run.levelT === 0 && blob4.run.inBoss === false && blob4.run.maxHp === 300 && blob4.run.checkpoint.score === live4.score && live4.score === s0 + 2950 && blob4.lastUnlockedLevel >= 2 && blob4.sectorBests["1"] && blob4.sectorBests["1"].score > 0,
-  { run: { levelIndex: blob4.run.levelIndex, levelT: blob4.run.levelT, inBoss: blob4.run.inBoss, maxHp: blob4.run.maxHp, cpScore: blob4.run.checkpoint.score }, liveScore: live4.score, s0, sectorBest: blob4.sectorBests["1"] });
+const tally4 = await P.g(() => window.game.lastTally && window.game.lastTally.total);   // CONTRACT 8.x R5: the real clear total
+P.check("after L1 clear: run.levelIndex 1, levelT 0, inBoss false, maxHp 300, checkpoint.score===stats.score, bonus once", blob4.run.levelIndex === 1 && blob4.run.levelT === 0 && blob4.run.inBoss === false && blob4.run.maxHp === 300 && blob4.run.checkpoint.score === live4.score && live4.score === s0 + tally4 && tally4 > 0 && blob4.lastUnlockedLevel >= 2 && blob4.sectorBests["1"] && blob4.sectorBests["1"].score > 0,
+  { run: { levelIndex: blob4.run.levelIndex, levelT: blob4.run.levelT, inBoss: blob4.run.inBoss, maxHp: blob4.run.maxHp, cpScore: blob4.run.checkpoint.score }, liveScore: live4.score, s0, tally4, sectorBest: blob4.sectorBests["1"] });
 await P.shot("level-complete");
 
 // ===== 5. Esc during the finale: #btnRestart hidden; no double bank =====
@@ -66,13 +75,13 @@ await clearSector();
 const s5 = (await P.state()).score;
 await P.page.keyboard.press("Escape");
 await sleep(200);
-const esc = await P.g(() => ({ mode: window.game.mode, restartHidden: document.getElementById("btnRestart").classList.contains("hidden"), score: window.game.stats.score, committed: window.game.bossClear && window.game.bossClear.committed }));
-P.check("Esc during finale: paused, #btnRestart hidden, clear committed once on the forced save", esc.mode === "paused" && esc.restartHidden && esc.committed === true && esc.score === s5 + (2500 + 450 * 2), esc);
+const esc = await P.g(() => ({ mode: window.game.mode, restartHidden: document.getElementById("btnRestart").classList.contains("hidden"), score: window.game.stats.score, committed: window.game.bossClear && window.game.bossClear.committed, tally: window.game.lastTally && window.game.lastTally.total }));
+P.check("Esc during finale: paused, #btnRestart hidden, clear committed once on the forced save", esc.mode === "paused" && esc.restartHidden && esc.committed === true && esc.tally > 0 && esc.score === s5 + esc.tally, { ...esc, s5 });
 await P.shot("paused-finale");
 await P.page.keyboard.press("Escape");
 await P.page.waitForFunction(() => window.game.mode === "levelComplete", null, { timeout: 20000 });
 const after5 = await P.state();
-P.check("finale end after an early commit adds nothing more (L2 bonus banked exactly once)", after5.score === s5 + (2500 + 450 * 2), { score: after5.score, expected: s5 + 3400 });
+P.check("finale end after an early commit adds nothing more (L2 bonus banked exactly once)", after5.score === s5 + esc.tally, { score: after5.score, expected: s5 + esc.tally });
 const restartShown = await P.g(() => { window.game.advanceLevel(); window.game.pauseGame("user"); const h = document.getElementById("btnRestart").classList.contains("hidden"); window.game.setMode("playing"); return h; });
 P.check("#btnRestart visible again on a normal pause", restartShown === false, { hidden: restartShown });
 
@@ -85,10 +94,11 @@ const s6 = (await P.state()).score;
 await P.page.click("#btnStop");
 await sleep(300);
 const blob6 = await P.saveBlob();
+const tally6 = await P.g(() => window.game.lastTally && window.game.lastTally.total);
 await P.clickContinue();
 await sleep(300);
 const r6 = await P.g(() => ({ maxHp: window.game.player.maxHp, hp: window.game.player.hp, score: window.game.stats.score, levelIndex: window.game.levelIndex, inBoss: window.game.inBoss, curve: getHpBonusForLevel(2) }));
-P.check("Stop during finale then Continue -> maxHp===getHpBonusForLevel(2), score includes the clear bonus exactly once, next sector", r6.maxHp === r6.curve && r6.hp === r6.maxHp && r6.score === s6 + 2950 && r6.levelIndex === 1 && !r6.inBoss && blob6.run && blob6.run.levelIndex === 1, { ...r6, s6, blobLevel: blob6.run && blob6.run.levelIndex });
+P.check("Stop during finale then Continue -> maxHp===getHpBonusForLevel(2), score includes the clear bonus exactly once, next sector", r6.maxHp === r6.curve && r6.hp === r6.maxHp && tally6 > 0 && r6.score === s6 + tally6 && r6.levelIndex === 1 && !r6.inBoss && blob6.run && blob6.run.levelIndex === 1, { ...r6, s6, tally6, blobLevel: blob6.run && blob6.run.levelIndex });
 
 // ===== 7. Die in a forced L6 boss -> Retry boss =====
 await P.g(() => { const g = window.game; g.stopToMenu(true); g.startNewRun(); g.startLevel(5, { fromMenu: true, fresh: true }); });
@@ -119,6 +129,9 @@ P.check("boss death -> menu -> Continue: inBoss with score === run.bossCheckpoin
 // ===== 8. high score on Stop and on hidden (fresh save: the legacy run above legitimately holds 9500 per E-3) =====
 await P.g(() => window.game.stopToMenu(true));
 await P.page.click("#btnResetSave");
+// Reset save asks "Erase everything?" since the overhaul (10-ui.js onResetSavePressed): confirm it.
+await P.page.locator("#btnConfirmOk").click();
+await sleep(300);
 await P.g(() => { window.game.startNewRun(); window.game.stats.score = 5000; });
 await sleep(200);
 await P.page.click("#btnStop");
@@ -146,6 +159,9 @@ const blocked = await P.g(async () => {
   window.game.toastOnce.delete("persist");
   document.getElementById("btnStart").click();
   await new Promise(r => setTimeout(r, 400));
+  // Start over a saved run asks "Abandon current run?" since the overhaul (review R34): confirm it.
+  const ok = document.getElementById("btnConfirmOk");
+  if (ok && !document.getElementById("confirmModal").classList.contains("is-dismissed") && ok.offsetParent) { ok.click(); await new Promise(r => setTimeout(r, 400)); }
   const launch = document.getElementById("btnStoryLaunch");
   if (launch && !document.getElementById("storyModal").classList.contains("hidden")) launch.click();
   await new Promise(r => setTimeout(r, 400));
@@ -159,12 +175,12 @@ P.check("storeSave throwing -> game still starts, persistUnavailable true, warn 
 // ===== 10. legacy-postvictory / unlocked-only Continue uses the HP curve =====
 await P.goto("legacy-postvictory");
 const pv = await P.g(() => ({ highScores: window.game.save.highScores, seeded: window.game.save.legacySeeded, continueEnabled: !document.getElementById("btnContinue").disabled }));
-await P.clickContinue();
+await continueProgrammatic();
 await sleep(300);
 const r10 = await P.g(() => ({ maxHp: window.game.player.maxHp, hp: window.game.player.hp, levelIndex: window.game.levelIndex, startLevel: window.game.run.startLevel }));
 P.check("legacy-postvictory: highScores seeded from highScore once; Continue (sector 10) -> maxHp 1100 from the curve", pv.seeded && pv.highScores.length === 1 && pv.highScores[0].score === 4200 && r10.maxHp === 1100 && r10.hp === 1100 && r10.levelIndex === 9 && r10.startLevel === 10, { pv, r10 });
 await P.goto({ playerName: "SEVEN", selectedShip: "coconut", highScore: 0, lastUnlockedLevel: 7, storySeen: true, keyboardHintSeen: true, settings: { muted: true, crt: true }, run: null });
-await P.clickContinue();
+await continueProgrammatic();
 await sleep(300);
 const r10b = await P.g(() => ({ maxHp: window.game.player.maxHp, hp: window.game.player.hp, levelIndex: window.game.levelIndex }));
 P.check("{lastUnlockedLevel:7, run:null} + Continue -> maxHp 800 and hp 800", r10b.maxHp === 800 && r10b.hp === 800 && r10b.levelIndex === 6, r10b);
@@ -172,7 +188,7 @@ P.check("{lastUnlockedLevel:7, run:null} + Continue -> maxHp 800 and hp 800", r1
 // ===== 11. legacy-inboss (B-10) and legacy level-complete clamp (E-3) =====
 await P.goto("legacy-inboss");
 const ib = await P.g(() => { const r = window.game.save.run; return { inBoss: r.inBoss, wavePhase: r.wavePhase, wave: r.wave, levelT: r.levelT, duration: LEVELS[r.levelIndex].duration }; });
-await P.clickContinue();
+await continueProgrammatic();
 await P.page.waitForFunction(() => window.game.inBoss, null, { timeout: 6000 }).catch(() => {});
 const ib2 = await P.state();
 P.check("legacy-inboss: migrated to approach (inBoss false, wave 2, levelT duration-1); Continue -> inBoss within 6 s", !ib.inBoss && ib.wavePhase === "approach" && ib.wave === 2 && ib.levelT === ib.duration - 1 && ib2.inBoss, { ib, ib2 });

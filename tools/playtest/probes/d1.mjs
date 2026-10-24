@@ -195,10 +195,12 @@ const typo = await P.g(async () => {
       if (dr > 20) { outsideRed++; if (where.length < 8) where.push([Math.round(x / s), Math.round(y / s), A[i], B[i]]); }
     }
   }
-  return { locked: !!(g.lock && g.lock.ref === en), glyph, typoT, outsideRed, outsideMax, where, insideChangedAB, insideChangedBC, misses: g.stats.misses, trauma: g.trauma, floaters: g.floaters.length, banner: !!g.banner, callout: !!g.callout };
+  const pair = typeof g.typistDebug === "function" ? g.typistDebug().pair.kind : null;   // MEASURE (D4): the inline pair
+  return { locked: !!(g.lock && g.lock.ref === en), glyph, pair, typoT, outsideRed, outsideMax, where, insideChangedAB, insideChangedBC, misses: g.stats.misses, trauma: g.trauma, floaters: g.floaters.length, banner: !!g.banner, callout: !!g.callout };
 });
 P.check("wrong key with a lock: no pixel outside the plate's 60 px neighbourhood changes red by > 20 (ship/plume column excluded)", typo.locked && typo.outsideRed === 0, typo);
-P.check("wrong key with a lock: the plate jitters / expected glyph rises (pixels inside the neighbourhood change on consecutive frames; typoT > 0)", typo.insideChangedAB > 0 && typo.insideChangedBC > 0 && typo.typoT > 0 && typo.glyph >= 1, { insideChangedAB: typo.insideChangedAB, insideChangedBC: typo.insideChangedBC, typoT: typo.typoT, glyph: typo.glyph });
+// MEASURE (D4): when 32-typist.js claims the miss it draws the typed / expected pair inside the plate instead of the rising glyph.
+P.check("wrong key with a lock: the plate jitters / the typo is named (pixels inside the neighbourhood change on consecutive frames; typoT > 0; rising glyph or the inline pair)", typo.insideChangedAB > 0 && typo.insideChangedBC > 0 && typo.typoT > 0 && (typo.glyph >= 1 || typo.pair === "locked"), { insideChangedAB: typo.insideChangedAB, insideChangedBC: typo.insideChangedBC, typoT: typo.typoT, glyph: typo.glyph, pair: typo.pair });
 await P.shot("typo-frame");
 
 // ---- wrong key with nothing locked: the top-edge flicker, still no wash ----
