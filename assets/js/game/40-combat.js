@@ -168,7 +168,9 @@ Object.assign(Game.prototype, {
         this.hungryT = 0;
         this.spawnAcc = Math.max(this.spawnAcc, 1);
       }
-    } else {
+    } else if (this.hungryT > 0) {
+      // Only a running timer resets: play never sets it below 0, so a probe's frozen spawner (hungryT = -1e9) stays
+      // frozen while its scripted plates are alive. PACE's 0.1 s HUNGRY_SPAWN_S would otherwise refill it between words.
       this.hungryT = 0;
     }
     if (this.waveKills + alive >= quota) { this.spawnAcc = Math.min(this.spawnAcc, 1); return; }
