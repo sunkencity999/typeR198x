@@ -151,11 +151,17 @@ P.check("T9 U1 saves unlocked (tutorialSeen.lock / onboardingDone); a 5 s drill 
   unlockedA && unlockedB && !toastDrill && t9.mode === "drill" && t9.enabled === false && t9.enemies > 0 && toastCampaign, { unlockedA, unlockedB, toastDrill, t9, toastCampaign });
 await P.g(() => window.game.stopToMenu(false));
 
-// T10 campaign chrome restored after a drill
+// T10 campaign chrome restored after a drill. The drill is paused first (its Left / Keys / WPM tiles, Restart drill, Quit to
+// menu) and left through Quit to menu, so every relabelled control has something to restore (review fix: a drill that never
+// paused left the tile labels untouched and the restore went unchecked).
 await P.goto(F5());
 await sleep(300);
 await startMode(P, "drill");
-await P.g(() => window.game.stopToMenu(false));
+await page.keyboard.press("Escape");
+await waitMode(P, "paused", 2000);
+const t10p = await P.g(() => ["pauseSector", "pauseWave", "pauseScore"].map((id) => document.getElementById(id).previousElementSibling.textContent).join() + "/" +
+  document.getElementById("btnRestart").textContent + "/" + document.getElementById("btnPauseQuit").textContent);
+await page.click("#btnPauseQuit");
 await waitMode(P, "menu", 2000);
 await P.startRun("T10");
 await waitFor(P, () => !window.game.levelIntro, 8000);
@@ -169,9 +175,9 @@ await page.keyboard.press("Escape");
 await waitMode(P, "paused", 2000);
 const t10b = await P.g(() => ({ restart: document.getElementById("btnRestart").textContent, quit: document.getElementById("btnPauseQuit").textContent, eyebrow: document.getElementById("pauseEyebrow").textContent,
   labels: ["pauseSector", "pauseWave", "pauseScore"].map((id) => document.getElementById(id).previousElementSibling.textContent) }));
-P.check("T10 drill -> menu -> Start campaign: HUD label Sector (1/10), #btnStop and #btnPauseQuit 'Save & quit', no body[data-run-mode], every HUD cell displayed; pause: Restart sector, Sector / Wave / Score labels, the sector eyebrow",
+P.check("T10 drill (paused: Left / Keys / WPM, Restart drill, Quit to menu) -> Quit to menu -> Start campaign: HUD label Sector (1/10), #btnStop and #btnPauseQuit 'Save & quit', no body[data-run-mode], every HUD cell displayed; pause: Restart sector, Sector / Wave / Score labels, the sector eyebrow",
   t10a.label === "Sector" && t10a.stop === "Save & quit" && t10a.quit === "Save & quit" && t10a.runMode === undefined && t10a.mode === "campaign" && t10a.cells.every((c) => c !== "none") && t10a.hidden === 0 &&
-  t10a.hud === "1/10" && t10b.restart === "Restart sector" && t10b.quit === "Save & quit" && t10b.labels.join() === "Sector,Wave,Score" && /^Paused \/\/ Sector 01/.test(t10b.eyebrow), { t10a, t10b });
+  t10a.hud === "1/10" && t10b.restart === "Restart sector" && t10b.quit === "Save & quit" && t10b.labels.join() === "Sector,Wave,Score" && /^Paused \/\/ Sector 01/.test(t10b.eyebrow) && t10p === "Left,Keys,WPM/Restart drill/Quit to menu", { t10p, t10a, t10b });
 
 checkErrors(P);
 await P.finish();

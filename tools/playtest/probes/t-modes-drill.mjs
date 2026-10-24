@@ -38,18 +38,20 @@ P.check(`L1 start: drill, sector 1, cps = clamp(1.1 x pilot ${pilot.cps.toFixed(
   l1card.title === "TARGETS K · P · TH" && l1card.sub === "NO HULL · NO SCORE" && /^Drill, 60 seconds\. Targets K, P and T H\. No hull, no score\./.test(l1card.said) && l1.label === "Drill" && l1.hud === "1:00" &&
   l1.score === "none" && l1.mult === "none" && l1.hull === "none" && l1.stage === "none" && l1.win.min === 3 && l1.win.max <= 8 && l1.win.max >= 5 && l1.letterRatio === 0.3 && l1.weakShare === 0.6, { weak, deck, l1, l1card });
 
-// L4 weighting (before any typing changes the profile)
+// L4 weighting (before any typing changes the profile). 1,000 picks, and the k / p band is centred on its expectation
+// .6 + .4 x 2/26 = .631 (60 % weak draws plus the uniform draws that land on k or p): the first cut centred it on .60 with
+// 400 picks, so a healthy picker failed it about one run in eight (review: .685 seen).
 const l4 = await P.g(() => {
   const g = window.game, cfg = LEVELS[0];
   let letters = 0, weakL = 0, words = 0, weakW = 0;
-  for (let i = 0; i < 400; i++) {
+  for (let i = 0; i < 1000; i++) {
     const t = g.makeEnemyText(cfg, 1, null);
     if (t.length === 1) { letters++; if (t === "k" || t === "p") weakL++; } else { words++; if (/[kp]|th/.test(t)) weakW++; }
   }
-  return { letterShare: letters / 400, weakLetters: weakL / letters, weakWords: weakW / words };
+  return { letterShare: letters / 1000, weakLetters: weakL / letters, weakWords: weakW / words };
 });
-P.check("L4 400 picks: letter share 0.30 +-0.06; k / p among letters 0.60 +-0.08 (60 % weak + uniform); words with k, p or th >= 0.52",
-  Math.abs(l4.letterShare - 0.3) <= 0.06 && Math.abs(l4.weakLetters - 0.6) <= 0.08 && l4.weakWords >= 0.52, l4);
+P.check("L4 1,000 picks: letter share 0.30 +-0.06; k / p among letters .631 +-0.08 (60 % weak + uniform 2/26); words with k, p or th >= 0.52",
+  Math.abs(l4.letterShare - 0.3) <= 0.06 && Math.abs(l4.weakLetters - (0.6 + 0.4 * 2 / 26)) <= 0.08 && l4.weakWords >= 0.52, l4);
 
 // L5 no powerups
 const l5 = await P.g(async () => {
