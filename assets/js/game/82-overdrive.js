@@ -7,14 +7,15 @@
 // Model (spec-arcade 3): T = max(1.05 x the pilot's run speed (else lifetime), 25 WPM). The burst is the speed of the
 // qualifying intervals (MEASURE's typistInterval; an own D1 chain from keyCorrect when MEASURE is absent) that ended in
 // the last 2.5 s of ENGAGED time (something typable on screen, not paused / card / intro / finale), with the open interval
-// counted once it is slower than the average. A charge fills at 1/2 s while the burst >= T (drains .5/s below it); full ->
+// counted once it is slower than the average. A charge fills at 1/2 s while the burst >= T and the pilot is typing (the
+// open interval, after the between-target grace, <= 600 ms); it drains .5/s otherwise (a pause never charges); full ->
 // OVERDRIVE. It ends on a hard miss, a leak or a surge hit (vent) or after 1 s of engaged time below 0.9 T (slow). Per
 // key and per frame: typed arrays, one state object, reused payloads, no allocation, no save write.
 const OVERDRIVE = Object.freeze({
   windowS: 2.5, minIntervals: 4, minIntervalMs: 25, maxWpm: 400,
   thresholdMul: 1.05, floorWpm: 25, runMin: 20, liveMin: 10, liveN: 30, gapMaxMs: 1500,
   fillS: 2.0, drainPerS: 0.5, exitMul: 0.9, exitBelowS: 1.0,
-  acquireGraceMs: 600, staleOpenMs: 1500, refreshS: 1.0,
+  acquireGraceMs: 600, typingGapMs: 600, staleOpenMs: 1500, refreshS: 1.0,
   scoreMul: 1.25, scoreKinds: Object.freeze({ kill: 1, bossChar: 1, segment: 1 }),
   arcGap: 12, arcW: 2.5, arcHaloW: 7, arcHaloAlpha: 0.22, arcAlpha: 0.92, arcTrackAlpha: 0.10, arcChargeAlpha: 0.65,
   arcPulseHz: 1.5, arcPulseAmp: 0.15, ventS: 0.25, ventParticles: 10, ventDangerAlpha: 0.7, ventTextAlpha: 0.5
@@ -157,7 +158,10 @@ Object.assign(Game.prototype, {
     const b = S.burst = this.odBurst();
     const T = S.threshold;
     if (!S.on) {
-      if (b === b) S.charge = clamp(S.charge + (b >= T ? raw / OVERDRIVE.fillS : -OVERDRIVE.drainPerS * raw), 0, 1);
+      // Charges only while the pilot is typing: a few fast keys and then a pause would otherwise keep the burst above a
+      // low threshold (the 25 WPM floor) long enough to fill the arc with nobody typing.
+      const typing = (S.chainLive ? S.open : S.open - OVERDRIVE.acquireGraceMs) <= OVERDRIVE.typingGapMs;
+      if (b === b) S.charge = clamp(S.charge + (b >= T && typing ? raw / OVERDRIVE.fillS : -OVERDRIVE.drainPerS * raw), 0, 1);
       if (S.charge >= 1) this.odActivate();
       else if (S.charge === 0 && (S.refreshAcc += raw) >= OVERDRIVE.refreshS) { S.refreshAcc = 0; S.threshold = this.odThreshold(); }
     } else {
@@ -324,7 +328,12 @@ if (typeof onGameHook === "function") {
   });
 
   onGameHook("lockRelease", function () { const S = this._od; if (S) S.lastRef = null; });
-  onGameHook("keyMiss", function () { this.odEnd("miss", true); });
+  // A hard miss vents (or drops a charge) and restarts the burst window: the arc fills only on a miss-free stretch.
+  onGameHook("keyMiss", function () {
+    this.odEnd("miss", true);
+    const S = this._od;
+    if (S) { S.count = 0; S.head = 0; S.burst = NaN; }
+  });
   onGameHook("leak", function () { this.odEnd("leak", true); });
   onGameHook("counterSignal", function (e) { if (e && e.result === "fired") this.odEnd("surge", true); });   // a surge hit vents like a leak
   onGameHook("bossKill", function () { this.odEnd("boss", false); });
