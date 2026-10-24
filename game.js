@@ -41,7 +41,7 @@
 //
 // native/sync-web.sh patches the withAssetVersion return line below by sed; keep it byte-identical.
 
-const ASSET_VERSION = "20261016a";
+const ASSET_VERSION = "20261024a";
 // Stale-shell guard. A cache can keep serving a previous index.html after a deploy, and the server ignores ?v= when it
 // resolves a file, so the old shell's versioned URLs come back with this release's code:
 //   * a host page cache (SiteGround's dynamic cache did it for "/" on 2026-10-17) or a browser that cached a
