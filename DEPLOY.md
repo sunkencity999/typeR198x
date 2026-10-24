@@ -6,10 +6,15 @@ passed through the `TYPER_FTP_PASSWORD` environment variable (or `--password-fil
 file, a commit or a shell history you keep.
 
 Background: the live site serves release `20261016a`. Its `/` answers `no-cache` (the `.htaccess` policy works
-there), but the host's NGINX direct delivery still answers `/index.html` with `Cache-Control: max-age=15552000` and
-every other static file with `max-age=31536000`, and ignores the query string when it resolves a file (audit G025;
-checked 2026-10-24). Steps 1, 4 and 6 exist to make sure returning players actually receive this release; the
-stale-shell guard in `game.js` reloads a browser that kept an older shell once into the new one.
+there), but the host's NGINX direct delivery still answers `/index.html` and the other pages with
+`Cache-Control: max-age=15552000` and every other static file with `max-age=31536000`, and ignores the query string
+when it resolves a file (audit G025; checked 2026-10-24). Steps 1, 4 and 6 exist to make sure returning players
+actually receive this release. The stale-shell guard in `game.js` reloads an older shell once into the new one only
+when that shell's `game.js` is no longer cached. A browser that cached the whole 20261016a build at `/index.html`
+(shell and scripts, the usual state after the footer pages' "Back to the game" links) runs it with zero requests
+and never loads the new `game.js`: it stays on 20261016a until the player reloads, opens `/` or the cache expires.
+On its first visit to `/` the new shell revalidates `/index.html`, `privacy-policy.html`, `support.html` and
+`info.html`, and the in-site links carry `?v=20261024a`, so from then on it gets this release.
 
 ## 0. Preconditions
 
@@ -96,13 +101,16 @@ missing/incorrect privacy target. Warnings about `immutable`, `Accept-Ranges`, a
 200, a font served as `application/octet-stream` or a `game.js` whose `window.SFX` guard sits in another
 script are worth fixing but do not block.
 
-## 6. If the host cache still serves the old shell
+## 6. Host cache for `*.html` (required while it serves a long `max-age`)
 
 When step 5 still reports a long `max-age` on `/index.html` after `--htaccess`, the host's own static
-cache (nginx in front of Apache; headers `x-proxy-cache-info`, `host-header`) is answering, not Apache:
+cache (nginx in front of Apache; headers `x-proxy-cache-info`, `host-header`) is answering, not Apache. Every browser
+that opens a page under that header keeps it for 180 days, and no client code reaches a browser that never sends a
+request, so this step is what stops new long-lived copies of this release's pages from forming:
 
-1. In the hosting panel, exclude `*.html` (at least `/`, `/index.html`, `/assets/opt/manifest.js`) from
-   the static/dynamic cache, or disable that cache for the site.
+1. In the hosting panel, exclude `*.html` (at least `/`, `/index.html`, `/privacy-policy.html`, `/support.html`,
+   `/info.html`, `/privacy.html`) and `/assets/opt/manifest.js` from the static/dynamic cache, or disable that
+   cache for the site.
 2. Purge the cache there.
 3. Re-run step 5. Repeat until `index.html` comes back `no-cache` and the `?v=` tokens on the served
    shell are the new ones.
@@ -111,7 +119,9 @@ Spot checks by hand:
 
 ```bash
 curl -sI https://typer198x.com/index.html | grep -i cache-control
+curl -sI https://typer198x.com/privacy-policy.html | grep -i cache-control
 curl -s  https://typer198x.com/ | grep -o 'v=[0-9a-z]*' | sort | uniq -c
+curl -s  https://typer198x.com/privacy-policy.html | grep 'Effective date'    # 24 October 2026
 ```
 
 ## 7. After the deploy

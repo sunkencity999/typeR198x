@@ -199,8 +199,9 @@ come from `PALETTE` / CSS variables rather than literals.
 
 ## Versioning: the two tokens
 
-1. **Shell token** (`YYYYMMDDx`, e.g. `20251130a`): the `?v=` on every `<script>`/`<link>` in the HTML
-   pages, `<meta name="asset-version">` and `const ASSET_VERSION` in `game.js`. `tools/bump-version.sh`
+1. **Shell token** (`YYYYMMDDx`, e.g. `20251130a`): the `?v=` on every `<script>`/`<link>` and in-site `<a href>`
+   page link in the HTML pages (and the `privacy.html` refresh), `<meta name="asset-version">` and
+   `const ASSET_VERSION` in `game.js`. `tools/bump-version.sh`
    is its only writer:
 
    ```bash
@@ -223,12 +224,19 @@ come from `PALETTE` / CSS variables rather than literals.
 
 Production must serve the HTML pages, `/` and `manifest.js` with `Cache-Control: no-cache` and every
 versioned URL as immutable; see [Deployment](#deployment). Bump the shell token before every deploy.
-While the host still answers `/index.html` with `max-age=15552000`, `staleShellGuard` at the top of `game.js` covers
-a stale shell: when the page has no `assets/js/` scripts (a pre-overhaul shell) or an `assets/js/` tag carries a
-`?v=` other than `ASSET_VERSION` (an older modular shell kept by the browser, whose versioned URLs now return this
-release's code because the server ignores the query), it reloads once with `?v=<ASSET_VERSION>`, stops if that
-query is already there, and on the reloaded page refetches the bare `/index.html` with `cache: "reload"` so the next
-visit needs no reload. It never runs on a `file:` origin or under the native user agent.
+While the host still answers `/index.html` and the other pages with `max-age=15552000`, `staleShellGuard` at the top
+of `game.js` covers a stale shell **that runs this release's `game.js`**: when the page has no `assets/js/` scripts (a
+pre-overhaul shell) or an `assets/js/` tag carries a `?v=` other than `ASSET_VERSION` (an older modular shell whose
+old `game.js` is no longer in the browser cache, so its versioned URLs return this release's code because the server
+ignores the query), it reloads once with `?v=<ASSET_VERSION>` and stops if that query is already there. It cannot
+reach a browser that cached the whole older build at `/index.html` (shell and scripts: the normal state after the
+footer pages' "Back to the game" links): that browser runs the old build with zero requests until the player
+reloads, opens `/` (served no-cache) or the cache expires. Once a returning browser runs this shell (a save exists,
+or it arrived through `?v=`), the guard revalidates `/index.html`, `privacy-policy.html`, `support.html` and
+`info.html` after load with `cache: "no-cache"` (a 304 without a body while the copy is current, the new page once
+after a release; nothing is stored), and every in-site page link carries `?v=<shell token>` (`bump-version.sh`
+rewrites the `<a href>` tokens and the `privacy.html` refresh), so the footer pages, their back links and the next
+`/index.html` visit are this release. It never runs on a `file:` origin or under the native user agent.
 `tools/deploy-check.sh` fails when the served tokens disagree, `manifest.js` differs from the local one, or an
 `assets/opt` token on the shell (the ship cards) differs from the manifest version.
 
@@ -433,9 +441,10 @@ tools/deploy-check.sh https://typer198x.com --strict            # 5. go/no-go
   size, and verifies over HTTPS that `index.html` and `game.js` match. `TOP_FILES` lists the root pages
   (`index.html`, `game.js`, `style.css`, `privacy-policy.html`, `privacy.html`, `info.html`, `support.html`
   and the optional `robots.txt`/`sitemap.xml`/`site.webmanifest`); `assets/` is walked whole.
-- **Cache policy (audit G025).** The live host currently answers `/index.html` with
-  `Cache-Control: max-age=15552000` (180 days), so a returning browser would keep the old shell next to
-  new scripts (the stale-shell guard turns that into one reload, see [Versioning](#versioning-the-two-tokens)).
+- **Cache policy (audit G025).** The live host currently answers `/index.html` and the other pages with
+  `Cache-Control: max-age=15552000` (180 days), so a returning browser keeps the old shell (the stale-shell guard
+  reloads it once only when its old `game.js` is gone from the cache; a browser holding the whole old build is
+  repaired on its next visit to `/`, see [Versioning](#versioning-the-two-tokens)).
   `--htaccess` merges `tools/deploy/htaccess-cache.txt` into the web root's `.htaccess`
   (never replaces it: the download is kept as `tools/deploy/backups/htaccess-<ms>.previous.txt`, the uploaded
   text as `htaccess-<ms>.merged.txt`, a new file is created only after a download attempt answers "no such
@@ -444,7 +453,8 @@ tools/deploy-check.sh https://typer198x.com --strict            # 5. go/no-go
   revalidating and bare media/fonts 30 days (immutability is gated on the token, not the extension), the WebP /
   WOFF2 / MP3 MIME types. `tools/nginx-cache.conf` is the equivalent server-block include for an nginx host. If
   the host's own static cache still serves `.html` with a long `max-age`, exclude `.html` from it and
-  purge it in the hosting panel.
+  purge it in the hosting panel (DEPLOY.md step 6, required while it does: no client code reaches a browser that
+  never sends a request).
 - **Go/no-go.** `tools/deploy-check.sh https://typer198x.com --strict` fails when `index.html` has a wrong
   status or MIME type, when `index.html` or `/` lacks
   `no-cache`/`max-age=0`, when the served `?v=` tokens disagree, when a script, stylesheet, WebP or MP3 comes
@@ -469,10 +479,11 @@ asserts both patches.
 Two notes for the native owner (amendment E-4b): the rsync carries the **masters and `assets/opt`** into
 both bundles (341 MB of PNG/WAV plus 29 MB of encoded files); excluding `assets/opt` there, or syncing
 from the encoded set only, would halve the bundles. This release is **web-only**: nothing under `native/`
-changed and no native build was produced. The secondary pages link back to the game with `./index.html`, not `./`:
-inside the WKWebView a `./` link is a `file:` directory, which has no index, and the navigation fails (measured with
-the wrappers' navigation policy: provisional load error 102), so the web build accepts one guarded reload for a
-browser holding a stale `/index.html` instead.
+changed and no native build was produced. The secondary pages link back to the game with
+`./index.html?v=<shell token>`, not `./`: inside the WKWebView a `./` link is a `file:` directory, which has no index,
+and the navigation fails (measured with the wrappers' navigation policy: provisional load error 102), while
+`./index.html?v=…` and `./privacy-policy.html?v=…` load (same policy, macOS WKWebView); on the web the token gives
+each link a URL the browser has not cached.
 
 The Xcode projects remain as documented in `native/ios/README.md` and `native/macos/README.md`: run
 `bash native/sync-web.sh` from the repo root, open the platform project, add the synced `www` folder as a
