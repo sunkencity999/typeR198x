@@ -21,7 +21,7 @@
 // PACE (D2 / D3): every wave also records the paceMul / quota PACE applied (waveTuning, read after PACE's waveWillStart
 // listener), whether it timed out and how many plates escaped; every sector the hull its card showed (hullIn) and the
 // gross throughput. The incomingCps band is judged per wave against targetCps x the applied paceMul, [0.85, 1.35]
-// (the 0.1 s empty-field rule and the 2-alive top-up from paceMul 1.5 feed a fast typist above the stream).
+// (the 0.1 s empty-field rule and the 2-alive top-up from PACE.hungryMin2AtMul feed a fast typist above the stream).
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -57,7 +57,7 @@ async function installHooks() {
       g[name] = function (...a) { const r = orig.apply(this, a); try { after.call(this, r, ...a); } catch (e) { console.warn("b10 hook", name, e); } return r; };
     };
     // hungry = the spawn came from the hungry rule (hungryT was just reset and fewer than the wave's hungryMinAlive were
-    // alive: PACE raises it to 2 from paceMul 1.5, waveTuning.hungryMinAlive)
+    // alive: PACE raises it to 2 from PACE.hungryMin2AtMul, waveTuning.hungryMinAlive)
     wrap("spawnEnemy", function (en) {
       if (!en) return;
       const t = typeof this.waveTuningNow === "function" ? this.waveTuningNow() : null;

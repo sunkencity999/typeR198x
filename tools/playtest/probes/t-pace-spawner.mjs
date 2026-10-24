@@ -105,7 +105,7 @@ P.check("3. pacePin(2, {now}) at S5 W2: quota round(18 x 2) = 36, add 2, speed x
   sp3.ended && sp3.ended.kills === 36 && sp3.ended.quota === 36 && sp3.ended.phase === "drain" && stageSeen && Math.abs(stageSeen.p - stageSeen.kills / 36) <= 1.5 / 36,
   { tune3, sp3, stageSeen });
 
-// ---- 4. 2-alive top-up from paceMul 1.5 ----
+// ---- 4. 2-alive top-up from PACE.hungryMin2AtMul ----
 const top = await P.g(async () => {
   const g = window.game;
   const frame = () => new Promise((r) => requestAnimationFrame(r));
