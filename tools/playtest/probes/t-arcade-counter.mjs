@@ -314,5 +314,24 @@ await waitFor(P, () => window.game.inBoss && !!window.game.boss, 10000);
 const t14 = await P.g(() => { const g = window.game, b = g.boss; return { level: LEVELS[g.levelIndex].level, surgeCount: b.surgeCount, firedInPhase: b.firedInPhase, surgesFired: g.levelStats.surgesFired | 0, surge: b.surge, typeofFired: typeof g.levelStats.surgesFired }; });
 P.check("14. legacy-inboss save -> Continue: sector 2 boss fight, surgeCount 0, firedInPhase 0, levelStats.surgesFired | 0 === 0", t14.level === 2 && t14.surgeCount === 0 && t14.firedInPhase === 0 && t14.surgesFired === 0 && !t14.surge, t14);
 
+// 5b. Layout (review fix): the charge bar sits 0-2 px under the hull meter, full meter width, at 1440 x 900, phone
+//     portrait 390 x 844 and phone landscape 844 x 390, and the HUD is no taller for it (it used to add a grid row:
+//     +6 px desktop, +10 px phone landscape).
+const t5c = [];
+for (const [w, h] of [[1440, 900], [390, 844], [844, 390]]) {
+  await P.page.setViewportSize({ width: w, height: h });
+  await sleep(400);
+  t5c.push(await P.g(([w, h]) => {
+    const m = document.getElementById("bossMeter").getBoundingClientRect(), c = document.getElementById("bossCharge").getBoundingClientRect();
+    const el = document.getElementById("bossCharge"), hud = document.getElementById("hud"), h1 = hud.getBoundingClientRect().height;
+    el.style.display = "none";
+    const h0 = hud.getBoundingClientRect().height;
+    el.style.display = "";
+    return { vp: `${w}x${h}`, gap: Math.round((c.top - m.bottom) * 10) / 10, dx: Math.round(Math.abs(c.left - m.left) + Math.abs(c.width - m.width)), h: Math.round(c.height * 10) / 10, hudGrowth: Math.round((h1 - h0) * 10) / 10 };
+  }, [w, h]));
+}
+await P.page.setViewportSize({ width: 1440, height: 900 });
+P.check("5b. #bossCharge 0-2 px under #bossMeter at the same left / width in every layout; the HUD is no taller for it", t5c.every((r) => r.gap >= 0 && r.gap <= 2 && r.dx <= 2 && r.h >= 2 && Math.abs(r.hudGrowth) <= 0.5), t5c);
+
 P.check("zero pageErrors / consoleErrors", P.errors.pageErrors.length === 0 && P.errors.consoleErrors.length === 0, { pageErrors: P.errors.pageErrors.slice(0, 3), consoleErrors: P.errors.consoleErrors.slice(0, 3) });
 await P.finish();
