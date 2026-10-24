@@ -18,7 +18,8 @@ async function scriptTimeout(words, wave = null) {
     const g = window.game;
     if (wave !== null) g.beginWave(wave);
     g.enemies.length = 0; g.powerups.length = 0; g.lock = null;
-    g.wavePhase = "spawn"; g.spawnAcc = -1e9; g.hungryT = -1e9; g.waveKills = 0; g.waveDmg = 0; g.powerAcc = -1e9;
+    // 2 kills and no damage before the cap: the pre-D3 rule (waveDmg 0 && waveKills > 0) would pay PERFECT WAVE here
+    g.wavePhase = "spawn"; g.spawnAcc = -1e9; g.hungryT = -1e9; g.waveKills = 2; g.waveDmg = 0; g.powerAcc = -1e9;
     g.levelT = Math.min(g.levelT, LEVELS[g.levelIndex].cap);
     const xs = [700, 900, 1100];
     words.forEach((w, i) => g.enemies.push(new Enemy({ text: w, x: xs[i], y: LANE_YS[i + 1], speed: 0, lane: i + 1 })));
@@ -49,10 +50,10 @@ await scriptTimeout(["neon", "grid", "volt"], 0);
 const cap = await P.g(() => {
   const g = window.game;
   return { phase: g.wavePhase, perfect: g.levelStats.perfectWaves | 0, perfect0: window.__stk.perfect0, cue: g.sfx.lastCue, alive: g.enemies.filter((e) => e.alive && !e.dying).length,
-    titles: [g.callout, ...(g.calloutQueue || [])].filter(Boolean).map((c) => c.title), score: g.stats.score, score0: window.__stk.score0, timeout: g.paceSnapshot().timeout, byQuota: g._waveByQuota };
+    titles: [g.callout, ...(g.calloutQueue || [])].filter(Boolean).map((c) => c.title), score: g.stats.score, score0: window.__stk.score0, timeout: g.paceSnapshot().timeout, byQuota: g._waveByQuota, kills: g.waveKills, dmg: g.waveDmg | 0 };
 });
-P.check("2a. at the cap (quota unmet, waveDmg 0): drain, no PERFECT WAVE, perfectWaves and score unchanged, no waveClear sting, all 3 plates still alive",
-  cap.phase === "drain" && cap.byQuota === false && cap.perfect === cap.perfect0 && !cap.titles.includes("PERFECT WAVE") && cap.score === cap.score0 && !/^waveClear/.test(String(cap.cue)) && cap.alive === 3 && !!cap.timeout, cap);
+P.check("2a. at the cap (quota unmet, 2 kills, waveDmg 0: the old rule would pay): drain, no PERFECT WAVE, perfectWaves and score unchanged, no waveClear sting, all 3 plates still alive",
+  cap.phase === "drain" && cap.byQuota === false && cap.kills === 2 && cap.dmg === 0 && cap.perfect === cap.perfect0 && !cap.titles.includes("PERFECT WAVE") && cap.score === cap.score0 && !/^waveClear/.test(String(cap.cue)) && cap.alive === 3 && !!cap.timeout, cap);
 await typeWord("neon");
 await sleep(150);
 const mid = await P.g(() => { const g = window.game; return { alive: g.enemies.filter((e) => e.alive && !e.dying).length, hp: g.player.hp, score: g.stats.score, phase: g.wavePhase, kills: g.waveKills }; });

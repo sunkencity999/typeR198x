@@ -116,6 +116,14 @@ await waitFor(P, () => window.game.mode === "playing", 8000);
 const b3 = await P.g(() => ({ inBoss: window.game.inBoss, diff: window.game.diff().id, cadetLevel: window.game.paceSnapshot().state.cadetLevel, level: window.game.levelIndex + 1 }));
 P.check("6. boss path: first S3 boss death no offer, second offers (boss: true, Retry boss shown); accepting restores the boss checkpoint (inBoss) with Cadet on",
   !b1.btn && b1.deaths.n === 1 && b2.btn && b2.offer && b2.offer.boss === true && b2boss && b3.inBoss && b3.diff === "cadet" && b3.cadetLevel === 3 && b3.level === 3, { b1, b2, b2boss, b3 });
+// 6b. a death while Cadet is already on: no second offer; the note says it stays on and the announcement carries it
+await P.g(() => { if (typeof window.game.endBossIntro === "function") window.game.endBossIntro(); });
+await sleep(200);
+await dieNow(P, "minion");
+await sleep(500);
+const b4 = await over();
+P.check("6b. a death with Cadet already on for Sector 3: no Cadet button, #cadetNote 'Cadet pace stays on until Sector 3 is cleared.', and the Game Over announcement carries it",
+  b4.mode === "gameOver" && !b4.btn && b4.note === "Cadet pace stays on until Sector 3 is cleared." && /Cadet pace stays on until Sector 3 is cleared\./.test(b4.sr) && b4.offer === null, b4);
 
 // ---- 7. the death count survives a reload ----
 await jumpTo(P, 4);
@@ -197,6 +205,19 @@ await p2.waitForFunction(() => window.game.mode === "playing", null, { timeout: 
 const t9b = await M.g(() => ({ mode: window.game.mode, diff: window.game.diff().id, touch: !!window.game.touchMode }));
 P.check("9. touch (390 x 844 phone context): the second death shows 'Fly at Cadet pace' (>= 44 px tall); a tap accepts it (playing, diff cadet); no page / console errors there",
   t9a.visible && t9a.h >= 44 && t9b.mode === "playing" && t9b.diff === "cadet" && p2errors.length === 0, { t9a, t9b, errors: p2errors.slice(0, 3) });
+// 9b. the records row of that Cadet run fits the phone-width modal (the CADET chip wraps under FULL, never clipped)
+await forceClear(M, {});
+await M.g(() => { const g = window.game; g.stopToMenu(true); g.openRecords(); });
+await sleep(700);
+const t9c = await M.g(() => {
+  const t = document.getElementById("highScoreTable");
+  const box = t.closest(".modalBody") || t.parentElement;
+  const chip = t.querySelector('.hsTag[data-tag="CADET"]');
+  const br = box.getBoundingClientRect(), cr = chip ? chip.getBoundingClientRect() : null;
+  return { chip: !!chip, tableW: t.scrollWidth, boxW: box.clientWidth, chipRight: cr ? Math.round(cr.right) : null, boxRight: Math.round(br.right) };
+});
+P.check("9b. phone records (390 x 844): the Cadet run's row shows its CADET chip inside the modal (table no wider than its scroll box, chip not clipped)",
+  t9c.chip && t9c.tableW <= t9c.boxW && t9c.chipRight <= t9c.boxRight && p2errors.length === 0, { t9c, errors: p2errors.slice(0, 3) });
 await ctx2.close();
 
 errorsCheck(P);

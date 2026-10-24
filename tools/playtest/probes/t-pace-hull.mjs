@@ -17,16 +17,25 @@ const next = async () => {
 const cardLines = () => P.g(() => { const b = window.game.banner; return b && b.kind === "sector" ? (b.lines || []).map((l) => l.text) : null; });
 const srText = () => P.g(() => document.getElementById("srAnnounce").textContent);
 
+// ---- 0. the PACE tag: a sector flown at a mean paceMul >= 1.1 shows "PACE xN.N" on its card and says it ----
+await P.g(() => { const g = window.game; g.pacePin(2); g.beginWave(0); g.beginWave(1); g.beginWave(2); g.pacePin(null); });
+const ok0 = await forceClear(P, {});
+await sleep(200);
+const tag0 = await P.g(() => ({ tags: window.game.lastResults.tags, waveMuls: window.game.paceSnapshot().state.waveMuls,
+  chip: !!document.querySelector('#resultsLevel .resultsTag[data-tag="PACE x2.0"]'), sr: document.getElementById("srAnnounce").textContent }));
+P.check("0. S1 flown at paceMul 2.0 (pinned, waves 1-3): the Level Complete card shows the 'PACE x2.0' chip and the announcement says 'Pace 2.0 times the standard stream.'",
+  ok0 && tag0.chip && JSON.stringify(tag0.waveMuls) === "[2,2,2]" && tag0.tags.includes("PACE x2.0") && /Pace 2\.0 times the standard stream\./.test(tag0.sr), tag0);
+
 // ---- 1. S3 clear at 150/400 -> S4 refills ----
 await jumpTo(P, 2);
 const ok1 = await forceClear(P, { hp: 150 });
 const lc1 = await lcText();
-const run1 = await P.g(() => ({ hp: window.game.player.hp, max: window.game.player.maxHp, runHp: window.game.save.run.hp, note: window.game.paceSnapshot().state.hullNote }));
+const run1 = await P.g(() => ({ hp: window.game.player.hp, max: window.game.player.maxHp, runHp: window.game.save.run.hp, note: window.game.paceSnapshot().state.hullNote, tags: window.game.lastResults.tags }));
 await next();
 const s4 = await P.g(() => ({ hp: window.game.player.hp, max: window.game.player.maxHp, level: window.game.levelIndex + 1 }));
 const s4lines = await cardLines();
-P.check("1. S3 clear at 150/400 -> S4 refills: hp === maxHp === 500, no hull card line, Level Complete text without a hull suffix",
-  ok1 && run1.hp === 500 && run1.max === 500 && run1.runHp === 500 && run1.note === null && !/Hull/.test(lc1) && s4.level === 4 && s4.hp === 500 && s4.max === 500 && (s4lines || []).length === 0, { lc1, run1, s4, s4lines });
+P.check("1. S3 clear at 150/400 -> S4 refills: hp === maxHp === 500, no hull card line, Level Complete text without a hull suffix; flown at the table pace: no PACE tag",
+  ok1 && !run1.tags.some((t) => /^PACE x/.test(t)) && run1.hp === 500 && run1.max === 500 && run1.runHp === 500 && run1.note === null && !/Hull/.test(lc1) && s4.level === 4 && s4.hp === 500 && s4.max === 500 && (s4lines || []).length === 0, { lc1, run1, s4, s4lines });
 
 // ---- 2. S4 clear at 220/500 -> S5 at 432/600 ----
 await waitFor(P, () => !window.game.levelIntro, 6000);
