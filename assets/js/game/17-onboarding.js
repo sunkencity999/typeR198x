@@ -650,6 +650,7 @@ Object.assign(Game.prototype, {
   briefingOnShow(evt) {
     const more = document.getElementById("storyMore");
     if (more) more.open = !(evt && evt.launch);
+    this.briefingSyncBody();
     const modal = this.storyModal;
     if (modal && typeof this.updateModalScroll === "function") requestAnimationFrame(() => this.updateModalScroll(modal));
   },
@@ -658,9 +659,22 @@ Object.assign(Game.prototype, {
     const more = document.getElementById("storyMore");
     if (!more || more.dataset.fcBound) return;
     more.dataset.fcBound = "1";
+    this.briefingSyncBody();
     more.addEventListener("toggle", () => {
+      this.briefingSyncBody();
       if (typeof this.updateModalScroll === "function") this.updateModalScroll(this.storyModal || document.getElementById("storyModal"));
     });
+  },
+
+  // The scroll body is a Tab stop (bindModals gives it tabindex 0) only while the disclosure is open. Chrome lays out a
+  // closed <details> body with content-visibility: hidden, so focusables() still lists it but focus() cannot land on it,
+  // and the modal's Tab trap would stall on the summary.
+  briefingSyncBody() {
+    const more = document.getElementById("storyMore");
+    const body = more && more.querySelector(".modalBody");
+    if (!body) return;
+    const t = more.open ? "0" : "-1";
+    if (body.getAttribute("tabindex") !== t) body.setAttribute("tabindex", t);
   }
 });
 
