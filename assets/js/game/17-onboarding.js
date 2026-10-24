@@ -454,14 +454,34 @@ Object.assign(Game.prototype, {
       this.announce(FC_COPY.srRelease(far.text, FC_WORDS.near));
       return;
     }
-    if (near && lock && lock.ref === near && fc.shownToast === "release") {
-      this.dismissToast(FC_TOAST_KEY);   // the nearer one is locked: the release lesson is done
-      fc.shownToast = null;
-    }
     const target = near || far;
     const lockedAny = !!(lock && (lock.ref === far || lock.ref === near));
     this.fcLockNudge(dt, target, this.isTargetable(target) && !lockedAny);
     this.fcNudges(target);
+    if (near) this.fcReleaseToast(lock ? lock.ref : null, far, near);   // after the nudges: one toast write per frame
+  },
+
+  // Step 3 once the nearer plate is up: the toast follows the lock. These are state changes, not nudges, so the nudge cap
+  // does not apply (a pilot who used both nudges and then lost the comet lock to 3 misses still reads TYPE L):
+  // comet locked -> the release copy; nothing locked (Space, or 3 misses dropped it) -> TYPE L; laser locked -> none
+  // (the release lesson is done; an idle FINISH nudge on the laser lock stays). Writes only on a change.
+  fcReleaseToast(ref, far, near) {
+    const fc = this.flightCheck;
+    const shown = fc.shownToast;
+    if (ref === near) {
+      if (shown === "release" || shown === "lead") {
+        this.dismissToast(FC_TOAST_KEY);
+        fc.shownToast = null;
+        fc.shownLead = null;
+      }
+      return;
+    }
+    if (ref === far) {
+      if (shown !== "release") this.fcShowToast("release");
+      return;
+    }
+    const lead = near.text[0];
+    if (shown !== "lead" || fc.shownLead !== lead) this.fcShowToast("lead", lead);
   },
 
   // Lock nudge (steps 2-3): the plate is targetable but not locked for FC_LOCK_NUDGE_S -> "TYPE <lead>".
