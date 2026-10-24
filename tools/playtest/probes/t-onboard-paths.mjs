@@ -271,9 +271,10 @@ async function drive(c, how = "space", send = null, { onNear = null } = {}) {
   c = await openCase("skip-flag", { flightCheck: "skip", save: null });
   out.skipFlag = await noCheck(c); await c.close();
   // Rule 5 (R20): a MEASURE session makes the save a returning pilot's. Real typistSessions with a seeded profile when
-  // MEASURE is merged; a stub on the instance when it is absent (or when the seeded row does not read back).
+  // MEASURE is merged (the row must read back: rank is "S".."D" or null for practice, else MEASURE's migration drops it);
+  // a stub on the instance only when MEASURE is absent.
   const sessionSave = { playerName: "PRAC", lastUnlockedLevel: 1, storySeen: true,
-    profile: { v: 1, keys: {}, bigrams: {}, speedEma: 41, thrEma: 44, speedN: 120, sessions: [[1792800000, "drill", 1, 41, 95.5, "-", 0, 3, 81, ""]], sectorBest: {}, bests: { speed: 0, ceiling: 0, drill: { speed: 41, acc: 95.5 } }, days: { n: 1, last: 20261023 } } };
+    profile: { v: 1, keys: {}, bigrams: {}, speedEma: 41, thrEma: 44, speedN: 120, sessions: [[1792800000, "drill", 1, 41, 95.5, null, 0, 3, 81, ""]], sectorBest: {}, bests: { speed: 0, ceiling: 0, drill: { speed: 41, acc: 95.5 } }, days: { n: 1, last: 20261023 } } };
   c = await openCase("session", { save: sessionSave });
   const pre = await c.g(() => {
     const g = window.game;
@@ -284,14 +285,15 @@ async function drive(c, how = "space", send = null, { onNear = null } = {}) {
       const saved = g.typistSessions;
       g.typistSessions = () => [];
       const control = g.flightCheckEligible();
-      g.typistSessions = (k) => [{ t: 1792800000, mode: "drill", sector: 1, speed: 41, acc: 95.5, rank: "-", score: 0, misses: 3, steady: 81, weak: [] }];
+      g.typistSessions = (k) => [{ t: 1792800000, mode: "drill", sector: 1, speed: 41, acc: 95.5, rank: null, score: 0, misses: 3, steady: 81, weak: "" }];
       return { path, real, n, control, eligible: g.flightCheckEligible(), hadReal: typeof saved === "function" };
     }
     return { path, real, n, control: null, eligible: g.flightCheckEligible() };
   });
   out.session = { ...pre, ...(await noCheck(c)) };
   await c.close();
-  const okAll = Object.values(out).every((o) => o.card && !o.active && o.ms <= 1000) && out.session.eligible === false && (out.session.control === null || out.session.control === true);
+  const okAll = Object.values(out).every((o) => o.card && !o.active && o.ms <= 1000) && out.session.eligible === false && (out.session.control === null || out.session.control === true)
+    && (!out.session.real || out.session.path === "measure");
   P.check("7 ineligible -> no check, sector card within 1 s: legacy-midwave Continue, a records row, tutorialSeen.lock, the skip flag, a typistSessions session (rule 5)",
     okAll, JSON.stringify(out));
 }
