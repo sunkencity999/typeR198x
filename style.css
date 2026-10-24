@@ -2724,7 +2724,18 @@ body[data-flight-check="on"] .tapToType:not(.hidden) ~ .toastStack { bottom: cal
   #storyModal .modalInner { overflow-y: auto; }
   #storyModal .modalBody { max-height: none; overflow: visible; }
 }
-@media (max-width: 560px) { .fcPanel { right: 8px; bottom: 8px; } .fcStep { display: none; } }
+/* The bottom-centre stack (tap pill, toasts) and the panel never overprint, so a tap meant for the pill cannot land on
+   Skip. Below ~500 px of playfield height the pill's row meets the panel's: the step count gives way while the pill
+   shows (landscape phones, portrait tablets); on narrow screens the pill and the toasts centre in the room left of the
+   Skip column (84px = the 8px gutter + the 68px "Skip" button + 8px) and the toasts wrap inside it. */
+body[data-flight-check="on"] .tapToType:not(.hidden) ~ .fcPanel .fcStep { visibility: hidden; }
+@media (max-width: 560px) {
+  .fcPanel { right: 8px; bottom: 8px; }
+  .fcStep { display: none; }
+  body[data-flight-check="on"] .tapToType,
+  body[data-flight-check="on"] .toastStack { left: calc(50% - 42px); }
+  body[data-flight-check="on"] .toastStack { max-width: calc(100% - 100px); }
+}
 /* ===== end track:ONBOARD ===== */
 
 /* ===== track:MEASURE (32-typist.js) ===== */

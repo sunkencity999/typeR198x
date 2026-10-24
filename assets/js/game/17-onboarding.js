@@ -603,16 +603,28 @@ Object.assign(Game.prototype, {
     if (!ui || !ui.step) return;
     const text = FC_COPY.step(n);
     if (ui.step.textContent !== text) ui.step.textContent = text;
+    this.fcSyncSkipLabel();   // a touch-mode flip or a resize since the last step
   },
 
   fcShowPanel(show) {
     const ui = this._fcUi;
     if (!ui) return;
-    if (show && ui.btn) {
-      const label = this.touchMode ? FC_COPY.skip : FC_COPY.skipKbd;
-      if (ui.btn.textContent !== label) ui.btn.textContent = label;
-    }
+    if (show) this.fcSyncSkipLabel();
     ui.panel.classList.toggle("hidden", !show);
+  },
+
+  // "Skip · Esc" for keyboard pilots; "Skip" in touch mode and on narrow screens (max-width 560px, the query style.css
+  // uses), where the tap pill and the toasts centre left of a column only one "Skip" button wide. Synced on show and on
+  // every step begin; writes only on a change.
+  fcSyncSkipLabel() {
+    const ui = this._fcUi;
+    if (!ui || !ui.btn) return;
+    if (ui.narrow === undefined) {
+      ui.narrow = null;
+      try { if (typeof window.matchMedia === "function") ui.narrow = window.matchMedia("(max-width: 560px)"); } catch (_) { ui.narrow = null; }
+    }
+    const label = (this.touchMode || (ui.narrow && ui.narrow.matches)) ? FC_COPY.skip : FC_COPY.skipKbd;
+    if (ui.btn.textContent !== label) ui.btn.textContent = label;
   },
 
   // ------------------------- Probe / harness reads (allocate) -------------------------
