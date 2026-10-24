@@ -23,7 +23,8 @@ const REQUIRED = [
   "maxRenderMs", "shadowBlurPerFrame", "fullFrameFillMaxAlpha", "getImageDataCalls", "layoutCountPer5s",
   "network", "networkTotals.overallBytes", "networkTotals.mediaBytes", "networkTotals.bytesFinishedBeforeFirstKeystroke",
   "networkTotals.bytesFinishedBeforeFirstKeystrokeNonMedia", "networkTotals.bytesFinishedBeforeFirstKeystrokeMedia", "networkTotals.topUrls",
-  "saveBlob", "reduceMotion", "canvas", "probe.longTasks", "probe.wrapped", "screenshots", "notes", "finalState"
+  "saveBlob", "reduceMotion", "canvas", "probe.longTasks", "probe.wrapped", "screenshots", "notes", "finalState",
+  "flightCheck", "config.flightCheck"   // ONBOARD (D13): { played } by default, the check's result with --flight-check
 ];
 const REQUIRED_ALL = ["fps.boss", "fps.finale", "perf.boss", "stateAfterBoss", "stateAfterFinale", "stateLevel2", "stateFinalBoss"];
 // debugStats is null until window.TypeRDebug.stats() exists (A2/B-15); only its presence as a key is required.

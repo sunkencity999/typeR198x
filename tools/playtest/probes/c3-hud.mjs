@@ -1,6 +1,6 @@
 // C3 acceptance probe: HUD (hull meter, chips, multiplier badge, boss meter, mode-aware opacity, two-row layout).
 // Usage: cd tools/playtest && node probes/c3-hud.mjs
-import { openProbe, sleep } from "./_lib.mjs";
+import { openProbe, sleep, harnessFlags } from "./_lib.mjs";
 import { chromium } from "playwright";
 
 const P = await openProbe("c3");
@@ -97,6 +97,7 @@ P.check("no page errors", P.errors.pageErrors.length === 0, JSON.stringify(P.err
 {
   const browser = await chromium.launch({ channel: "chrome", headless: true, args: ["--autoplay-policy=no-user-gesture-required", "--mute-audio"] });
   const ctx = await browser.newContext({ viewport: { width: 900, height: 700 }, deviceScaleFactor: 1 });
+  await harnessFlags(ctx);   // ONBOARD: a fresh-save Start skips the Flight Check (harness default)
   const pg = await ctx.newPage();
   await pg.goto(P.base, { waitUntil: "load" });
   await pg.waitForFunction(() => { const el = document.getElementById("loadingOverlay"); return !el || el.classList.contains("hidden") || getComputedStyle(el).visibility === "hidden"; }, null, { timeout: 60000 });

@@ -2699,6 +2699,47 @@ fieldset.shipGrid > legend {
 /* ===== end training scaffold ===== */
 
 /* ===== track:ONBOARD (17-onboarding.js) ===== */
+/* Flight Check panel (step pill + Skip, created by fcEnsureUi in #main) and the HUD cells it hides; briefing summary. */
+.fcPanel { position: absolute; right: 16px; bottom: 16px; z-index: var(--z-toast); display: flex; align-items: center; gap: 12px; pointer-events: none; }
+.fcPanel.hidden, body:not([data-mode="playing"]) .fcPanel { display: none; }
+.fcStep { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--c-ui);
+  padding: 6px 10px; border-radius: var(--r-pill); background: var(--glass1); border: 1px solid rgba(57,245,255,0.45); }
+.fcSkip { pointer-events: auto; min-width: 44px; min-height: 44px; }
+body[data-flight-check="on"] #hud .hudRow > .hudCell:not(.hudCell--pilot),
+body[data-flight-check="on"] #stageBar,
+body[data-flight-check="on"] #hudChips { visibility: hidden; }
+body[data-flight-check="on"] .tapToType:not(.hidden) ~ .toastStack { bottom: calc(10% + 64px); }   /* pill and toast never overprint */
+.storySummary { margin: 0 0 12px; padding-left: 1.4em; font-size: 17px; line-height: 1.5; color: var(--c-text); }
+.storySummary li { margin: 0 0 4px; }
+.storySummary li::marker { color: var(--c-ui); font-family: var(--font-mono); }
+.storyMore > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; gap: 8px; list-style: none; font-family: var(--font-mono);
+  font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--c-ui); }
+.storyMore > summary::-webkit-details-marker { display: none; }
+.storyMore > summary::before { content: ""; width: 6px; height: 6px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor;
+  transform: rotate(-45deg); transition: transform var(--dur-2); }   /* same chevron as the help sections */
+.storyMore[open] > summary::before { transform: rotate(45deg); }
+:root.reduce-motion .storyMore > summary::before { transition: none; }
+.storyMore[open] > summary { margin-bottom: 8px; }
+@media (max-height: 500px) {   /* landscape phones: the panel scrolls once, not two nested areas */
+  #storyModal .modalInner { overflow-y: auto; }
+  #storyModal .modalBody { max-height: none; overflow: visible; }
+}
+/* The bottom-centre stack (tap pill, toasts) and the panel never overprint, so a tap meant for the pill cannot land on
+   Skip. Below ~500 px of playfield height the pill's row meets the panel's: the step count gives way while the pill
+   shows (landscape phones, portrait tablets); on narrow screens the pill and the toasts centre in the room left of the
+   Skip column (84px = the 8px gutter + the 68px "Skip" button + 8px) and the toasts wrap inside it. */
+body[data-flight-check="on"] .tapToType:not(.hidden) ~ .fcPanel .fcStep { visibility: hidden; }
+@media (max-width: 560px) {
+  .fcPanel { right: 8px; bottom: 8px; }
+  .fcStep { display: none; }
+  body[data-flight-check="on"] .tapToType,
+  body[data-flight-check="on"] .toastStack { left: calc(50% - 42px); }
+  body[data-flight-check="on"] .toastStack { max-width: calc(100% - 100px); }
+}
+@media (max-width: 359px) {   /* 320 px phones: no room for the pill beside that column, so Skip rises above the pill while it shows */
+  body[data-flight-check="on"] .tapToType { left: 50%; }
+  body[data-flight-check="on"] .tapToType:not(.hidden) ~ .fcPanel { bottom: calc(10% + 54px); }
+}
 /* ===== end track:ONBOARD ===== */
 
 /* ===== track:MEASURE (32-typist.js) ===== */

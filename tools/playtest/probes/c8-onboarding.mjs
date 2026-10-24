@@ -56,8 +56,24 @@ await sleep(4300);
 const gone = await P.g(() => { const t = document.querySelector("#toastStack .toast"); return !t || !/LOCK ON/.test(t.textContent); });
 P.check("'LOCK ON' toast gone after ~4 s", gone, `gone=${gone}`);
 
-// First lock on a WORD target -> FINISH toast, tutorialSeen.lock true; kill -> finish true.
+// D13 regression (ONBOARD): a letter kill before any word lock leaves tutorialSeen.finish false. It used to mark FINISH
+// seen on any kill, so the tip never showed (wave 1 is ~80 % letters).
 await P.g(() => { window.game.invulnT = 1000; });
+const letterCh = await P.g(() => {
+  const g = window.game;
+  const used = new Set([...g.enemies, ...g.powerups].filter((e) => e.alive && !e.dying).map((e) => e.nextChar()));
+  const ch = "qxzjvkwybp".split("").find((c) => !used.has(c)) || "q";
+  g.enemies.push(new Enemy({ text: ch, x: 700, y: LANE_YS[2], speed: 0, lane: 2 }));
+  return ch;
+});
+await page.keyboard.press(letterCh);
+await sleep(200);
+const afterLetter = await P.g(() => ({ kills: window.game.levelStats.kills, finish: window.game.save.tutorialSeen.finish, log: window.__toastLog.slice(),
+  blob: (JSON.parse(localStorage.getItem("typesmup198x.save.v1")) || {}).tutorialSeen }));
+P.check("a letter kill before any word lock leaves tutorialSeen.finish false (no FINISH toast)", afterLetter.kills >= 1 && afterLetter.finish === false &&
+  !afterLetter.log.some((s) => /FINISH/.test(s)) && !(afterLetter.blob && afterLetter.blob.finish), JSON.stringify({ letter: letterCh, ...afterLetter }));
+
+// First lock on a WORD target -> FINISH toast (marks tutorialSeen.finish when displayed), tutorialSeen.lock true.
 let locked = false;
 for (let i = 0; i < 150 && !locked; i++) {
   const k = await P.g(() => {
@@ -92,8 +108,10 @@ for (let i = 0; i < 120; i++) {
   await sleep(55);
 }
 await sleep(150);
-const finish = await P.g(() => ({ kills: window.game.levelStats.kills, seenFinish: window.game.save.tutorialSeen.finish }));
-P.check("first kill -> tutorialSeen.finish === true", finish.kills > 0 && finish.seenFinish === true, JSON.stringify(finish));
+const finish = await P.g(() => ({ kills: window.game.levelStats.kills, seenFinish: window.game.save.tutorialSeen.finish, log: window.__toastLog.slice(),
+  blob: (JSON.parse(localStorage.getItem("typesmup198x.save.v1")) || {}).tutorialSeen }));
+P.check("FINISH display sets tutorialSeen.finish (memory and storage)", finish.seenFinish === true && !!(finish.blob && finish.blob.finish === true) &&
+  finish.log.some((s) => /FINISH/.test(s)), JSON.stringify({ kills: finish.kills, seenFinish: finish.seenFinish, blobFinish: finish.blob && finish.blob.finish }));
 
 // Powerup tip: spawn one in view.
 await P.g(() => { const g = window.game; g.spawnPowerup({ type: "SHIELD", x: 900, y: 320, fromKill: true }); });

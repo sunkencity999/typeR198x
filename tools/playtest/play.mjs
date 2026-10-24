@@ -5,9 +5,9 @@
 //                 [--dpr 1|2] [--wpm 80] [--accuracy 0.93] [--reduced-motion] [--mobile]
 //                 [--ua native|"<string>"] [--cpu 4] [--fixture <name>] [--entry auto|start|continue]
 //                 [--fail-webp] [--delay-opt <ms>] [--expect-resource-errors] [--ignore-errors <regex>]
-//                 [--no-music] [--file] [--headed]
+//                 [--no-music] [--file] [--headed] [--flight-check]
 //
-// Produces <out>/report.json plus numbered PNG screenshots (fixed numbering, see SHOT_INDEX).
+// Produces <out>/report.json plus numbered PNG screenshots (fixed numbering, see SHOT_INDEX; --flight-check adds 17-20).
 // Exit code 1 when page errors or non-resource console errors occurred (or the harness itself failed);
 // resource-load errors (404s, injected failures) are reported separately and never fail the run.
 // See README.md in this directory for every flag and report field.
@@ -18,7 +18,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const BOOL_FLAGS = new Set(["mobile", "headed", "reduced-motion", "fail-webp", "expect-resource-errors", "file", "no-music", "help"]);
+const BOOL_FLAGS = new Set(["mobile", "headed", "reduced-motion", "fail-webp", "expect-resource-errors", "file", "no-music", "flight-check", "help"]);
 
 const args = Object.fromEntries(process.argv.slice(2).reduce((acc, a, i, arr) => {
   if (a.startsWith("--")) {
@@ -55,6 +55,9 @@ const EXPECT_RESOURCE_ERRORS = args["expect-resource-errors"] === "true";
 const IGNORE_ERRORS = args["ignore-errors"] ? new RegExp(args["ignore-errors"]) : null;
 const FILE_MODE = args.file === "true";
 const NO_MUSIC = args["no-music"] === "true";
+// ONBOARD (D13): the game's first-run Flight Check is skipped by default (window.TypeRHarness.flightCheck = "skip"), so
+// every row measures what it always did; --flight-check sets "play" and plays it (report.flightCheck, shots 17-20).
+const FLIGHT_CHECK = args["flight-check"] === "true";
 const LS_KEY = "typesmup198x.save.v1";
 
 fs.mkdirSync(OUT, { recursive: true });
@@ -316,7 +319,7 @@ const report = {
   root: ROOT, scenario: SCENARIO, dpr: DPR, mobile: MOBILE,
   config: { seconds: SECONDS, wpm: WPM, accuracy: ACCURACY, reducedMotion: REDUCED_MOTION, ua: UA, cpu: CPU || null, fixture: FIXTURE, entry: ENTRY,
     failWebp: FAIL_WEBP, delayOptMs: DELAY_OPT || null, expectResourceErrors: EXPECT_RESOURCE_ERRORS, ignoreErrors: IGNORE_ERRORS ? String(IGNORE_ERRORS) : null, fileMode: FILE_MODE,
-    noMusic: NO_MUSIC },
+    noMusic: NO_MUSIC, flightCheck: FLIGHT_CHECK },
   consoleErrors: [], consoleWarnings: [], pageErrors: [], resourceErrors: [], ignoredErrors: [], requestFailures: [], mediaAborts: [], httpErrors: [],
   screenshots: [], timings: {}, fps: {}, perf: {}, network: [], networkTotals: null, notes: []
 };
@@ -350,6 +353,8 @@ const ctxOpts = MOBILE
 if (UA) ctxOpts.userAgent = UA;
 const context = await browser.newContext(ctxOpts);
 await context.addInitScript(installProbe);
+// Harness flag contract (spec-onboard 3.7): "skip" | "play" | null (the game's real eligibility rule).
+await context.addInitScript((m) => { window.TypeRHarness = Object.assign(window.TypeRHarness || {}, { flightCheck: m }); }, FLIGHT_CHECK ? "play" : "skip");
 if (NO_MUSIC) await context.addInitScript(installNoMusic);
 if (fixture) {
   await context.addInitScript(({ key, blob }) => {
@@ -621,6 +626,52 @@ async function enterGame() {
   }
 }
 
+// --flight-check: play the Flight Check like the typist plays a wave (same WPM / accuracy jitter). Space when the
+// check asks for the release (insertText(" ") on --mobile, which handleTextInput treats as a release). Shots
+// flight-check-1..3 the first frame each step's plate is targetable, flight-check-complete on the done beat.
+async function playFlightCheck() {
+  const out = { played: false };
+  const fcState = () => page.evaluate(() => {
+    const g = (typeof game !== "undefined" && game) || window.game;
+    return g && typeof g.flightCheckState === "function" ? g.flightCheckState() : null;
+  }).catch(() => null);
+  let st = await fcState();
+  if (!st) { report.notes.push("flight-check: no Flight Check was active after Start (eligibility, or 17-onboarding.js missing)"); return out; }
+  out.played = true;
+  const interval = 60000 / (Math.max(1, WPM) * 5);
+  const shotTaken = new Set();
+  const t0 = Date.now();
+  while (Date.now() - t0 < 60000) {
+    const loopStart = Date.now();
+    st = await fcState();
+    if (!st) break;
+    if (st.phase === "step" && !shotTaken.has(st.step) && st.plates[0] && st.plates[0].targetable) {
+      shotTaken.add(st.step);
+      await shot(`flight-check-${st.step}`);
+    }
+    if (st.phase === "done" && !shotTaken.has("done")) { shotTaken.add("done"); await shot("flight-check-complete"); }
+    const mode = await page.evaluate(() => window.game && window.game.mode).catch(() => null);
+    if (st.phase !== "step" || mode !== "playing") { await sleep(60); continue; }
+    let key = null;
+    if (st.wantRelease) key = " ";
+    else {
+      const k = await nextKey();
+      if (k) key = Math.random() > ACCURACY ? "abcdefghijklmnopqrstuvwxyz".replace(k, "")[Math.floor(Math.random() * 25)] : k;
+    }
+    if (!key) { await sleep(60); continue; }
+    await pressKey(key);
+    if (firstKeyAt === null) { firstKeyAt = Date.now(); report.timings.firstKeystrokeMs = firstKeyAt - navEpoch; }
+    const jitter = interval * (0.8 + Math.random() * 0.4);
+    await sleep(Math.max(5, jitter - (Date.now() - loopStart)));
+  }
+  if (st) report.notes.push(`flight-check: still active after 60 s (phase ${st.phase}, step ${st.step})`);
+  const handed = await page.waitForFunction(() => { const g = window.game; return !!(g && !g.flightCheck && g.levelIntro); }, null, { timeout: 5000 })
+    .then(() => true).catch(() => false);
+  if (!handed) report.notes.push("flight-check: no sector card within 5 s of the check ending");
+  const last = await page.evaluate(() => { const g = window.game; return g && typeof g.flightCheckLastResult === "function" ? g.flightCheckLastResult() : null; }).catch(() => null);
+  return { ...out, sectorCard: handed, ...(last || {}) };
+}
+
 async function checkFixture() {
   if (!fixture) return;
   const exp = fixture.expect || {};
@@ -691,6 +742,7 @@ try {
     if (!(await waitPlaying(30000))) report.notes.push("never entered playing mode");
   }
   report.timings.startToPlayingMs = Date.now() - tStart;
+  report.flightCheck = FLIGHT_CHECK ? await playFlightCheck() : { played: false };
   await checkFixture();
 
   // Idle layout hygiene (PLAN A11 / E2): forced layouts over the first 5 s of play with no typing

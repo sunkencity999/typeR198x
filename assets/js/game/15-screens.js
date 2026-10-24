@@ -593,7 +593,8 @@ Object.assign(Game.prototype, {
 // enemy on screen (t >= 1 s), first lock, first powerup on screen, boss intro end, first lock loss, the accuracy tip
 // after a sector-1 death below 70 %. Flags live in save.tutorialSeen; everything is suppressed for returning players
 // (lastUnlockedLevel > 1), deferred behind the sector card, DROPPED (never queued) while a boss intro or the finale
-// is on, and cleared outside play. The boss tip itself waits for the intro to end.
+// is on, and cleared outside play. The boss tip itself waits for the intro to end. FINISH is marked seen when it is
+// displayed, on the first multi-letter lock (D13); nothing here fires during the Flight Check (17-onboarding.js).
 const TUTORIAL_TIPS = {
   lock: { text: "TYPE THE FIRST LETTER OF A TARGET TO LOCK ON", ms: 4000 },
   finish: { text: "KEEP TYPING TO FINISH IT", ms: 2600 },
@@ -663,6 +664,8 @@ Object.assign(Game.prototype, {
       return;
     }
     T.prevMode = mode;
+    // ONBOARD: the Flight Check teaches with its own toasts; nothing here fires during it or carries over from it.
+    if (this.flightCheck) { T.prevLock = null; T.prevCorrect = null; T.prevMisses = null; T.prevKills = null; T.watchPowerup = null; return; }
     const seen = (this.save && this.save.tutorialSeen) || {};
     const lock = this.lock;
     const st = this.stats || {};
@@ -672,13 +675,11 @@ Object.assign(Game.prototype, {
     // (single-letter targets lock and die inside one keystroke), a kill is a finished target, and a miss that leaves
     // the previous target alive at progress 0 is a lost lock.
     const firstCorrect = correct > T.prevCorrect && !this.inBoss;
-    const killed = kills > T.prevKills;
     const prevRef = T.prevLock && T.prevLock.ref;
     const lost = !!(T.prevLock && !lock && misses > T.prevMisses && prevRef && prevRef.alive && !prevRef.dying && (prevRef.progress | 0) === 0);
 
     // Progress flags are tracked whether or not a tip is on screen.
     if (firstCorrect && !seen.lock) this.markTutorial("lock");
-    if (killed && !seen.finish && !this.inBoss) this.markTutorial("finish");
     if (T.watchPowerup && T.watchPowerup.alive === false) {
       if ((T.watchPowerup.progress | 0) >= (T.watchPowerup.label || "").length && !seen.powerup) this.markTutorial("powerup");
       T.watchPowerup = null;
@@ -700,9 +701,12 @@ Object.assign(Game.prototype, {
       if (!seen.lock && !T.shown.lock && !lock && this.levelIndex === 0 && levelT >= 1 && this.hasEnemyOnScreen()) {
         this.tutorialToast("lock", TUTORIAL_TIPS.lock.text, TUTORIAL_TIPS.lock.ms);
       }
-      // The lock landed on a word (still alive): teach the finish; a letter target already taught it by dying.
-      if (!seen.finish && !T.shown.finish && firstCorrect && lock && lock.kind === "enemy") {
+      // The first multi-letter lock (a correct key that leaves the lock alive on a word) teaches the finish. It is marked
+      // seen only now, when it is displayed (D13): a letter kill used to mark it first, so the tip never showed.
+      if (!seen.finish && !T.shown.finish && firstCorrect && lock && lock.kind === "enemy" && lock.ref && lock.ref.alive &&
+          (lock.ref.text || "").length > 1 && (lock.ref.progress | 0) >= 1) {
         this.tutorialToast("finish", TUTORIAL_TIPS.finish.text, TUTORIAL_TIPS.finish.ms);
+        this.markTutorial("finish");
       }
       if (!seen.powerup && !T.shown.powerup && !T.watchPowerup) {
         const p = this.firstPowerupOnScreen();
