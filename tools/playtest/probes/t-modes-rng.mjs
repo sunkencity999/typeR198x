@@ -86,5 +86,20 @@ const sectors = await P.g(() => [modesDailySectorFor(20261023, 5), modesDailySec
 P.check("R6 same mocked date: the first 3 spawned texts of wave 1 are identical across two attempts; the next date's first 5 differ in at least one",
   a1.length >= 3 && a2.length >= 3 && a1.slice(0, 3).join() === a2.slice(0, 3).join() && b1.length >= 5 && b1.join() !== a1.join(), { a1, a2, b1, sectors });
 
+// R8 review fix: a campaign start while a mode run is live (harness startSector) drops the mode first, so
+// bankAbandonedRun banks the stored campaign run (F5: 6,000 from sector 3) into the records as a menu start does.
+await P.goto(F5());
+await sleep(300);
+const rows = () => P.g(() => window.game.save.highScores.map((r) => `${r.score}/${r.startLevel}`).join());
+const r8a = await rows();
+await startMode(P, "drill");
+await P.g(() => window.game.startSector(0));
+await sleep(300);
+const r8 = await P.g(() => ({ mode: window.game.runMode(), modes: window.game._modes, rng: window.game._rng, chrome: document.body.dataset.runMode || null, run: window.game.save.run && window.game.save.run.startLevel }));
+const r8b = await rows();
+await P.g(() => window.game.stopToMenu(false));
+P.check("R8 startSector(0) during a live drill: mode state dropped first (campaign, _modes / _rng null, chrome restored) and the stored 6,000 run is banked into the records",
+  r8a === "5000/1" && r8b.split(",").includes("6000/3") && r8.mode === "campaign" && r8.modes === null && r8.rng === null && r8.chrome === null && r8.run === 1, { r8a, r8b, r8 });
+
 checkErrors(P);
 await P.finish();

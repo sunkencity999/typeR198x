@@ -1,5 +1,5 @@
 // Type-R 198X — MODES track (D9): run.mode, the seeded Daily Sortie, Endless Drift, Drill, the title deck and the mode
-// results card. Loads after 50-boss.js. Hooks consumed: levelWillStart, waveWillStart, tick, bossWillApproach,
+// results card. Loads after 50-boss.js. Hooks consumed: runWillStart, levelWillStart, waveWillStart, tick, bossWillApproach,
 // enemyTextWillPick, powerupWillSpawn, damageWillApply, leak, scoreWillAdd, gameOverWillStart, restartWillRun,
 // restartWillAsk, modeChange, pauseScreenFilled, sectorCardWillShow, menuRender, keyEscape, comboTierWillShow; emitted:
 // modesRunStart, modesRunEnd. Top-level names MODES_* / modes*. A mode run never touches save.run, the high score,
@@ -919,6 +919,8 @@ Object.assign(Game.prototype, {
 if (typeof onGameHook === "function") {
   const live = (g) => { const M = g._modes; return M && g.runMode() === M.mode ? M : null; };
   const on = (name, fn) => onGameHook(name, fn);
+  // A campaign start (harness startSector) while a mode run is live: drop it before bankAbandonedRun, so the stored run is banked.
+  on("runWillStart", function () { if (this._modes) this.modesCleanup(); });
   on("levelWillStart", function () { if (this._modes && this.runMode() === "campaign") this.modesCleanup(); });
   on("waveWillStart", function (evt) {
     const M = live(this);
