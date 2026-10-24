@@ -143,6 +143,26 @@ P.check("P8 S7 live: two-word plates spawn and are typed to death by the harness
 const help = await P.g(() => document.getElementById("helpModal").textContent.replace(/\s+/g, " "));
 P.check("P7 help copy: Backspace releases, Space types the gap of a two-word target, the gap counts in scoring", /Backspace releases your lock/.test(help) && /two-word target/.test(help) && /Space types it/.test(help) && /per character/.test(help), help.slice(0, 120));
 
+// P4b Reset save (the real flow, confirm accepted) gives a new save object: the tip shows again on its first two-word plate
+await P.g(() => { const g = window.game; g.stopToMenu(true); window.__resetP = g.onResetSavePressed(); });
+await P.page.locator("#btnConfirmOk").click({ timeout: 3000 }).catch(() => {});
+await P.g(() => window.__resetP);
+await P.g(() => { const g = window.game; g.startNewRun(); g.startLevel(3, { fromMenu: true, fresh: true }); });
+await waitFor(P, () => !window.game.levelIntro, 6000);
+const tip2 = await P.g(() => {
+  const g = window.game;
+  const before = !!(g.save.tutorialSeen && g.save.tutorialSeen.phrase);
+  let calls = 0; const orig = g.showToast; g.showToast = function (text, o) { if (o && o.key === "phrase") calls++; return orig.apply(this, arguments); };
+  const force = function (evt) { evt.text = "game over"; };
+  GAME_HOOKS.enemyTextWillPick.push(force);
+  g.enemies.length = 0; g.spawnEnemy(); g.enemies.length = 0; g.spawnEnemy();
+  GAME_HOOKS.enemyTextWillPick.splice(GAME_HOOKS.enemyTextWillPick.indexOf(force), 1);
+  g.showToast = orig; g.enemies.length = 0;
+  const saved = JSON.parse(localStorage.getItem("typesmup198x.save.v1") || "{}");
+  return { before, calls, flag: !!(saved.tutorialSeen && saved.tutorialSeen.phrase) };
+});
+P.check("P4b after Reset save the first two-word plate shows the tip once more and stores tutorialSeen.phrase again", !tip2.before && tip2.calls === 1 && tip2.flag, tip2);
+
 // P9 W4: the real Flight Check (ONBOARD, harness flag "play") with a weak profile: WORDS picks nothing, adds no card
 // line, then the Sector 1 card after Esc carries THREAT INTEL again.
 {

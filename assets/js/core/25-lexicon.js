@@ -478,8 +478,8 @@ lexiconOn("waveWillStart", function () {
 // E20 enemySpawned: the first two-word plate of a save gets one tip (announced by showToast), one storeSave per save.
 lexiconOn("enemySpawned", function (evt) {
   const en = evt && evt.en;
-  if (!en || en.kind !== "enemy" || !lexiconIsPhrase(en.text) || this._lexTipShown || !this.save || lexiconQuiet(this)) return;
-  this._lexTipShown = true;
+  if (!en || en.kind !== "enemy" || !lexiconIsPhrase(en.text) || !this.save || this._lexTipShown === this.save || lexiconQuiet(this)) return;
+  this._lexTipShown = this.save;   // per save object: a failing storage never repeats the tip; Reset save (new object) re-arms it
   const seen = this.save.tutorialSeen && typeof this.save.tutorialSeen === "object" ? this.save.tutorialSeen : (this.save.tutorialSeen = {});
   if (seen.phrase) return;
   seen.phrase = true;
