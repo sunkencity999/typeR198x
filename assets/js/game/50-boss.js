@@ -620,7 +620,13 @@ Object.assign(Game.prototype, {
     const L = cfg.level;
     this.killMinionsAll();
     this.cancelSurge(false);
-    boss.firedInPhase = 0; boss.surgeTimer = 0; boss.surgePending = false;   // D10: the cap and the cadence restart per phase
+    // D10 cap per phase. The cadence (R41: first surge min(6 s, surgeEvery) after the intro unlock, then every surgeEvery)
+    // runs on across phases, and a pending surge opens the next phase's first segment; only a phase that hit the cap
+    // restarts the clock, so a struggling pilot gets a full surgeEvery before the next one. (Resetting the clock at
+    // every phase clear left S2-3 fights, three segments per phase, with no surge at all for most pilots.)
+    const capped = (boss.firedInPhase | 0) >= COUNTER_SIGNAL.maxFiredPerPhase;
+    boss.firedInPhase = 0;
+    if (capped) { boss.surgeTimer = 0; boss.surgePending = false; }
     this.player.shield = Math.min(DAMAGE.shieldCap, (this.player.shield || 0) + DAMAGE.phaseClearShield);
     const slab = boss.slabRect;
     this.addScore(SCORE.phase(L), { kind: "bonus", x: slab.x + slab.w / 2, y: slab.y + slab.h + 24 });
