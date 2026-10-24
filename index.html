@@ -447,20 +447,28 @@
     </div>
 
     <!-- Modals -->
-    <div id="storyModal" class="modalOverlay is-dismissed" role="dialog" aria-modal="true" aria-labelledby="storyTitle">
+    <div id="storyModal" class="modalOverlay is-dismissed" role="dialog" aria-modal="true" aria-labelledby="storyTitle" aria-describedby="storySummary">
       <div class="modalInner">
         <p class="modalEyebrow">Mission briefing</p>
         <h2 id="storyTitle" class="neon-text">WordStorm Protocol</h2>
-        <div class="modalScroll">
-          <div class="modalBody">
-            <p>In 198X, the world’s neon skyways are protected by the TypeGrid—an arcade-era defense network that keeps the city’s air-lanes stable by continuously “spelling” the right commands into reality.</p>
-            <p>Then the WordStorm hits. Letters break loose. Words mutate into swarms. Boss-ships the size of buildings roll in like floating billboards, monorails, and glitching arcade cabinets—each broadcasting corrupted phrases that rewrite the sky into chaos.</p>
-            <p>You are a rookie pilot plugged into the last working TypeGrid interceptor: the Keystream. Your weapon isn’t ammo—it’s accuracy. Every correct keystroke fires a laser. Every completed word shatters enemy code. Every boss is a living headline you have to type back into submission.</p>
-            <p>Clear 10 sectors, reclaim the High Score, and punch through the final signal: the Electromancer Empress, source of the WordStorm, who’s trying to overwrite the world with a single unstoppable message.</p>
-            <p><strong>Type fast. Type clean. Save the city—one letter at a time.</strong></p>
+        <ol id="storySummary" class="storySummary">
+          <li>Type the first letter to lock.</li>
+          <li>Finish the word to fire.</li>
+          <li>Space lets go.</li>
+        </ol>
+        <details id="storyMore" class="storyMore">
+          <summary>Read the full briefing</summary>
+          <div class="modalScroll">
+            <div class="modalBody">
+              <p>In 198X, the world’s neon skyways are protected by the TypeGrid—an arcade-era defense network that keeps the city’s air-lanes stable by continuously “spelling” the right commands into reality.</p>
+              <p>Then the WordStorm hits. Letters break loose. Words mutate into swarms. Boss-ships the size of buildings roll in like floating billboards, monorails, and glitching arcade cabinets—each broadcasting corrupted phrases that rewrite the sky into chaos.</p>
+              <p>You are a rookie pilot plugged into the last working TypeGrid interceptor: the Keystream. Your weapon isn’t ammo—it’s accuracy. Every correct keystroke fires a laser. Every completed word shatters enemy code. Every boss is a living headline you have to type back into submission.</p>
+              <p>Clear 10 sectors, reclaim the High Score, and punch through the final signal: the Electromancer Empress, source of the WordStorm, who’s trying to overwrite the world with a single unstoppable message.</p>
+              <p><strong>Type fast. Type clean. Save the city—one letter at a time.</strong></p>
+            </div>
+            <span class="modalScrollHint" aria-hidden="true">scroll</span>
           </div>
-          <span class="modalScrollHint" aria-hidden="true">scroll</span>
-        </div>
+        </details>
         <div class="modalActions">
           <button id="btnStoryBack" class="btn-arcade" type="button">Back</button>
           <button id="btnStoryLaunch" class="btn-arcade primary" type="button">Launch the Keystream</button>
