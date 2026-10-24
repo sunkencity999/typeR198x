@@ -181,8 +181,8 @@ Object.assign(Game.prototype, {
     this.overdriveOn = true;
     if (typeof this.showBanner === "function") this.showBanner({ kind: "callout", title: "OVERDRIVE", color: "text" });
     if (this.sfx && typeof this.sfx.overdrive === "function") this.sfx.overdrive();
-    // First activation on this save: one tip (the flag rides the next autosave), then the one announcement. Its own
-    // toast key: it stacks beside an S1 tutorial tip ("tut") instead of replacing it.
+    // First activation on this save: one tip (the flag rides the next autosave), then the one announcement (own
+    // toast key: beside an S1 tutorial tip, not over it).
     const save = this.save;
     let first = false;
     if (save && !(save.tutorialSeen && save.tutorialSeen.overdrive)) {
