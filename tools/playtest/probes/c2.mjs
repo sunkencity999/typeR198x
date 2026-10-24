@@ -2,13 +2,14 @@
 // rotate hint, icon-only controls at phone width.
 // Usage: cd tools/playtest && node probes/c2.mjs
 import { devices } from "playwright";
-import { openProbe, sleep } from "./_lib.mjs";
+import { openProbe, sleep, harnessFlags } from "./_lib.mjs";
 
 const P = await openProbe("c2", { viewport: { width: 1366, height: 768 } });
 const overlayGone = (page) => page.waitForFunction(() => { const el = document.getElementById("loadingOverlay"); return !el || el.classList.contains("hidden") || getComputedStyle(el).visibility === "hidden"; }, null, { timeout: 60000 });
 
 async function open(opts, label) {
   const ctx = await P.browser.newContext(opts);
+  await harnessFlags(ctx);   // ONBOARD: a fresh-save Start skips the Flight Check (harness default; release finding R1)
   await ctx.addInitScript((k) => { try { localStorage.removeItem(k); } catch {} }, "typesmup198x.save.v1");
   const page = await ctx.newPage();
   const errs = [];

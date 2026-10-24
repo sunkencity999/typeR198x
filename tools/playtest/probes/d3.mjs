@@ -1,6 +1,6 @@
 // D3 acceptance: enemy plates, powerup capsules, lane rails, lifecycle ceremony (PLAN D3 / VIS-04 / VIS-05 / JUICE-06).
 // Usage: node probes/d3.mjs [--dpr 2]
-import { openProbe, sleep } from "./_lib.mjs";
+import { openProbe, sleep, harnessFlags } from "./_lib.mjs";
 
 const argDpr = Number((process.argv.find((a, i, arr) => arr[i - 1] === "--dpr")) || 1);
 const P = await openProbe("d3-dpr" + argDpr, { dpr: argDpr });
@@ -183,6 +183,7 @@ P.check("no page / console errors during the D3 probe", errs.pageErrors === 0 &&
 
 // ---- reduced motion context ----
 const ctx2 = await P.browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: argDpr, reducedMotion: "reduce" });
+await harnessFlags(ctx2);   // ONBOARD: a fresh-save Start skips the Flight Check (harness default; release finding R1)
 const pg = await ctx2.newPage();
 const rmErrors = [];
 pg.on("pageerror", (e) => rmErrors.push(String(e)));
