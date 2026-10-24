@@ -2926,6 +2926,9 @@ body[data-flight-check="on"] .tapToType:not(.hidden) ~ .fcPanel .fcStep { visibi
 /* ===== end track:MEASURE ===== */
 
 /* ===== track:PACE (42-pacing.js) ===== */
+/* Game Over: the Cadet offer's note sits under #retryNote in the same voice. */
+#cadetNote { margin: var(--sp-1) 0 0; text-align: center; opacity: 0.8; }
+#cadetNote:empty { display: none; }
 /* ===== end track:PACE ===== */
 
 /* ===== track:WORDS (25-lexicon.js) ===== */

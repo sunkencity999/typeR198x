@@ -137,7 +137,7 @@ Object.assign(Game.prototype, {
     if (len >= LONG_WORD_LEN) speed *= LONG_WORD_SPEED_MUL;
     else if (len === 1) speed *= this.randRange(LETTER_SPEED_MUL[0], LETTER_SPEED_MUL[1]);
     const en = new Enemy({ text, x: this.w, y, speed, lane });
-    en.x = this.w + en.plateW / 2 + this.randRange(10, 90);   // plate fully off-screen, targetable ~0.3 s later (PACE P2: 10-30)
+    en.x = this.w + en.plateW / 2 + this.randRange(SPAWN_ROLLIN_PX[0], SPAWN_ROLLIN_PX[1]);   // fully off-screen, targetable ~0.2-0.5 s later (PACE)
     this.enemies.push(en);
     this.hook("enemySpawned", { en, cfg, wave: this.wave });   // WORDS: first two-word tip
     this.lastSpawnLane = lane;
