@@ -840,6 +840,8 @@ Object.assign(Game.prototype, {
     const acc = Number(src.acc) || 0, wpm = Number(src.wpm) || 0;
     const h = clamp(Number.isFinite(src.hpPts) ? src.hpPts : 1, 0, 1);
     const hits = Math.max(0, src.hits | 0), level = src.level | 0;
+    // speedN (optional): the scope's qualifying intervals; under 10 the speed was not measured (the WPM tile shows --)
+    const unmeasured = src.speedN != null && Number(src.speedN) < TYPIST_SHOW_MIN_N;
     const grade = rankFor(acc, wpm, h, level);
     if (grade === "S") return { text: "", say: "", term: "" };
     const win = rankSpeedWindow(level);
@@ -871,11 +873,13 @@ Object.assign(Game.prototype, {
       return { text: `ACCURACY HELD YOU BACK · ${shown}% · ${G} AT ${needS}%`, say: `Accuracy held you back. ${shown} percent. ${G} at ${needS} percent.`, term: "acc" };
     }
     const rw = Math.round(wpm);
-    if (!any) return { text: `SPEED HELD YOU BACK · ${rw} WPM`, say: `Speed held you back. ${rw} words per minute.`, term: "speed" };
+    const shownW = unmeasured ? "--" : String(rw);
+    const sayW = unmeasured ? "Speed not measured." : `${rw} words per minute.`;
+    if (!any) return { text: `SPEED HELD YOU BACK · ${shownW} WPM`, say: `Speed held you back. ${sayW}`, term: "speed" };
     const need = win.floor + win.span * (s + gap / W.speed);
     let sp = Math.max(Math.ceil(need - 1e-9), rw + 1);
     while (sp < 400 && !typistGradeAtLeast(rankFor(acc, sp, h, level), G)) sp++;
-    return { text: `SPEED HELD YOU BACK · ${rw} WPM · ${G} AT ${sp}`, say: `Speed held you back. ${rw} words per minute. ${G} at ${sp}.`, term: "speed" };
+    return { text: `SPEED HELD YOU BACK · ${shownW} WPM · ${G} AT ${sp}`, say: `Speed held you back. ${sayW} ${G} at ${sp}.`, term: "speed" };
   },
 
   typistShortfall(input) {
@@ -927,7 +931,7 @@ Object.assign(Game.prototype, {
       r.rankWhyKind = "cause";
     } else {
       const hpPts = (ls.damageTaken | 0) === 0 ? 1 : clamp(1 - (ls.damageTaken | 0) / Math.max(1, this.player.maxHp), 0, 1);
-      why = this.typistShortfallParts({ acc: r.acc, wpm: r.wpm, hpPts, hits: ls.hits | 0, level: L });
+      why = this.typistShortfallParts({ acc: r.acc, wpm: r.wpm, hpPts, hits: ls.hits | 0, level: L, speedN: r.wpmN });
       r.rankWhyKind = "shortfall";
     }
     r.rankWhy = why.text;

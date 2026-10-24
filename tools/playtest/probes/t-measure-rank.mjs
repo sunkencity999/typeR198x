@@ -28,6 +28,22 @@ P.check("1. shortfall copy: the four spec examples, HULL ... 3 HITS, and '' for 
   ex.spd42 === "SPEED HELD YOU BACK · 42 WPM · S AT 55" && ex.acc85 === "ACCURACY HELD YOU BACK · 85% · B AT 88%" &&
   ex.hull === "HULL HELD YOU BACK · 3 HITS" && ex.s === "" && ex.sRank === "S", ex);
 
+// ---- 1b. speed not measured (under 10 intervals): the speed clause shows "--", as the WPM tile ----
+const um = await P.g(() => {
+  const g = window.game;
+  const parts = g.typistShortfallParts({ acc: 98, wpm: 0, hpPts: 1, hits: 0, level: 1, speedN: 3 });
+  const s5 = g.typistShortfall({ acc: 97, wpm: 0, hpPts: 1, hits: 0, level: 5, speedN: 0 });
+  const measured = g.typistShortfall({ acc: 98, wpm: 30, hpPts: 1, hits: 0, level: 4, speedN: 80 });
+  // through the results filter: a fresh segment (0 intervals) -> results.wpmN 0
+  g.typistBeginSegment("sector");
+  const evt = { scope: "level", results: { acc: 98, wpm: 0, level: 1, speech: [] } };
+  g.typistOnResults(evt);
+  return { parts, s5, measured, why: evt.results.rankWhy, n: evt.results.wpmN, say: evt.results.speech[0] };
+});
+P.check("1b. speed not measured (< 10 intervals): 'SPEED HELD YOU BACK · -- WPM · A AT 9' (not '0 WPM'), speech 'Speed not measured.'; the results filter passes its interval count; a measured speed keeps its number",
+  um.parts.text === "SPEED HELD YOU BACK · -- WPM · A AT 9" && um.parts.say === "Speed held you back. Speed not measured. A at 9." && um.s5 === "SPEED HELD YOU BACK · -- WPM · A AT 29" &&
+  um.measured === "SPEED HELD YOU BACK · 30 WPM · S AT 36" && um.n === 0 && um.why === um.parts.text && um.say === um.parts.say, um);
+
 // ---- 2. sweep: <= 48 chars and the stated value really reaches the stated grade ----
 const sweep = await P.g(() => {
   const g = window.game;
