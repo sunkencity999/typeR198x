@@ -492,8 +492,9 @@ folder reference, configure signing and bundle identifiers, test on hardware, ar
 ## Privacy
 
 Everything the game stores lives on the player's device under `typesmup198x.save.v1` (plus a one-session
-rotate-hint flag on phones), including the typing profile behind the Flight log (per-key speed and misses, the
-slowest letter pairs and a summary of the last 100 sectors); it is never sent anywhere and Reset save erases it.
+rotate-hint flag on phones), including the typing profile behind the Flight log (per-key speed and misses, timing for
+the up to 200 most-typed letter pairs, the count of days played with the last date, and a dated summary of each of the last 100 sector attempts,
+deaths included); it is never sent anywhere and Reset save erases it.
 [privacy-policy.html](./privacy-policy.html) says so, effective 24 October 2026. No accounts, analytics, telemetry or
 third-party scripts; the web build makes no network calls while playing beyond fetching its own code, art and music. The footer links
 [privacy-policy.html](./privacy-policy.html); `privacy.html` is a meta-refresh stub for old links.
