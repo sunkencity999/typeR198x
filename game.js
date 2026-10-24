@@ -42,17 +42,33 @@
 // native/sync-web.sh patches the withAssetVersion return line below by sed; keep it byte-identical.
 
 const ASSET_VERSION = "20261016a";
-// Stale-shell guard. A host or CDN page cache can keep serving a previous index.html after a deploy (SiteGround's
-// dynamic cache did exactly that for "/" on 2026-10-17): that shell loads only this file and cannot boot the split
-// build, so the loading screen never ends. When the page that loaded this file has none of the assets/js/ scripts in
-// its markup, it is reloaded once with the current token in the query string, a URL no cache has seen. The current
-// shell (web and native) lists assets/js/core/*.js before this file, so it never takes this path; the v= check stops a
-// second reload if the stale copy somehow comes back.
+// Stale-shell guard. A cache can keep serving a previous index.html after a deploy, and the server ignores ?v= when it
+// resolves a file, so the old shell's versioned URLs come back with this release's code:
+//   * a host page cache (SiteGround's dynamic cache did it for "/" on 2026-10-17) or a browser that cached a
+//     pre-overhaul shell: it loads only this file (no assets/js/ scripts) and cannot boot the split build;
+//   * a browser that kept an older modular /index.html (served max-age=15552000, 180 days): its assets/js/ tags carry
+//     an older ?v= token, so it boots this release's code without the scripts and markup the release added.
+// Either way the page is reloaded once with the current token in the query string, a URL no cache has seen. The
+// current shell carries ?v=ASSET_VERSION on every tag (tools/bump-version.sh writes both), so it never takes this
+// path; the v= check stops a second reload if a stale copy somehow comes back. Never on file: or in the native
+// wrappers (their bundled shell is synced with this file by native/sync-web.sh and its URLs are bare).
 (function staleShellGuard() {
   try {
     if (typeof document === "undefined" || typeof location === "undefined" || location.protocol === "file:") return;
-    if (document.querySelector('script[src*="assets/js/"]')) return;
-    if (new URLSearchParams(location.search).get("v") === ASSET_VERSION) return;
+    if (typeof IS_NATIVE_SHELL !== "undefined" ? IS_NATIVE_SHELL : /TypeR198X-(macOS|iOS)/i.test(navigator.userAgent || "")) return;
+    if (new URLSearchParams(location.search).get("v") === ASSET_VERSION) {
+      // Arrived here through the reload: refetch the bare document URL so the browser's 180-day copy of the old shell is
+      // replaced and the next visit to /index.html needs no reload ("/" itself is served no-cache).
+      if (/\/index\.html$/.test(location.pathname) && typeof fetch === "function") fetch(location.pathname, { cache: "reload" }).catch(() => {});
+      return;
+    }
+    const tags = document.querySelectorAll('script[src*="assets/js/"]');
+    let stale = tags.length === 0;
+    for (const s of tags) {
+      const v = new URL(s.src, location.href).searchParams.get("v");
+      if (v && v !== ASSET_VERSION) { stale = true; break; }
+    }
+    if (!stale) return;
     const u = new URL(location.href);
     u.searchParams.set("v", ASSET_VERSION);
     location.replace(u.toString());
