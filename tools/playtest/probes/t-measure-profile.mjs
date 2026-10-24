@@ -204,7 +204,8 @@ const s9 = await P.g(() => {
 });
 const w9 = s9.n / (s9.n + 300);
 const ema9 = Math.round((pre9.ema > 0 ? pre9.ema + w9 * (s9.speed - pre9.ema) : s9.speed) * 10) / 10;
-const rowOk = (r) => Array.isArray(r) && r.length === 10 && Number.isInteger(r[0]) && typeof r[1] === "string" && Number.isInteger(r[2]) && Number.isInteger(r[3]) && typeof r[4] === "number" &&
+// acc (r[4]) is a number, or null for a segment with under 10 keys (review fix: no 100 % for no typing)
+const rowOk = (r) => Array.isArray(r) && r.length === 10 && Number.isInteger(r[0]) && typeof r[1] === "string" && Number.isInteger(r[2]) && Number.isInteger(r[3]) && (r[4] === null || typeof r[4] === "number") &&
   (r[5] === null || /^[SABCD]$/.test(r[5])) && Number.isInteger(r[6]) && Number.isInteger(r[7]) && (r[8] === null || Number.isInteger(r[8])) && typeof r[9] === "string";
 // death in sector 2, from a different local day
 await P.g(() => { window.game.advanceLevel(); });
@@ -217,8 +218,11 @@ await sleep(300);
 const d9 = await P.g(() => {
   const g = window.game, p = g.save.profile, row = p.sessions[p.sessions.length - 1];
   const daysAfterDeath = { n: p.days.n, last: p.days.last, before: window.__days0 };
-  g.typistEndSession({ mode: "drill" });
-  return { row, sessions: p.sessions.length, daysAfterDeath, daysSameDay: p.days.n, sectorBest2: p.sectorBest["2"] || null };
+  const drillOut = g.typistEndSession({ mode: "drill" });
+  const norm = [typistNormaliseRow([1790000000, "campaign", 2, 0, null, null, 0, 0, null, ""]), typistNormaliseRow([1790000000, "campaign", 2, 0, "x", null, 0, 0, null, ""]),
+    typistNormaliseRow({ t: 1790000000, mode: "drill", sector: 0, speed: 0, acc: null, rank: null, score: 0, misses: 0, steady: null, weak: "" })];
+  const fixed = JSON.stringify(typistMigrateProfile(typistMigrateProfile(p)).sessions) === JSON.stringify(typistMigrateProfile(p).sessions);
+  return { row, sessions: p.sessions.length, daysAfterDeath, daysSameDay: p.days.n, sectorBest2: p.sectorBest["2"] || null, keys: g.typistDebug().seg.keys, drillAcc: drillOut.acc, norm, fixed, obj: g.typistSessions(2)[0] };
 });
 const today = (() => { const d = new Date(); return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate(); })();
 P.check("9. session on clear: +1 row, typed per 7.1, rank letter, speedEma per w = n / (n + 300); death row rank null; days.n +1 on a new local day only",
@@ -226,6 +230,10 @@ P.check("9. session on clear: +1 row, typed per 7.1, rank letter, speedEma per w
   Math.abs(s9.ema - ema9) <= 0.05 && s9.obj.rank === s9.rank && s9.obj.sector === 1 &&
   rowOk(d9.row) && d9.row[5] === null && d9.row[2] === 2 && d9.daysAfterDeath.n === d9.daysAfterDeath.before + 1 && d9.daysAfterDeath.last === today && d9.daysSameDay === d9.daysAfterDeath.n,
   { pre9, s9, ema9, d9 });
+P.check("9b. a segment with under 10 keys logs acc null, not 100 (the zero-key death row, typistSessions, a keyless typistEndSession); the clear row keeps its number; rows keep null through normalisation (fixed point), a non-number acc is still rejected",
+  typeof s9.row[4] === "number" && s9.row[4] > 50 && d9.keys < 10 && d9.row[4] === null && d9.obj.acc === null && d9.drillAcc === null &&
+  d9.norm[0] && d9.norm[0][4] === null && d9.norm[1] === null && d9.norm[2] && d9.norm[2][4] === null && d9.fixed,
+  { clearAcc: s9.row[4], keys: d9.keys, deathAcc: d9.row[4], obj: d9.obj, drillAcc: d9.drillAcc, norm: d9.norm, fixed: d9.fixed });
 // sector-best rules on controlled segments
 const sb = await P.g(() => {
   const g = window.game, ty = g.typistState(), p = g.save.profile;

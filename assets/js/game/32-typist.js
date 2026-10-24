@@ -126,12 +126,13 @@ function typistNormaliseRow(row) {
   if (TYPIST_MODES.indexOf(mode) < 0) return null;
   sector = Number(sector);
   if (!Number.isFinite(sector) || sector < 0 || sector > 10) return null;
-  speed = Number(speed); acc = Number(acc); score = Number(score); misses = Number(misses);
-  if (![speed, acc, score, misses].every((x) => Number.isFinite(x) && x >= 0)) return null;
+  speed = Number(speed); score = Number(score); misses = Number(misses);
+  if (![speed, score, misses].every((x) => Number.isFinite(x) && x >= 0)) return null;
+  if (acc !== null) { acc = Number(acc); if (!(Number.isFinite(acc) && acc >= 0)) return null; acc = typistRound(Math.min(100, acc), 1); }   // null: under 10 keys
   if (rank !== null && (typeof rank !== "string" || RANK.order.indexOf(rank) < 0)) return null;
   if (steady !== null) { steady = Number(steady); if (!Number.isFinite(steady)) return null; steady = Math.round(clamp(steady, 0, 100)); }
   if (typeof weak !== "string" || !/^[a-z]{0,3}$/.test(weak)) return null;
-  return [Math.floor(t), mode, Math.round(sector), Math.round(speed), typistRound(Math.min(100, acc), 1), rank, Math.round(score), Math.round(misses), steady, weak];
+  return [Math.floor(t), mode, Math.round(sector), Math.round(speed), acc, rank, Math.round(score), Math.round(misses), steady, weak];
 }
 
 // Pure, idempotent normalisation of a stored profile (CONTRACT 3.2 step 4). Unknown fields are dropped; key order is
@@ -698,7 +699,8 @@ Object.assign(Game.prototype, {
 
   typistSegmentSummary(ty) {
     const speed = typistSpeedOf(ty.sN, ty.sMs);
-    const acc = ty.sKeys > 0 ? (ty.sKeys - ty.sMiss) / ty.sKeys * 100 : 100;
+    // Accuracy needs TYPIST_ACC_MIN_KEYS keys, as the HUD ACC: a segment with fewer logs acc null, never 100 %.
+    const acc = ty.sKeys >= TYPIST_ACC_MIN_KEYS ? (ty.sKeys - ty.sMiss) / ty.sKeys * 100 : null;
     let steady = null;
     if (ty.sN >= TYPIST_SHOW_MIN_N && ty.sMs > 0) {
       const mean = ty.sMs / ty.sN;
@@ -767,12 +769,12 @@ Object.assign(Game.prototype, {
     this.typistUpdateEmas(p, sum.n, sum.speed, Number(m.throughput) || 0);
     const t = Math.floor(Date.now() / 1000);
     const speed = Math.round(sum.speed);
-    const acc = typistRound(sum.acc, 1);
+    const acc = sum.acc === null ? null : typistRound(sum.acc, 1);
     const row = [t, mode, sector, speed, acc, rank, score, sum.misses, sum.steady, sum.weak];
     this.typistAppendSession(p, row);
     if (!p.bests || typeof p.bests !== "object") p.bests = { speed: 0, ceiling: 0, drill: { speed: 0, acc: 0 } };
     if (mode === "endless" && Number(m.ceiling) > 0) p.bests.ceiling = Math.max(p.bests.ceiling | 0, Math.round(Number(m.ceiling)));
-    if (mode === "drill" && sum.n >= TYPIST_SHOW_MIN_N && sum.keys >= 20) {
+    if (mode === "drill" && sum.n >= TYPIST_SHOW_MIN_N && sum.keys >= 20 && acc !== null) {
       const d = p.bests.drill || (p.bests.drill = { speed: 0, acc: 0 });
       const rating = (s, a) => s * Math.pow(a / 100, 2);
       if (rating(speed, acc) > rating(d.speed || 0, d.acc || 0)) { d.speed = speed; d.acc = acc; }
@@ -797,7 +799,7 @@ Object.assign(Game.prototype, {
     this.typistUpdateEmas(p, sum.n, sum.speed, throughput);
     const clear = evt.outcome === "clear";
     const t = Math.floor(Date.now() / 1000);
-    const acc = typistRound(sum.acc, 1);
+    const acc = sum.acc === null ? null : typistRound(sum.acc, 1);
     if (clear) {
       this.typistApplyStash(ty, p, L);
       const key = String(L);
@@ -806,7 +808,7 @@ Object.assign(Game.prototype, {
       let improved = false;
       const next = cur ? { ...cur } : { speed: 0, acc: 0, t: 0 };
       if (sum.n >= TYPIST_BEST_MIN_N && speed > (next.speed | 0)) { next.speed = speed; improved = true; }
-      if ((ls.total | 0) >= TYPIST_SECTOR_ACC_MIN_KEYS && acc > (Number(next.acc) || 0)) { next.acc = acc; improved = true; }
+      if ((ls.total | 0) >= TYPIST_SECTOR_ACC_MIN_KEYS && acc !== null && acc > (Number(next.acc) || 0)) { next.acc = acc; improved = true; }
       if (improved) { next.t = t; p.sectorBest[key] = next; }
     }
     const row = [t, "campaign", L, Math.round(sum.speed), acc, clear && typeof r.rank === "string" ? r.rank : null,
