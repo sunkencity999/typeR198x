@@ -2949,7 +2949,7 @@ body[data-flight-check="on"] .tapToType:not(.hidden) ~ .fcPanel .fcStep { visibi
 .modeTile > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .modeTile__eyebrow, .modeTile__sub, .modeTile__status { font-size: var(--fs-2xs); letter-spacing: 0.1em; text-transform: uppercase; line-height: 1.25; }
 .modeTile__title { font-family: var(--font-display); font-weight: 700; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; line-height: 1.25; }
-.modeTile__sub { opacity: 0.75; }
+.modeTile__sub { opacity: 0.75; letter-spacing: 0.06em; }
 .modeTile--daily { grid-template-columns: minmax(0, 1fr) auto; column-gap: 8px; gap: 3px 8px; border-color: rgba(255,193,74,0.5); }
 .modeTile--daily .modeTile__eyebrow { color: var(--c-score); }
 .modeTile--daily .modeTile__title { font-size: 15px; }
