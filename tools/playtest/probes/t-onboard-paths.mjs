@@ -362,6 +362,8 @@ async function drive(c, how = "space", send = null, { onNear = null } = {}) {
 }
 
 // ---- 11b. Phone layouts: the tap pill and the toasts never overprint the Skip button or the step count ----
+// 390x844 (the pill and the toasts centre left of the Skip column), 844x390 (the step count gives way to the pill),
+// 320x568 (no room beside the column: Skip rises above the pill while it shows).
 // Rects in CSS px of everything visible in the bottom band: the pill (+6 px for its ring), each fc toast, Skip, the step
 // count. Measured in step 1 with the pill up, then (pill down, typing) on the FINISH toast and the two-line release toast,
 // then the release toast with the pill forced back up (a pilot who closed the soft keyboard).
@@ -384,7 +386,8 @@ async function drive(c, how = "space", send = null, { onNear = null } = {}) {
     return { overlaps, inside, pill: round(pill), skip: round(skip), step: round(step), toasts: toasts.map((t) => ({ text: t.text, ...round(t) })), skipText: document.getElementById("btnFlightSkip").textContent };
   };
   const out = {};
-  for (const [name, phone] of [["p390x844", { width: 390, height: 844 }], ["l844x390", { width: 844, height: 390 }]]) {
+  const LAYOUTS = [["p390x844", { width: 390, height: 844 }], ["l844x390", { width: 844, height: 390 }], ["p320x568", { width: 320, height: 568 }]];
+  for (const [name, phone] of LAYOUTS) {
     const c = await openCase("layout-" + name, { save: null, phone });
     const send = (k) => c.page.keyboard.insertText(k);
     await c.page.fill("#playerName", "THUMB").catch(() => {});
@@ -419,9 +422,9 @@ async function drive(c, how = "space", send = null, { onNear = null } = {}) {
     await c.close();
   }
   const frames = Object.values(out).flatMap((r) => [r.step1, r.finish, r.release, r.releasePill]);
-  P.check("11b 390x844 and 844x390 touch: no overlap between the tap pill (+ring) / fc toasts and Skip / the step count, toasts clear of the pill, all inside #main (step 1 with the pill, FINISH, release, release with the pill); both pass",
-    Object.values(out).every((r) => r.pillUp && r.passed) && frames.every((f) => f && f.overlaps.length === 0 && f.inside) &&
-    frames.every((f) => f.toasts.length > 0) && !!out.p390x844.step1.pill && !!out.l844x390.releasePill.pill, JSON.stringify(out));
+  P.check("11b 390x844, 844x390 and 320x568 touch: no overlap between the tap pill (+ring) / fc toasts and Skip / the step count, toasts clear of the pill, all inside #main (step 1 with the pill, FINISH, release, release with the pill); all pass",
+    Object.values(out).length === LAYOUTS.length && Object.values(out).every((r) => r.pillUp && r.passed) && frames.every((f) => f && f.overlaps.length === 0 && f.inside) &&
+    frames.every((f) => f.toasts.length > 0) && !!out.p390x844.step1.pill && !!out.l844x390.releasePill.pill && !!out.p320x568.step1.pill, JSON.stringify(out));
 }
 
 // ---- 12. An external level start aborts it ----

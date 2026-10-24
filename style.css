@@ -2736,6 +2736,10 @@ body[data-flight-check="on"] .tapToType:not(.hidden) ~ .fcPanel .fcStep { visibi
   body[data-flight-check="on"] .toastStack { left: calc(50% - 42px); }
   body[data-flight-check="on"] .toastStack { max-width: calc(100% - 100px); }
 }
+@media (max-width: 359px) {   /* 320 px phones: no room for the pill beside that column, so Skip rises above the pill while it shows */
+  body[data-flight-check="on"] .tapToType { left: 50%; }
+  body[data-flight-check="on"] .tapToType:not(.hidden) ~ .fcPanel { bottom: calc(10% + 54px); }
+}
 /* ===== end track:ONBOARD ===== */
 
 /* ===== track:MEASURE (32-typist.js) ===== */
