@@ -215,7 +215,7 @@ function typistNewState() {
     recordsTab: "hall", tabsWired: false,
     popFont: "", dangerFill: "", haloStroke: ""
   };
-  ty.accPulseFn = () => { if (ty.accPulseEl) ty.accPulseEl.classList.remove("is-miss"); ty.accPulseT = 0; };
+  ty.accPulseFn = () => { if (ty.accPulseEl) ty.accPulseEl.classList.remove("is-miss", "is-miss-alt"); ty.accPulseT = 0; };
   return ty;
 }
 
@@ -391,9 +391,12 @@ Object.assign(Game.prototype, {
     ty.lastMissAt = e.t;
     const el = this.hudEls().acc;
     if (el) {
-      el.classList.add("is-miss");
-      ty.accPulseEl = el;
       if (ty.accPulseT) clearTimeout(ty.accPulseT);
+      // a miss inside a running pulse restarts it: .is-miss-alt swaps the animation-name (a new name restarts the
+      // keyframes; no forced reflow)
+      if (ty.accPulseT && ty.accPulseEl === el) el.classList.toggle("is-miss-alt");
+      else { if (ty.accPulseEl && ty.accPulseEl !== el) ty.accPulseFn(); el.classList.add("is-miss"); }
+      ty.accPulseEl = el;
       ty.accPulseT = setTimeout(ty.accPulseFn, TYPIST_ACC_PULSE_MS);
     }
     const typed = e.typed;

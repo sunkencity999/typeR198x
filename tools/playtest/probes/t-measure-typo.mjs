@@ -221,6 +221,32 @@ const c7 = await P.g(async () => {
 P.check("7. HUD ACC: '--' after 9 keys, a percent at 10; 94 % -> data-acc warn; 89 % -> bad; .is-miss within a frame, gone after 400 ms",
   c7.at9 === "--" && c7.at10 === "100%" && c7.pulse && c7.warn.text === "94%" && c7.warn.attr === "warn" && c7.bad.text === "89%" && c7.bad.attr === "bad" && c7.bad.pulseGone, c7);
 
+// ---- 7b. a hard miss inside a running pulse restarts it (300 ms from the second miss) ----
+const c7b = await P.g(async () => {
+  const g = window.game, T = window.__tp;
+  const el = document.getElementById("hudAcc");
+  await T.wait(450);
+  window.__ty.clear(); window.__ty.hold();
+  window.__ty.plate("orbit", 2, 800);
+  await T.frame();
+  g.handleTyped("o"); await T.wait(40);
+  const anims = () => el.getAnimations().filter((a) => a.animationName).map((a) => ({ name: a.animationName, t: Math.round(a.currentTime) }));
+  g.handleTyped("q"); await T.frame();
+  const first = anims();
+  await T.wait(150);
+  g.handleTyped("q"); await T.frame();
+  const second = anims();
+  await T.wait(200);   // 350 ms after the first miss: the first pulse would be over
+  const mid = { cls: el.classList.contains("is-miss"), anims: anims() };
+  await T.wait(200);
+  const end = { cls: el.classList.contains("is-miss") || el.classList.contains("is-miss-alt"), anims: anims() };
+  g.releaseLock("manual");
+  return { first, second, mid, end };
+});
+P.check("7b. HUD ACC: a second miss 150 ms into the pulse restarts it (a new animation from ~0 ms under the other keyframe name, still running 200 ms later), the class is gone 400 ms after the second miss",
+  c7b.first.length === 1 && c7b.second.length === 1 && c7b.second[0].t < 100 && c7b.second[0].name !== c7b.first[0].name &&
+  c7b.mid.cls && c7b.mid.anims.length === 1 && c7b.mid.anims[0].t >= 150 && !c7b.end.cls && c7b.end.anims.length === 0, c7b);
+
 // ---- 8. lead underline on unlocked plates only ----
 const c8 = await P.g(async () => {
   const g = window.game, T = window.__tp;
@@ -288,8 +314,9 @@ const layoutRun = async () => {
 };
 const pulseSwitch = (on) => P.g((on) => {
   const el = window.game.hudEls().acc;
-  if (!el.__typistAdd) el.__typistAdd = el.classList.add.bind(el.classList);
+  if (!el.__typistAdd) { el.__typistAdd = el.classList.add.bind(el.classList); el.__typistToggle = el.classList.toggle.bind(el.classList); }
   el.classList.add = on ? el.__typistAdd : function (...c) { return el.__typistAdd(...c.filter((x) => x !== "is-miss")); };
+  el.classList.toggle = on ? el.__typistToggle : function (c, f) { return c === "is-miss-alt" ? false : el.__typistToggle(c, f); };
 }, on);
 const lay = { on: [], off: [] };
 for (let i = 0; i < 2; i++) { await pulseSwitch(true); lay.on.push(await layoutRun()); await pulseSwitch(false); lay.off.push(await layoutRun()); }
