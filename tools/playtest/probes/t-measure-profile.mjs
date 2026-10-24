@@ -133,6 +133,9 @@ await P.goto("fresh");
 await P.startRun("WRITES");
 await waitFor(P, () => !window.game.levelIntro, 6000);
 await P.g(() => {
+  // The first word lock on a fresh save writes the one-time LOCK and FINISH tips (markTutorial -> storeSave): mark them
+  // seen so the two windows count the autosave cadence only (release finding R6: 6 vs 4 in 2 of 3 runs).
+  Object.assign(window.game.save.tutorialSeen, { lock: true, finish: true });
   window.__writes = 0;
   const orig = Storage.prototype.setItem;
   Storage.prototype.setItem = function (k, v) { if (k === "typesmup198x.save.v1") window.__writes++; return orig.call(this, k, v); };
@@ -324,6 +327,32 @@ const scan = await P.g(() => {
   return { names: names.length, hits };
 });
 P.check("14. hot path (typistOnCorrect / OnMiss / HudAcc / HudWpm / DrawOverlay + helpers): no new, .map / .filter / .slice / .concat, JSON, template, array or object literals", scan.hits.length === 0, scan);
+
+// ---- 15. 40-save.js beside an older 00-util.js (no hook registry; release finding RET-3) ----
+const mixed = await P.g(async () => {
+  const src = await (await fetch("./assets/js/core/40-save.js")).text();
+  const store = {};
+  const fakeLs = { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: (k) => { delete store[k]; } };
+  const blob = { schema: 2, playerName: "CLEAR1", highScore: 9473, lastUnlockedLevel: 2, storySeen: true, bestWpm: 71,
+    highScores: [{ runId: "r1", name: "CLEAR1", score: 9473, levelReached: 2, startLevel: 1, wpm: 71, acc: 95, maxCombo: 20, ship: "coconut", difficulty: "standard", date: 1 }] };
+  store["typesmup198x.save.v1"] = JSON.stringify(blob);
+  const out = {};
+  try {
+    // runGameHooks shadowed as undefined: the state of a browser whose cached 00-util.js predates the registry.
+    const m = new Function("localStorage", "runGameHooks", "window", `${src}\nreturn { loadSave, storeSave };`)(fakeLs, undefined, {});
+    const loaded = m.loadSave();
+    out.loaded = { highScore: loaded.highScore, level: loaded.lastUnlockedLevel, name: loaded.playerName, schema: loaded.schema };
+    out.stored = m.storeSave(loaded);
+    const back = JSON.parse(store["typesmup198x.save.v1"]);
+    out.storedSchema = back.schema;
+    const full = migrateSave(back);   // the full release later: MEASURE migrates it and flags the old gross WPM
+    out.full = { schema: full.schema, legacy: full.highScores[0] && full.highScores[0].wpmLegacy };
+  } catch (e) { out.error = String(e); }
+  return out;
+});
+P.check("15. 40-save.js without the hook registry: loadSave keeps the pilot (9,473, sector 2, CLEAR1) at schema 2, storeSave writes without throwing; the full release then migrates it to schema 3 with the old WPM flagged legacy",
+  !mixed.error && mixed.loaded.highScore === 9473 && mixed.loaded.level === 2 && mixed.loaded.name === "CLEAR1" && mixed.loaded.schema === 2 &&
+  mixed.stored === true && mixed.storedSchema === 2 && mixed.full.schema === 3 && mixed.full.legacy === true, mixed);
 
 P.check("zero page errors", P.errors.pageErrors.length === 0, P.errors.pageErrors);
 await P.finish();

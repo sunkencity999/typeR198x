@@ -225,8 +225,12 @@ function migrateSave(obj) {
   if (save.highScores.length > 10) save.highScores.length = 10;
   save.onboardingDone = Number(obj.onboardingDone) > 0 ? Number(obj.onboardingDone) : 0;   // ONBOARD (D13)
   // saveMigrate (scaffold): MEASURE normalises save.profile and flags pre-schema-3 WPM as legacy (src = the raw blob).
-  runGameHooks("saveMigrate", { save, src: obj }, null);
-  save.schema = SAVE_SCHEMA;
+  // Feature-detected: an older 00-util.js still cached beside this file has no registry, and without the guard the
+  // ReferenceError made loadSave return a blank pilot (release finding RET-3). Then MEASURE never migrated the blob,
+  // so it keeps schema 2 and the full release still flags its pre-hand-speed WPM as legacy.
+  const hooks = typeof runGameHooks === "function";
+  if (hooks) runGameHooks("saveMigrate", { save, src: obj }, null);
+  save.schema = (hooks || Number(obj.schema) >= SAVE_SCHEMA) ? SAVE_SCHEMA : 2;
   return save;
 }
 
@@ -249,7 +253,7 @@ function loadSave() {
 // Returns false (and flags the game once) when storage is blocked; the run keeps going in memory (F044).
 function storeSave(save) {
   // saveStore (scaffold): MEASURE folds its dirty per-key tables into save.profile; this adds no write.
-  runGameHooks("saveStore", { save }, (typeof window !== "undefined" && window.game) || null);
+  if (typeof runGameHooks === "function") runGameHooks("saveStore", { save }, (typeof window !== "undefined" && window.game) || null);
   try {
     localStorage.setItem(LS_KEY, JSON.stringify(save));
     return true;
