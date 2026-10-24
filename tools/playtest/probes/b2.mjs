@@ -15,10 +15,11 @@ const gen = await P.g(() => {
   const g = window.game;
   const out = [];
   for (const cfg of LEVELS) {
-    const words = new Set(cfg.words);
     let bad = 0, padded = 0, letters = 0, total = 0;
     const badSet = new Set();
     for (let w = 0; w < 3; w++) {
+      // WORDS (D8): the wave's pool is the themed words plus its common words and two-word phrases (25-lexicon.js)
+      const words = new Set([...cfg.words, ...((cfg.waveCommon && cfg.waveCommon[w]) || []), ...((cfg.wavePhrases && cfg.wavePhrases[w]) || [])]);
       const letterSet = letterSetForWave(cfg, w);
       for (let i = 0; i < 700; i++) {
         const t = g.makeEnemyText(cfg, w, null);
@@ -32,7 +33,7 @@ const gen = await P.g(() => {
   }
   return out;
 });
-P.check("2100 makeEnemyText calls per level return only pool words or wave letter-set chars, nothing padded", gen.every(x => x.bad === 0 && x.padded === 0), gen);
+P.check("2100 makeEnemyText calls per level return only wave-pool words (themed, common, two-word) or wave letter-set chars, nothing padded", gen.every(x => x.bad === 0 && x.padded === 0), gen);
 
 const l1 = await P.g(() => {
   const g = window.game;
