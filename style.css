@@ -2733,6 +2733,10 @@ fieldset.shipGrid > legend {
   transition: opacity 180ms var(--ease-out, ease-out);
 }
 .rankWhy[data-kind="cause"] { color: var(--c-danger); }
+/* Phone portrait: the line wraps (two lines at most for the 48-character budget) so the next-grade target stays. */
+@media (max-width: 480px) {
+  .rankWhy { white-space: normal; text-overflow: clip; text-wrap: balance; }
+}
 .rankWhy.is-pending { opacity: 0; }
 .rankWhy.is-in { opacity: 1; }
 :root.reduce-motion .rankWhy { transition: none; }

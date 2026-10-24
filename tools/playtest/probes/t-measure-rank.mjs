@@ -139,6 +139,28 @@ await P.page.setViewportSize({ width: 1440, height: 900 });
 P.check("10. 844 x 390: .rankWhy fits or ellipsises, no horizontal overflow of .resultsCard or the page, .weakSignal__label hidden",
   (phone.whyHidden || phone.whySW <= phone.whyCW + 1 || phone.ellipsis === "ellipsis") && phone.cardSW <= phone.cardCW + 1 && phone.docSW <= phone.docCW + 1 && phone.label === "none", phone);
 
+// ---- 10b. phone portrait 390 x 844: the line wraps (at most two lines), never truncated, also at the 43-char maximum ----
+await P.page.setViewportSize({ width: 390, height: 844 });
+await sleep(400);
+const portrait = [];
+for (const text of [null, sweep.maxStr]) {
+  portrait.push(await P.g((text) => {
+    const g = window.game, c = document.getElementById("resultsLevel");
+    const r = text ? { ...g.lastResults, rank: "B", rankWhy: text, rankWhyKind: "shortfall" } : g.lastResults;
+    g.renderResultsCard(c, r, { animate: false });
+    const why = c.querySelector(".rankWhy");
+    const lh = parseFloat(getComputedStyle(why).lineHeight);
+    const out = { text: why.textContent, hidden: why.classList.contains("hidden"), sw: why.scrollWidth, cw: why.clientWidth, lines: Math.round(why.getBoundingClientRect().height / lh),
+      cardSW: c.scrollWidth, cardCW: c.clientWidth, docSW: document.documentElement.scrollWidth, docCW: document.documentElement.clientWidth };
+    if (text) g.renderResultsCard(c, g.lastResults, { animate: false });
+    return out;
+  }, text));
+}
+await P.shot("phone-portrait-card");
+await P.page.setViewportSize({ width: 1440, height: 900 });
+P.check("10b. 390 x 844: .rankWhy wraps instead of truncating (scrollWidth <= clientWidth + 1, 1-2 lines) for the card's line and the sweep's longest line; no horizontal overflow",
+  portrait.every((p) => p.hidden || (p.sw <= p.cw + 1 && p.lines >= 1 && p.lines <= 2 && p.cardSW <= p.cardCW + 1 && p.docSW <= p.docCW + 1)) && portrait[1].text === sweep.maxStr && portrait[1].lines >= 1, portrait);
+
 // ---- 5. Game Over by leaks in wave 2 ----
 await jumpTo(P, 1);
 await installTypist(P);
