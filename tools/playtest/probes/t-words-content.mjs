@@ -1,7 +1,7 @@
 // WORDS (D7 / D8) content probe, no browser: the four core scripts run in a vm (like content-tables.mjs).
 // COMMON_WORDS / PHRASES shape, inventions out of the wave pools, per-wave pools and shares, >= 95 % dictionary words,
 // English top-100 coverage, bigram and letter coverage of a simulated stream vs today's pools, the cps estimate,
-// the weak-key bias, determinism, MODES tuning and the THREAT INTEL copy.
+// the weak-key bias (and the anti-repeat ring on tiny weak pools), determinism, MODES tuning and the THREAT INTEL copy.
 // Usage: node t-words-content.mjs [--root ../..] [--dict /usr/share/dict/words]
 import vm from "node:vm";
 import fs from "node:fs";
@@ -135,6 +135,17 @@ for (const [k, r] of Object.entries(wk)) {
   check(`C11 S${k} words with k/p/q/th: .35 + .65 x base +-.04`, near(r.wordOn, 0.35 + 0.65 * r.wordOff, 0.04), { on: r.wordOn.toFixed(3), off: r.wordOff.toFixed(3) });
   check(`C11 S${k} no API -> uniform letters (dev < .01), bias off; a throwing API -> off; never outside the wave set`, r.uniformDev < 0.01 && !r.offActive && !r.throwActive && r.outside === 0, r);
 }
+// ---- C16 a tiny weak pool keeps the anti-repeat ring: a weak q (S1w2: quick, queue; S7w2: frequency) or z (S3w3: blitz)
+// never fills a third of the word plates; each word stays <= .10 of word spawns while the weak words still beat the base ----
+const rep = G(`(() => { const out = [];
+  for (const [L, w, key] of [[1, 1, "q"], [7, 1, "q"], [3, 2, "z"]]) {
+    const cfg = LEVELS[L - 1], run = (api) => { const g = { levelIndex: L - 1, run: {}, recentWords: [], rand: __mk(41 + L), ...api }; const cnt = {}; let n = 0, weak = 0;
+      for (let i = 0; i < 20000; i++) { const t = lexiconPickText(g, cfg, w, null, null); if (t.length > 1) { n++; cnt[t] = (cnt[t] || 0) + 1; if (t.includes(key)) weak++; } }
+      const top = Object.entries(cnt).sort((a, b) => b[1] - a[1])[0]; return { top: top[0], topShare: top[1] / n, weak: weak / n }; };
+    const on = run({ typistWeakKeys: () => [key], typistWeakBigram: () => null }), off = run({});
+    out.push({ S: L + "." + (w + 1), key, on, off });
+  } return out; })()`);
+for (const r of rep) check(`C16 S${r.S} weak ${r.key}: top word <= .10 of word spawns, weak words > base + .05`, r.on.topShare <= 0.10 && r.on.weak > r.off.weak + 0.05, { top: r.on.top, topShare: r.on.topShare.toFixed(3), weak: r.on.weak.toFixed(3), base: r.off.weak.toFixed(3) });
 // ---- C12 determinism / avoidSet ----
 const det = G(`(() => { const seq = () => { const g = { levelIndex: 4, run: {}, recentWords: [], rand: __mk(9), typistWeakKeys: () => ["k"] }; const s = []; for (let i = 0; i < 500; i++) s.push(lexiconPickText(g, LEVELS[4], 1, null, null)); return s.join("|"); };
   const g2 = { levelIndex: 3, run: {}, recentWords: [], rand: __mk(5) }; const avoid = new Set("abcdefghijklm"); let v = 0; for (let i = 0; i < 3000; i++) if (avoid.has(lexiconPickText(g2, LEVELS[3], 1, avoid, null)[0])) v++;

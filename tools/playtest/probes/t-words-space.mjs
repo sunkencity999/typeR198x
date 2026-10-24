@@ -1,5 +1,6 @@
 // WORDS (D8) acceptance: Space types the gap of a two-word plate when the locked target's next character is a space,
-// releases otherwise; Backspace always releases; bosses, the sector card, pause, auto-repeat and the finale unchanged;
+// releases otherwise; Backspace always releases; bosses, the sector card, pause, auto-repeat and the finale unchanged; a
+// plate PIERCE / RAPID left at its gap steps over it;
 // the touch path (#typeInput insertText) and the harness typists type the space; MEASURE (32-typist.js, real on this tree)
 // counts the typed gap as a speed interval and never as a key or a bigram. Usage: node probes/t-words-space.mjs
 import { devices } from "playwright";
@@ -90,6 +91,34 @@ for (let i = 0; i < 6; i++) await placeEnemy(P, ["game over", "high score", "war
 const typed = await typeFor(P, 12, { wpm: 90, accuracy: 1, until: (st) => st.alive === 0 });
 const s12 = await state(P);
 P.check("S12 b_lib typeFor clears six two-word plates (types the space)", s12.alive === 0, { typed, alive: s12.alive });
+
+// S13 PIERCE / RAPID advance plates nobody locked; one that stops exactly at its gap steps over it (25-lexicon.js tick
+// listener), so its next letter locks it instead of a plate that can never be typed and leaks
+await clearField(P);
+await P.g(() => { window.game.power.pierce = 9; });
+await placeEnemy(P, "nova", 500, 2);
+await placeEnemy(P, "warp core", 900, 2);
+for (const k of "nova") { await press(P, k); await sleep(40); }
+await sleep(120);
+const s13a = await P.g(() => { const en = window.game.enemies.find(e => e.alive && e.text === "warp core"); return { p: en ? en.progress : null, lock: !!window.game.lock }; });
+await P.g(() => { window.game.power.pierce = 0; });
+const m13 = (await snap()).misses;
+for (const k of "core") { await press(P, k); await sleep(40); }
+const s13b = await snap();
+await clearField(P);
+await P.g(() => { window.game.power.rapid = 9; });
+await placeEnemy(P, "box", 500, 1);
+await placeEnemy(P, "go home", 900, 3);
+await P.g(() => { window.game.enemies.find(e => e.text === "go home").progress = 1; });
+for (const k of "box") { await press(P, k); await sleep(40); }
+await sleep(120);
+const s13c = await P.g(() => { const en = window.game.enemies.find(e => e.alive && e.text === "go home"); return { p: en ? en.progress : null }; });
+await P.g(() => { window.game.power.rapid = 0; });
+for (const k of "home") { await press(P, k); await sleep(40); }
+const s13d = await snap();
+P.check("S13 a plate PIERCE / RAPID left at its gap steps over it: 'warp core' 4 -> 5, 'core' locks and kills it; 'go home' 2 -> 3, 'home' kills it; no miss",
+  s13a.p === 5 && !s13a.lock && s13b.alive === 0 && s13b.misses === m13 && s13c.p === 3 && s13d.alive === 0 && s13d.misses === m13, { s13a, s13b, s13c, s13d, m13 });
+await clearField(P);
 
 // S7 sector card: Space does nothing
 await P.g(() => { const g = window.game; g.startLevel(3, { fromMenu: true, fresh: true }); });

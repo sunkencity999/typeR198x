@@ -1,7 +1,7 @@
 // Type-R 198X — WORDS track (D7 / D8): COMMON_WORDS and PHRASES, the wave-pool mix, two-word plates (Space types the gap),
 // the weak-key bias and the THREAT INTEL sector-card line. Classic script: loads after 20-constants.js, before 30-content.js.
 // Game does not exist yet when this file runs: runtime behaviour is GAME_HOOKS listeners (this = game) on enemyTextWillPick,
-// enemySpawned, waveWillStart, sectorCardWillShow and spaceKey, plus plain lexicon*() functions that 30-content.js (load
+// enemySpawned, waveWillStart, sectorCardWillShow, spaceKey and tick, plus plain lexicon*() functions that 30-content.js (load
 // time), 70-canvas.js (per plate) and 75-fx-draw.js call when they exist. Top-level names: COMMON_WORDS, PHRASES, LEXICON*,
 // lexicon*. Nothing here allocates per frame or writes the save per key.
 //
@@ -9,7 +9,8 @@
 // targets), LEXICON_INVENTIONS (taken out of the wave pools; bosses, callouts, capsules and attract keep ALL_WORDS) and
 // LEXICON_NEON_EXTRA (real neon words for the long windows). Shares are of word spawns: S1-5 common .5, S6-10 .3; two-word
 // .15 from S4, .2 from S7. D7: once MEASURE's typistWeakKeys() is non-empty, 35 % of letter draws come from the weak keys
-// inside the wave's alphabet and 35 % of word picks from words holding a weak key or typistWeakBigram().
+// inside the wave's alphabet and 35 % of word picks prefer words holding a weak key or typistWeakBigram() (the 12-pick
+// anti-repeat ring still rules, so a one- or two-word weak pool cannot fill a third of the stream).
 // Quiet (no pick, no card line, no tip, Space unhandled) while the Flight Check runs (CONTRACT 8.y W4); endless / drill
 // text belongs to MODES (R35). Every gameplay draw goes through game.rand() (seeded in a Daily Sortie).
 
@@ -137,6 +138,7 @@ const LEXICON_EMPTY = Object.freeze([]);
 const lexiconInventionSet = new Set(LEXICON_INVENTIONS);
 const lexiconPoolCache = new Map();
 const lexiconDotFill = { done: "", idle: "", lockedIdle: "", next: "" };   // PALETTE strings, filled on the first draw
+const lexiconDotR = { font: "", r: 0 };   // gap dot radius for the last font string (no regex match per plate per frame)
 
 // ------------------------- Registration -------------------------
 // onGameHook (00-util.js, scaffold) when present; the bare GAME_HOOKS push otherwise (CONTRACT 1.1, both work).
@@ -323,6 +325,22 @@ function lexiconRingPick(game, pool) {
   return x;
 }
 
+// The weak-key preference obeys the same anti-repeat ring: a pick from the weak-filtered pool that still repeats one of
+// the last 12 picks after the rerolls returns null (nothing pushed) and the caller draws from the wave's own pool. A weak
+// pool of one or two words (a weak q in S1-2: "quick", "queue") then shows each word at most once per 12 word plates
+// instead of a third of all of them.
+function lexiconRingPickFresh(game, pool) {
+  const ring = game.recentWords || (game.recentWords = []);
+  for (let i = 0; i <= LEXICON.rerolls; i++) {
+    const x = pool[(lexiconRand(game) * pool.length) | 0];
+    if (ring.indexOf(x) !== -1) continue;
+    ring.push(x);
+    if (ring.length > LEXICON.repeatRing) ring.shift();
+    return x;
+  }
+  return null;
+}
+
 // ------------------------- The spawn decision -------------------------
 // Endless and Drill pick their own text (MODES, C7); the campaign and the Daily Sortie use this picker.
 function lexiconModeOwnsText(game) {
@@ -380,11 +398,12 @@ function lexiconPickOnce(game, cfg, wave = 0, tuning = null) {
   const r = lexiconRand(game);
   let pool = themed, src = 0;
   if (r < pp) { src = 2; pool = phrases; } else if (r < pp + pc) { src = 1; pool = commonDraw; }
+  if (src === 2) st.phrase++; else if (src === 1) st.common++; else st.themed++;
   if (weakOn && weakShare > 0 && lexiconRand(game) < weakShare) {
     const wp = lexiconWeakPool(snap, poolKey + src, pool);   // src 0 themed / 1 common / 2 phrase
-    if (wp.length) { pool = wp; st.weakWords++; }
+    const x = wp.length ? lexiconRingPickFresh(game, wp) : null;
+    if (x !== null) { st.weakWords++; return x; }
   }
-  if (src === 2) st.phrase++; else if (src === 1) st.common++; else st.themed++;
   return lexiconRingPick(game, pool);
 }
 
@@ -418,7 +437,10 @@ function lexiconDrawGapDots(ctx, done, remaining, x0, wd, wr, y, opts, xr) {
   const n = nd + nr;
   if (n < 3) return;
   const adv = (wd + wr) / n;
-  const r = Math.max(LEXICON.dotRMin, fontPx(opts && opts.font ? opts.font : ctx.font) * LEXICON.dotR);
+  const font = opts && opts.font ? opts.font : ctx.font;
+  const dr = lexiconDotR;
+  if (dr.font !== font) { dr.font = font; dr.r = Math.max(LEXICON.dotRMin, fontPx(font) * LEXICON.dotR); }
+  const r = dr.r;
   const locked = !!(opts && opts.caret);
   const xs = Number.isFinite(xr) ? xr : x0 + wd;
   const f = lexiconDotFill;
@@ -485,6 +507,21 @@ lexiconOn("enemySpawned", function (evt) {
   seen.phrase = true;
   if (typeof storeSave === "function") storeSave(this.save);
   if (typeof this.showToast === "function") this.showToast(LEXICON_COPY.phraseTip, { kind: "tip", key: "phrase", ms: LEXICON.tipMs });
+});
+
+// E15 tick: PIERCE (the plate behind the target) and RAPID (chain hits) advance plates nobody has locked. One that stops
+// exactly at its gap could never be locked again (a letter looks for nextChar(); Space types a gap only for the locked
+// plate), so it would fly on and leak. Step it over the gap: its next letter locks it as usual. Per frame, no allocation;
+// the Flight Check claims its frames (no tick) and plays single words.
+lexiconOn("tick", function () {
+  const list = this.enemies;
+  if (!list || !list.length) return;
+  const ref = this.lock ? this.lock.ref : null;
+  for (let i = 0; i < list.length; i++) {
+    const en = list[i];
+    if (en === ref || !en.alive || en.dying || !(en.progress > 0) || typeof en.text !== "string") continue;
+    while (en.progress < en.text.length && en.text.charCodeAt(en.progress) === 32) en.progress++;
+  }
 });
 
 // E07 / E08 spaceKey: Space types the gap when it is the locked plate's next character (keyboard step 9, touch text); else
