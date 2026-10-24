@@ -2,7 +2,7 @@
 // gun pop + nearest-plate lead pulse for unlocked misses, the danger-zone guard, HUD ACC states, the lead underline,
 // reduced motion and the frame budget with 40 % misses. PASS = the feature works.
 // Usage: node tools/playtest/probes/t-measure-typo.mjs [--dpr 1|2]
-import { openProbe, sleep, waitFor, installTypist, holdField, runSteps, dbg, startFresh, jumpTo } from "./measure_lib.mjs";
+import { openProbe, sleep, waitFor, installTypist, holdField, runSteps, wordSteps, dbg, startFresh, jumpTo } from "./measure_lib.mjs";
 
 const dprAt = process.argv.indexOf("--dpr");
 const dpr = dprAt > 0 ? Number(process.argv[dprAt + 1]) || 1 : 1;
@@ -276,6 +276,27 @@ const c12 = await P.g(async () => {
   return { cases: n, bakes, level: g.levelIndex + 1 };
 });
 P.check("12. a locked miss on every capsule label and on plates of every word length in the sector bakes no plate sprite (the warm cache covers the typo widening)", c12.cases >= 8 && c12.bakes.length === 0, c12);
+
+// ---- 13. the HUD ACC miss pulse is paint-only: the same scripted misses cost no extra layouts with the pulse on ----
+const layoutRun = async () => {
+  await holdField(P);
+  await sleep(300);
+  const m0 = await P.metrics();
+  await runSteps(P, wordSteps(["signal", "vector", "plasma", "quasar", "nebula", "photon", "matrix", "cipher", "beacon", "rocket"], 100, { miss: true }));
+  const m1 = await P.metrics();
+  return P.per5s(m0, m1).layoutPer5s;
+};
+const pulseSwitch = (on) => P.g((on) => {
+  const el = window.game.hudEls().acc;
+  if (!el.__typistAdd) el.__typistAdd = el.classList.add.bind(el.classList);
+  el.classList.add = on ? el.__typistAdd : function (...c) { return el.__typistAdd(...c.filter((x) => x !== "is-miss")); };
+}, on);
+const lay = { on: [], off: [] };
+for (let i = 0; i < 2; i++) { await pulseSwitch(true); lay.on.push(await layoutRun()); await pulseSwitch(false); lay.off.push(await layoutRun()); }
+await pulseSwitch(true);
+const layDelta = Math.min(...lay.on) - Math.min(...lay.off);
+P.check("13. HUD ACC .is-miss pulse is paint-only: 10 words with a miss each at 100 ms/key cost <= 6 more layouts per 5 s with the pulse than without (CDP LayoutCount)",
+  layDelta <= 6, { ...lay, delta: Math.round(layDelta * 10) / 10 });
 
 // ---- 6. boss: the pair sits in the slab's centre cell ----
 await P.g(() => { const g = window.game; g.levelT = LEVELS[g.levelIndex].duration + 0.01; g.wavePhase = "spawn"; g.spawnAcc = 0; });

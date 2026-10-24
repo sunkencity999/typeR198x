@@ -2702,13 +2702,13 @@ fieldset.shipGrid > legend {
 /* ===== end track:ONBOARD ===== */
 
 /* ===== track:MEASURE (32-typist.js) ===== */
-/* HUD ACC (D4): amber below 95 %, red below 90 %, a 300 ms colour pulse per hard miss (paint only, no layout). */
+/* HUD ACC (D4): amber below 95 %, red below 90 %, a 300 ms colour pulse per hard miss. Colour only: animating
+   text-shadow forces a layout on every animation frame (measured +110 layouts per 5 s at 1.4 misses / s). */
 #hudAcc[data-acc="warn"] { color: var(--c-score); }
 #hudAcc[data-acc="bad"] { color: var(--c-danger); }
 #hudAcc.is-miss { animation: typistAccMiss 300ms ease-out; }
 @keyframes typistAccMiss {
-  0% { color: var(--c-danger); text-shadow: 0 0 8px var(--c-danger); }
-  100% { text-shadow: 0 0 0 transparent; }
+  0% { color: var(--c-danger); }
 }
 :root.reduce-motion #hudAcc.is-miss { animation: none; color: var(--c-danger); }
 
