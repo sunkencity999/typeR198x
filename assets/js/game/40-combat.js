@@ -137,7 +137,7 @@ Object.assign(Game.prototype, {
     if (len >= LONG_WORD_LEN) speed *= LONG_WORD_SPEED_MUL;
     else if (len === 1) speed *= this.randRange(LETTER_SPEED_MUL[0], LETTER_SPEED_MUL[1]);
     const en = new Enemy({ text, x: this.w, y, speed, lane });
-    en.x = this.w + en.plateW / 2 + this.randRange(10, 90);   // plate fully off-screen, targetable ~0.3 s later (PACE P2: 10-30)
+    en.x = this.w + en.plateW / 2 + this.randRange(SPAWN_ROLLIN_PX[0], SPAWN_ROLLIN_PX[1]);   // fully off-screen, targetable ~0.2-0.5 s later (PACE)
     this.enemies.push(en);
     this.hook("enemySpawned", { en, cfg, wave: this.wave });   // WORDS: first two-word tip
     this.lastSpawnLane = lane;
@@ -168,7 +168,9 @@ Object.assign(Game.prototype, {
         this.hungryT = 0;
         this.spawnAcc = Math.max(this.spawnAcc, 1);
       }
-    } else {
+    } else if (this.hungryT > 0) {
+      // Only a running timer resets: play never sets it below 0, so a probe's frozen spawner (hungryT = -1e9) stays
+      // frozen while its scripted plates are alive. PACE's 0.1 s HUNGRY_SPAWN_S would otherwise refill it between words.
       this.hungryT = 0;
     }
     if (this.waveKills + alive >= quota) { this.spawnAcc = Math.min(this.spawnAcc, 1); return; }

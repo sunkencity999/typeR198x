@@ -1,0 +1,226 @@
+// t-pace-balance (PACE, the D2 / D3 balance targets as restated by R26 / lead ruling Q1). Drives one harness typist
+// (play-clock paced, b10's typist) through consecutive sectors and classifies every frame of play like the pedagogy
+// probe: card / boss intro / finale / transition (drain, banner, approach) / boss / active (something targetable) / idle
+// (a spawn phase with nothing targetable). Idle share = idle / sector play time. Per sector it prints and stores the
+// idle share, the longest idle gap, deaths, min hull, the carried hull on the card, damage, rank, hand speed, and per
+// wave paceMul / source / quota / carry / timeout / escaped, so the lead's re-pass on the merged tree can compare.
+// Targets (checked with --expect, auto by default):
+//   p55 / p80 (fresh and --seed-profile): S2 and S3 idle <= 15 %; S1 <= 15 % seeded, <= 30 % fresh
+//   p35 (35 / .90, fresh): 0 deaths, 0 hull damage, rank >= B in S1-3 (not made harder)
+//   p55: reaches the S1 boss in 25-70 s of play clock, clears S1-3, min hull > 25 %
+//   p80: no idle gap > 2 s inside a spawn phase
+// Usage: node tools/playtest/probes/t-pace-balance.mjs --wpm 55 --accuracy .93 [--sectors 3] [--seed-profile auto|WPM]
+//          [--jump L] [--retry N] [--expect auto|none|p35|p55|p80] [--set hungryMin2AtMul=1.3,rollin=10-20] [--label x]
+//        node tools/playtest/probes/t-pace-balance.mjs --matrix [--parallel 2] [--set ...]   (35 / 55 / 80 fresh + 55 / 80 seeded)
+// Writes tools/playtest/out/t-pace-balance/<label>.json (and summary.json for --matrix). ~4-6 min per profile.
+import fs from "node:fs";
+import path from "node:path";
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const OUT_DIR = path.resolve(HERE, "../out/t-pace-balance");
+fs.mkdirSync(OUT_DIR, { recursive: true });
+const argv = process.argv.slice(2);
+const args = {};
+for (let i = 0; i < argv.length; i++) {
+  if (!argv[i].startsWith("--")) continue;
+  const k = argv[i].slice(2), v = argv[i + 1];
+  if (v === undefined || v.startsWith("--")) args[k] = "true"; else { args[k] = v; i++; }
+}
+
+// ----------------------------- --matrix: the five R26 profiles as child processes -----------------------------
+if (args.matrix === "true") {
+  const PAR = Math.max(1, Number(args.parallel || 2));
+  const extra = args.set ? ["--set", args.set] : [];
+  const runs = [
+    { label: "w35-fresh", argv: ["--wpm", "35", "--accuracy", ".90"] },
+    { label: "w55-fresh", argv: ["--wpm", "55", "--accuracy", ".93"] },
+    { label: "w80-fresh", argv: ["--wpm", "80", "--accuracy", ".97"] },
+    { label: "w55-seeded", argv: ["--wpm", "55", "--accuracy", ".93", "--seed-profile", "auto"] },
+    { label: "w80-seeded", argv: ["--wpm", "80", "--accuracy", ".97", "--seed-profile", "auto"] }
+  ];
+  const results = [];
+  let next = 0;
+  const runOne = (r) => new Promise((resolve) => {
+    const child = spawn(process.execPath, [fileURLToPath(import.meta.url), ...r.argv, "--label", r.label, ...extra], { stdio: ["ignore", "pipe", "pipe"] });
+    let out = "";
+    child.stdout.on("data", (d) => { out += d; });
+    child.stderr.on("data", (d) => { out += d; });
+    child.on("close", (code) => {
+      const lines = out.split("\n").filter((l) => /^(PASS|FAIL|SECTOR|  )/.test(l));
+      console.log(`== ${r.label} exit ${code}\n${lines.join("\n")}`);
+      resolve({ label: r.label, code });
+    });
+  });
+  const workers = Array.from({ length: PAR }, async () => { while (next < runs.length) { const r = runs[next++]; results.push(await runOne(r)); } });
+  await Promise.all(workers);
+  const table = [];
+  for (const r of runs) {
+    const f = path.join(OUT_DIR, `${r.label}.json`);
+    if (!fs.existsSync(f)) { table.push({ label: r.label, missing: true }); continue; }
+    const rep = JSON.parse(fs.readFileSync(f, "utf8"));
+    table.push({ label: r.label, exit: (results.find((x) => x.label === r.label) || {}).code, sectors: rep.sectors.map((s) => ({ S: s.level, outcome: s.outcome, idle: s.idleShare, gap: s.idleMaxGapS,
+      toBoss: s.toBossS, deaths: s.deaths, minHullPct: s.minHullPct, dmg: s.damage, rank: s.rank, wpm: s.wpm, muls: s.waves.map((w) => w.mul), timeouts: s.waves.filter((w) => w.timedOut).length, escaped: s.waves.reduce((a, w) => a + (w.escaped || 0), 0) })) });
+  }
+  fs.writeFileSync(path.join(OUT_DIR, "summary.json"), JSON.stringify({ when: new Date().toISOString(), set: args.set || null, table }, null, 1));
+  console.log("\nSUMMARY (idle share / longest idle gap s / deaths / min hull % / damage / rank / hand WPM / paceMul per wave)");
+  for (const row of table) {
+    if (row.missing) { console.log(`${row.label}: no report`); continue; }
+    console.log(`${row.label} (exit ${row.exit})`);
+    for (const s of row.sectors) console.log(`  S${s.S} ${s.outcome} idle ${Math.round(s.idle * 100)}% gap ${s.gap}s toBoss ${s.toBoss}s deaths ${s.deaths} minHull ${s.minHullPct}% dmg ${s.dmg} rank ${s.rank} wpm ${s.wpm} mul ${s.muls.join("/")} timeouts ${s.timeouts} escaped ${s.escaped}`);
+  }
+  console.log("wrote", path.join(OUT_DIR, "summary.json"));
+  process.exit(results.some((r) => r.code !== 0) ? 1 : 0);
+}
+
+// ----------------------------- one profile -----------------------------
+const { openProbe, sleep, waitFor, paceType } = await import("./pace_lib.mjs");
+const WPM = Number(args.wpm || 55);
+const ACC = Number(args.accuracy || 0.93);
+const SEED = args["seed-profile"] ? (args["seed-profile"] === "auto" ? Math.round(WPM * ACC) : Number(args["seed-profile"])) : 0;
+const JUMP = args.jump ? Number(args.jump) : 0;
+const SECTORS = Number(args.sectors || (JUMP ? 4 : 3));
+const RETRY = Number(args.retry || 0);
+const SECONDS = Number(args.seconds || 420);
+const SETS = args.set ? String(args.set).split(",").map((kv) => kv.split("=")).filter((p) => p.length === 2) : [];
+let EXPECT = args.expect || "auto";
+if (EXPECT === "auto") EXPECT = JUMP ? "none" : WPM <= 40 ? "p35" : WPM <= 65 ? "p55" : "p80";
+const LABEL = args.label || `w${WPM}-a${String(ACC).replace(/^0/, "")}${SEED ? `-seed${SEED}` : "-fresh"}${JUMP ? `-j${JUMP}` : ""}`;
+
+const P = await openProbe(`t-pace-balance-${LABEL}`);
+if (SEED) {
+  const bigrams = {};
+  const L = "etaoinshrdlucmfwypvbgk";
+  let k = 0;
+  for (const a of L) for (const b of L) { if (k >= 100) break; bigrams[a + b] = { n: 3, ms: Math.round(12000 / SEED) }; k++; }
+  await P.goto({ schema: 3, playerName: "BALANCE", selectedShip: "coconut", lastUnlockedLevel: Math.max(1, JUMP || 1), storySeen: true, keyboardHintSeen: true, onboardingDone: Date.now(),
+    settings: { muted: true }, profile: { v: 1, keys: {}, bigrams, speedEma: SEED, thrEma: Math.round(SEED * 0.6), speedN: 300, sessions: [], sectorBest: {}, bests: { speed: 0, ceiling: 0, drill: { speed: 0, acc: 0 } }, days: { n: 3, last: 20261020 } } });
+} else {
+  await P.goto("fresh");
+}
+if (SETS.length) {
+  await P.g((sets) => {
+    for (const [k, v] of sets) {
+      if (k === "rollin") { const [a, b] = v.split("-").map(Number); SPAWN_ROLLIN_PX[0] = a; SPAWN_ROLLIN_PX[1] = b; }
+      else if (k in PACE) PACE[k] = Number(v);
+    }
+  }, SETS);
+}
+
+// page-side classifier and per-wave log (listeners registered after PACE's, so they read the tuning PACE wrote)
+await P.g(() => {
+  const B = window.__bal = {
+    reset() { B.st = { card: 0, bossIntro: 0, finale: 0, transition: 0, boss: 0, active: 0, idle: 0, total: 0 }; B.gap = 0; B.gapMax = 0; B.waves = B.waves ? B.waves.filter((w) => w.L === LEVELS[window.game.levelIndex].level) : []; B.minHp = Infinity; B.dmg = 0; B.toBoss = null; B.t0 = window.game.playClock || 0; B.hullIn = B.lastCard || null; },
+    st: null
+  };
+  B.reset();
+  onGameHook("tick", function (e) {
+    if (this.mode !== "playing" || !B.st) return;
+    const dt = e.dt, s = B.st;
+    s.total += dt;
+    let idle = false;
+    if (this.levelIntro) s.card += dt;
+    else if (this.bossIntro && this.bossIntro.locked) s.bossIntro += dt;
+    else if (this.bossClear) s.finale += dt;
+    else if (this.inBoss) { s.boss += dt; if (B.toBoss === null) B.toBoss = (this.playClock || 0) - B.t0; }
+    else if (this.wavePhase === "drain" || this.wavePhase === "banner" || this.wavePhase === "approach") s.transition += dt;
+    else if (this.hasVisibleTargets()) s.active += dt;
+    else { s.idle += dt; idle = true; }
+    if (idle) { B.gap += dt; if (B.gap > B.gapMax) B.gapMax = B.gap; } else B.gap = 0;
+    if (this.player.hp < B.minHp) B.minHp = this.player.hp;
+  });
+  onGameHook("waveWillStart", function (e) {
+    const l = this._paceLast || {};
+    B.waves.push({ L: e.level, w: e.wave, mul: e.tuning.spawnMul, quota: e.tuning.quota, source: l.source || null, target: l.target ?? null, runN: l.n ?? null, carry: l.carry || 0, timedOut: false, escaped: 0 });
+  });
+  onGameHook("waveWillEnd", function (e) { const w = B.waves[B.waves.length - 1]; if (w && !e.byQuota) { w.timedOut = true; w.aliveAtCap = e.alive; } });
+  onGameHook("waveDrained", function (e) { const w = B.waves[B.waves.length - 1]; if (w && !e.byQuota) w.escaped = e.detonated; });
+  onGameHook("hullDamage", function (e) { B.dmg += e.dmg; });
+  onGameHook("sectorCardWillShow", function () { B.lastCard = { hp: this.player.hp, maxHp: this.player.maxHp }; if (!B.hullIn) B.hullIn = B.lastCard; });
+});
+
+// the classifier only counts mode "playing", so arming it before Start keeps the first sector's card and wave 1
+await P.g(() => window.__bal.reset());
+await P.startRun("BALANCE");
+if (JUMP) {
+  await P.g((i) => { window.__jumpTo = i; window.game.startSector(i); }, JUMP - 1);
+  await waitFor(P, () => window.game && window.game.mode === "playing" && window.game.levelIndex === window.__jumpTo, 8000);
+  await P.g(() => window.__bal.reset());
+}
+
+const report = { label: LABEL, wpm: WPM, accuracy: ACC, seedProfile: SEED || null, jump: JUMP, sets: SETS, expect: EXPECT, sectors: [] };
+const r2 = (x) => (x === null || x === undefined || !Number.isFinite(x) ? null : Math.round(x * 100) / 100);
+for (let s = 0; s < SECTORS; s++) {
+  const t0 = Date.now();
+  let deaths = 0, outcome = "timeout";
+  const level = await P.g(() => window.game.levelIndex + 1);
+  while (Date.now() - t0 < SECONDS * 1000) {
+    await paceType(P, SECONDS, { wpm: WPM, accuracy: ACC, until: (st) => st.mode !== "playing" });
+    const mode = await P.g(() => window.game.mode);
+    if (mode === "gameOver") {
+      deaths++;
+      if (deaths > RETRY) { outcome = "gameOver"; break; }
+      await sleep(900);
+      await P.g(() => document.getElementById("btnTryAgain").click());
+      await waitFor(P, () => window.game.mode === "playing", 8000);
+      continue;
+    }
+    if (mode === "levelComplete" || mode === "victory") { outcome = mode; break; }
+    if (mode !== "playing") await sleep(200);
+  }
+  const ev = await P.g(() => {
+    const g = window.game, B = window.__bal, r = g.lastResults;
+    return { st: B.st, gapMax: B.gapMax, waves: B.waves, minHp: B.minHp, dmg: B.dmg, toBoss: B.toBoss, playS: (g.playClock || 0) - B.t0, hullIn: B.hullIn,
+      results: r && { rank: r.rank, wpm: r.wpm, throughput: r.throughput, acc: r.acc, tags: r.tags }, maxHp: g.player.maxHp, hpEnd: g.player.hp, pace: g.paceSnapshot().state };
+  });
+  const tot = Math.max(1e-6, ev.st.total);
+  const rec = {
+    level, outcome, deaths, playS: r2(ev.playS), toBossS: r2(ev.toBoss), idleShare: r2(ev.st.idle / tot), spawnPhaseIdle: r2(ev.st.idle / Math.max(1e-6, ev.st.idle + ev.st.active)),
+    idleMaxGapS: r2(ev.gapMax), frac: Object.fromEntries(Object.entries(ev.st).filter(([k]) => k !== "total").map(([k, v]) => [k, r2(v / tot)])),
+    minHp: ev.minHp === Infinity ? null : ev.minHp, minHullPct: ev.minHp === Infinity ? null : Math.round(1000 * ev.minHp / Math.max(1, ev.hullIn ? ev.hullIn.maxHp : ev.maxHp)) / 10,
+    hullIn: ev.hullIn, damage: ev.dmg, rank: ev.results && ev.results.rank, wpm: ev.results && Math.round(ev.results.wpm), throughput: ev.results && ev.results.throughput,
+    acc: ev.results && ev.results.acc, tags: ev.results && ev.results.tags,
+    waves: ev.waves.map((w) => ({ ...w, target: r2(w.target) })), cadet: ev.pace && ev.pace.cadetLevel === level
+  };
+  report.sectors.push(rec);
+  console.log(`SECTOR ${rec.level} ${rec.outcome} play ${rec.playS}s toBoss ${rec.toBossS}s idle ${Math.round(rec.idleShare * 100)}% (spawn-phase ${Math.round(rec.spawnPhaseIdle * 100)}%) gap ${rec.idleMaxGapS}s deaths ${rec.deaths} ` +
+    `hullIn ${rec.hullIn ? `${rec.hullIn.hp}/${rec.hullIn.maxHp}` : "-"} minHull ${rec.minHullPct}% dmg ${rec.damage} rank ${rec.rank} wpm ${rec.wpm} acc ${rec.acc} ` +
+    `waves ${rec.waves.map((w) => `${w.mul}(${w.source}${w.carry ? `+${w.carry}` : ""}) q${w.quota}${w.timedOut ? ` TIMEOUT esc ${w.escaped}` : ""}`).join(" / ")}`);
+  if (outcome !== "levelComplete") break;
+  if (s + 1 < SECTORS) {
+    await sleep(600);
+    await P.g(() => { document.getElementById("btnNextLevel").click(); });
+    await waitFor(P, () => window.game.mode === "playing", 8000);
+    await P.g(() => window.__bal.reset());
+  }
+}
+fs.writeFileSync(path.join(OUT_DIR, `${LABEL}.json`), JSON.stringify(report, null, 1));
+console.log("wrote", path.join(OUT_DIR, `${LABEL}.json`));
+
+// ----------------------------- targets -----------------------------
+const S = report.sectors;
+const by = (L) => S.find((r) => r.level === L);
+const idleLine = S.map((r) => `S${r.level} ${Math.round(r.idleShare * 100)}%`).join(" ");
+if (EXPECT === "p55" || EXPECT === "p80") {
+  const s1 = by(1), s2 = by(2), s3 = by(3);
+  P.check(`${LABEL}: S2 and S3 idle share <= 15 %`, !!s2 && !!s3 && s2.idleShare <= 0.15 && s3.idleShare <= 0.15, idleLine);
+  const s1Max = SEED ? 0.15 : 0.30;
+  P.check(`${LABEL}: S1 idle share <= ${Math.round(s1Max * 100)} % (${SEED ? "returning, seeded" : "fresh"} profile)`, !!s1 && s1.idleShare <= s1Max, idleLine);
+}
+if (EXPECT === "p55") {
+  const s1 = by(1);
+  P.check(`${LABEL}: reaches the S1 boss in 25-70 s of play clock`, !!s1 && s1.toBossS !== null && s1.toBossS >= 25 && s1.toBossS <= 70, { toBossS: s1 && s1.toBossS });
+  P.check(`${LABEL}: clears S1-3 without dying, min hull > 25 % in every sector`, S.length === 3 && S.every((r) => r.outcome === "levelComplete" && r.deaths === 0 && r.minHullPct > 25), S.map((r) => `S${r.level}:${r.outcome}/${r.deaths}/${r.minHullPct}%`));
+}
+if (EXPECT === "p80") {
+  P.check(`${LABEL}: no idle gap > 2 s inside a spawn phase`, S.every((r) => r.idleMaxGapS <= 2), S.map((r) => `S${r.level}:${r.idleMaxGapS}s`));
+}
+if (EXPECT === "p35") {
+  const order = ["S", "A", "B", "C", "D"];
+  P.check(`${LABEL}: not made harder in S1-3: 0 deaths, 0 hull damage, rank >= B`, S.length === 3 && S.every((r) => r.outcome === "levelComplete" && r.deaths === 0 && r.damage === 0 && order.indexOf(r.rank) >= 0 && order.indexOf(r.rank) <= 2),
+    S.map((r) => `S${r.level}:${r.outcome} deaths ${r.deaths} dmg ${r.damage} rank ${r.rank}`));
+}
+if (EXPECT === "none") P.note(`${LABEL}: stakes run (no targets)`, S.map((r) => `S${r.level}:${r.outcome} hullIn ${r.hullIn ? r.hullIn.hp + "/" + r.hullIn.maxHp : "-"} minHull ${r.minHullPct}% deaths ${r.deaths}`).join(" "));
+P.check("zero page errors and console errors", P.errors.pageErrors.length === 0 && P.errors.consoleErrors.length === 0, { pageErrors: P.errors.pageErrors.slice(0, 3), consoleErrors: P.errors.consoleErrors.slice(0, 3) });
+await P.finish();

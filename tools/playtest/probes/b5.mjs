@@ -60,11 +60,13 @@ await jumpTo(P, 1);
 const pw = await P.g(() => {
   const g = window.game;
   g.enemies.length = 0; g.lock = null;
+  if (typeof g.pacePin === "function") g.pacePin(1);   // PACE (D2): the quota is paced; pin the table pace for this check
   g.beginWave(0);
-  g.waveKills = LEVELS[1].quota[0];
+  g.waveKills = typeof g.waveQuota === "function" ? g.waveQuota() : LEVELS[1].quota[0];
   g.waveDmg = 0;
   const before = g.stats.score;
   g.endWave();
+  if (typeof g.pacePin === "function") g.pacePin(null);
   return { gained: g.stats.score - before, callout: g.callout && g.callout.title, queued: (g.calloutQueue || []).map(c => c.title), phase: g.wavePhase, perfectWaves: g.levelStats.perfectWaves };
 });
 P.check("wave with waveDamage === 0 at L2 -> +500 and a 'PERFECT WAVE' callout", pw.gained === 500 && (pw.callout === "PERFECT WAVE" || pw.queued.includes("PERFECT WAVE")) && pw.perfectWaves === 1, pw);

@@ -9,6 +9,93 @@ sector-10 clear) as the end of the sector and idled there until its wall cap whi
 itself ran at 60 fps / 0.97 during those runs (checked separately: sector 10 with an 80 WPM typist, `out/fpstype`). The
 final probe stops on `victory` and paces the typist by `game.playClock`, so its WPM is honest at any frame rate.
 
+## Training update: pace (PACE, D2 / D3), measured on `wt/pace` before WORDS / ARCADE
+
+Measured on 2026-10-24 on the PACE worktree (`wt/pace`, base training 0067c1b = scaffold + MEASURE + ONBOARD), headless
+Chrome, DPR 1, 1440 x 900, other agents' browsers running on the machine (every typist is paced by `game.playClock`, so
+the profiles stay honest; play / wall clock 0.94-0.97). **WORDS (exact cps, two-word plates) and ARCADE (Counter-Signal,
+par, surge damage) were not on this tree: the lead's re-pass on the merged tree replaces these numbers** (`t-pace-balance
+--matrix`, b10 for the three profiles, the stakes jumps below; every PACE number lives in the `PACE` block of
+`assets/js/game/42-pacing.js` plus `HUNGRY_SPAWN_S` / `SPAWN_ROLLIN_PX` in 20-constants.js).
+
+Shipped numbers: spec-pace 1 except one knob, `PACE.hungryMin2AtMul` **1.5 -> 1.35** (spec 14.3 knob 1, after round 3
+below): pilot factor 0.85, paceMul 1.0-2.5, step 0.35, run speed from 20 intervals, profile from 60, maxEnemies +
+min(3, round(2 (m - 1))), speed x (1 + 0.15 (m - 1)), 2-alive top-up from paceMul 1.35, Cadet 0.75 / 0.75 / 0.8, hull
+carry from S4 at 50 %; `HUNGRY_SPAWN_S` 0.1, `SPAWN_ROLLIN_PX` [10, 30].
+
+Probe: `probes/t-pace-balance.mjs` (one profile per run; `--matrix` runs the five; `--set key=value` retunes a `PACE`
+knob or `rollin=a-b` in the page). Idle share = time in a spawn phase with nothing targetable / the sector's play time
+(mode `playing`, sector card and boss included), the pedagogy probe's definition.
+
+### R26 targets (`t-pace-balance --matrix`): rounds 1-3 at `hungryMin2AtMul` 1.5, round 4 at the shipped 1.35
+
+| profile | S1 idle r1 / r2 / r3 -> r4 (target) | S2 idle | S3 idle | longest idle gap | to S1 boss | deaths / damage S1-3 | rank S1-S3 (r4) | hand WPM | paceMul S1 · S2 · S3 (r4) |
+|---|---|---|---|---|---|---|---|---|---|
+| 35 / .90 fresh | 15 / 13 / 14 -> **7 %** (not harder) | 6 / 5 / 3 -> 5 % | 6 / 3 / 5 -> 4 % | <= 0.52 s | 36-47 s | 0 / 0 in all four | B A B | 28-33 | 1/1/1.35 · 1.18-1.22 · 1/1/1 |
+| 55 / .93 fresh | 18 / 23 / 24 -> **5 %** (<= 30) | 2 / 3 / 7 -> 2 % | 3 / 0 / 1 -> 1 % | <= 0.61 s | 32-43 s | 0 / 0 | A A A | 47-52 | 1/1.35/1.7 · 2.05/2.10/2.10 · 1.75/1.52/1.52 |
+| 80 / .97 fresh | 25 / 29 / 28 -> **27 %** (<= 30) | 7 / 4 / 7 -> 6 % | 3 / 7 / 4 -> 2 % | <= 0.52 s | 29-34 s | 0 / 0 | A S S | 70-75 | 1/1/1 · 1.35/1.70/2.05 · 2.26-2.28 |
+| 55 / .93 seeded (51) | 6 / 8 / 8 -> **4 %** (<= 15) | 3 / 1 / 2 -> 2 % | 2 / 1 / 1 -> 1 % | <= 0.52 s | 40-46 s | 0 / 0 | A A A | 48-52 | 1.35/1.70/2.05 · 2.06-2.08 · 1.71/1.53/1.52 |
+| 80 / .97 seeded (78) | 13 / 14 / **19 FAIL** -> **15 %** (<= 15) | 3 / 5 / 8 -> 4 % | 4 / 3 / 3 -> 1 % | <= 0.52 s | 32-37 s | 0 / 0 | S S S | 72-76 | 1.35/1.70/2.05 · 2.40/2.50/2.50 · 2.27-2.29 |
+
+Knob runs at 1.35 before shipping it (`--set hungryMin2AtMul=1.35`): 80 seeded S1 8 % and 12 %, 55 seeded S1 4 %
+(S2 3 %, S3 2 %), 35 fresh S1 10 % / S2 5 % / S3 2 % with 0 damage and ranks A / B / B (its S2 waves stayed at
+1.32-1.34). Why this knob: a returning pilot's first wave runs at exactly 1.35 (one step from 1.0), below the old 1.5
+top-up, so every kill emptied the field; 1.35 is the lowest value that leaves the 35 WPM pilot's S2 (1.18-1.34 in four
+rounds) on the table's empty-field rule. Before PACE (pedagogy baseline): idle 35 / 22 / 12 % (35 WPM), 36 / 34 / 25 %
+(55), 50 / 44 / 41 % (80). Extra runs at 1.5: 80 fresh S1 26 / S2 6 / S3 3 %, and with `--set rollin=10-20` S1 26 / S2 4 /
+S3 1 % (the roll-in knob barely moves sector 1).
+
+The two margins to watch on the merged tree: **80 fresh S1** (25-29 % against 30 %: a fresh pilot flies S1 at paceMul
+1.0 until the 20-interval run gate, R26; the knob only acts from 1.35) and **80 seeded S1** (8-15 % at 1.35 against 15 %).
+If either misses there, the next levers are R26's kept-out alternative (the 2-alive top-up from MEASURE's live speed in
+S1) for the fresh case and `PACE.profileMinIntervals` / a 1.3 knob (it then reaches the 35 pilot's S2) for the seeded one.
+In the round-2 JSON the S1 `minHullPct` reads 66.7 % because that probe version took the max-HP after the clear for the
+first sector (fixed before round 3); the damage column is 0 in every sector of every round.
+
+### b10 (three profiles, fresh save, sectors 1-3; pace columns added by PACE; measured at `hungryMin2AtMul` 1.5)
+
+The band is now judged per wave against `targetCps x the applied paceMul`: every wave delivers at least 0.85 x (all
+spawns) and the stream alone stays under 1.35 x. Hungry top-ups above it are demand-driven (a typist who clears the
+field is fed at their own pace: sector 1 at paceMul 1.0 reads 1.6-3.3 x for 35-80 WPM). The `stream` half of the
+80 WPM sector 1 cells is 0: every one of its spawns came from the hungry rule.
+
+### pace-w35-s1-3 — 35 WPM / 0.9 accuracy, minion policy danger, fresh save
+
+| S | outcome | to boss s | boss s | min HP | wave leaks/min | boss leaks/min (per phase) | cps ratio w1/w2/w3 | hungry spawns w1/w2/w3 | idle max s w1/w2/w3 | surges f/c | rank (shipped / level-aware) | WPM (nominal) | acc | dmg | tally | clock | paceMul w1/w2/w3 | quota | cps / (target x mul), all / stream | timed out (escaped) | hull in | throughput |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | clear | 42.6 | 12.2 | 100 % | 0 | 0 (0/0/0) | 1.65/2.11/1.97 | 5/8 8/10 8/16 | 0.52/0.38/0.38 | 0/0 | A / A | 32.0 (14.4) | 94.1 | 0 | 2500 | 0.97 | 1/1/1.35 | 8/10/16 | 1.65/0.58 2.11/0.70 1.46/0.83 | no/no/no | 200/200 | 29 |
+| 2 | clear | 50 | 19.9 | 100 % | 0 | 0 (0/0/0) | 1.25/1.46/1.66 | 4/13 10/16 10/18 | 0.47/0.35/0.07 | 0/0 | A / A | 30.5 (20.4) | 90.4 | 0 | 3500 | 0.96 | 1.33/1.32/1.32 | 13/16/18 | 0.94/0.49 1.11/0.52 1.26/0.63 | no/no/no | 300/300 | 30 |
+| 3 | clear | 63.6 | 26.6 | 100 % | 0 | 0 (0/0/0) | 0.99/0.98/0.97 | 4/12 6/14 7/16 | 0.27/0.22/0 | 0/1 | A / A | 31.6 (27.6) | 91.7 | 0 | 4500 | 0.97 | 1/1/1 | 12/14/16 | 0.99/0.56 0.98/0.45 0.97/0.49 | no/no/no | 400/400 | 30 |
+
+### pace-w55-s1-3 — 55 WPM / 0.93 accuracy, minion policy danger, fresh save
+
+| S | outcome | to boss s | boss s | min HP | wave leaks/min | boss leaks/min (per phase) | cps ratio w1/w2/w3 | hungry spawns w1/w2/w3 | idle max s w1/w2/w3 | surges f/c | rank (shipped / level-aware) | WPM (nominal) | acc | dmg | tally | clock | paceMul w1/w2/w3 | quota | cps / (target x mul), all / stream | timed out (escaped) | hull in | throughput |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | clear | 36.4 | 6.9 | 100 % | 0 | 0 (0/0/0) | 2.24/2.64/2.46 | 7/8 10/10 13/16 | 0.33/0.30/0.43 | 0/0 | A / A | 47.5 (14.4) | 90.6 | 0 | 2579 | 0.96 | 1/1/1.35 | 8/10/16 | 2.24/0.13 2.64/0 1.82/0.25 | no/no/no | 200/200 | 36 |
+| 2 | clear | 48.4 | 12.7 | 100 % | 0 | 0 (0/0/0) | 2.39/3.71/2.91 | 9/17 17/24 13/29 | 0.23/0.18/0.23 | 0/0 | A / A | 50.5 (20.4) | 94.3 | 0 | 3748 | 0.95 | 1.70/2.03/2.04 | 17/24/29 | 1.41/0.45 1.83/0.62 1.43/0.70 | no/no/no | 300/300 | 47 |
+| 3 | clear | 66.8 | 16.7 | 100 % | 0 | 0 (0/0/0) | 1.75/1.75/1.82 | 9/20 6/21 5/24 | 0.32/0.33/0.30 | 0/1 | A / A | 49.1 (27.6) | 93 | 0 | 4897 | 0.96 | 1.69/1.52/1.51 | 20/21/24 | 1.04/0.69 1.15/0.76 1.21/0.86 | no/no/yes (0) | 400/400 | 47 |
+
+### pace-w80-s1-3 — 80 WPM / 0.97 accuracy, minion policy danger, fresh save
+
+| S | outcome | to boss s | boss s | min HP | wave leaks/min | boss leaks/min (per phase) | cps ratio w1/w2/w3 | hungry spawns w1/w2/w3 | idle max s w1/w2/w3 | surges f/c | rank (shipped / level-aware) | WPM (nominal) | acc | dmg | tally | clock | paceMul w1/w2/w3 | quota | cps / (target x mul), all / stream | timed out (escaped) | hull in | throughput |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | clear | 25.9 | 4.7 | 100 % | 0 | 0 (0/0/0) | 1.97/2.95/3.36 | 8/8 10/10 12/12 | 0.50/0.33/0.37 | 0/0 | S / S | 74.1 (14.4) | 100 | 0 | 3274 | 0.95 | 1/1/1 | 8/10/12 | 1.97/0 2.95/0 3.36/0 | no/no/no | 200/200 | 40 |
+| 2 | clear | 39.8 | 8.8 | 100 % | 0 | 0 (0/0/0) | 2.41/3.05/4.52 | 11/14 14/20 25/29 | 0.45/0.30/0.27 | 0/0 | S / S | 71.8 (20.4) | 95.7 | 0 | 4424 | 0.94 | 1.35/1.70/2.05 | 14/20/29 | 1.78/0.54 1.80/0.29 2.20/0.35 | no/no/no | 300/300 | 57 |
+| 3 | clear | 52.9 | 10.8 | 100 % | 0 | 0 (0/0/0) | 2.52/2.66/3.32 | 22/27 11/31 20/36 | 0.23/0.28/0.20 | 0/0 | S / S | 74.4 (27.6) | 97.7 | 0 | 6065 | 0.94 | 2.23/2.23/2.24 | 27/31/36 | 1.13/0.20 1.19/0.90 1.48/0.56 | no/no/no | 400/400 | 67 |
+
+### Stakes (D3), seeded profile, sector jump then consecutive sectors, one retry allowed (none used; every wave ran at paceMul 1.0, so the knob does not apply)
+
+| profile | sector: hull in (card) -> damage, min hull, wave timeouts (escaped), paceMul |
+|---|---|
+| 25 / .85 from S3 | S3 400/400 -> 14, 96.5 %, W3 (2); S4 500/500 -> 94, 81.2 %, W3 (0); S5 **544/600** -> 302, 40.3 %, W1 (1) W2 (1), carry +1 +1; S6 **491/700** -> 506, **12.9 %**, W2 (2), carry +2; all waves 1.0, rank C / D / D / D |
+| 35 / .90 from S4 | S4 500/500 -> 0, 100 %, W3 (0); S5 600/600 -> 118, 80.3 %, W3 (2); S6 **631/700** -> 392, 34.1 %, W1 (0) W2 (0); S7 **597/800** -> 444, **19.1 %**, W1 (0) W2 (2), carry +2; all waves 1.0, rank B / C / C / C |
+| 55 / .93 from S7 | S7 800/800 -> 56, 93 %, W3 (0); S8 **869/900** -> 124, 82.8 %; S9 **914/1000** -> 474, 44 %, W1 (1) W2 (0), carry +1; S10 **792/1100** -> 444, 46.6 %, W2 (2), carry +2, victory; all waves 1.0, rank A / A / B / B |
+
+Bold = a hull carried from the previous clear (S5+). Nobody died, so no Cadet offer appeared; the prototype (spec-pace
+14.2, same D3 rules, no MEASURE) had the 25 WPM pilot die in S6 and the 35 WPM pilot end S7 at 60 / 800. Every one of
+these pilots is below the table from these sectors, so every wave ran at paceMul 1.0 and the numbers isolate D3.
+ARCADE's surge damage from S2 and its shorter boss time bonus land on exactly these runs: re-run them on the merged tree.
+
 ## Method
 
 * Probe: `tools/playtest/probes/b10.mjs --wpm W --accuracy A [--sectors 3 | --jump 10] [--minions danger|never|always]

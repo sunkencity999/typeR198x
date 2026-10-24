@@ -35,8 +35,9 @@ const AZ = /^[a-z]+$/;
 
 // ---- timing constants ----
 const timing = { LEVEL_INTRO_S: 1.6, LEVEL_INTRO_MAX_S: 2.5, WAVE_BANNER_S: 1.2, DRAIN_MAX_S: 6, BOSS_APPROACH_S: 3.0, BOSS_INTRO_S: 2.4,
-  BOSS_FINALE_S: 5.0, BOSS_FINALE_SKIP_S: 2.0, IFRAMES_S: 0.8, HUNGRY_SPAWN_S: 0.5, HUNGRY_MIN_ALIVE: 1, GAME_SPEED_FACTOR: 1, PLATE_H: 40, DANGER_X: 0.35 };
+  BOSS_FINALE_S: 5.0, BOSS_FINALE_SKIP_S: 2.0, IFRAMES_S: 0.8, HUNGRY_SPAWN_S: 0.1, HUNGRY_MIN_ALIVE: 1, GAME_SPEED_FACTOR: 1, PLATE_H: 40, DANGER_X: 0.35 };   // PACE (D2): hungry 0.5 -> 0.1 s
 for (const [k, v] of Object.entries(timing)) check(`const ${k} === ${v}`, G(k) === v, G(k));
+check("SPAWN_ROLLIN_PX === [10, 30] (PACE D2: roll-in was 10-90 px)", eq(G("SPAWN_ROLLIN_PX"), [10, 30]), G("SPAWN_ROLLIN_PX"));
 check("LANE_YS", eq(G("LANE_YS"), [184, 252, 320, 388, 456, 524]), G("LANE_YS"));
 check("phone lane profile", eq(G("LANE_PROFILE_PHONE.laneYs"), [200, 300, 400, 500]) && G("LANE_PROFILE_PHONE.maxEnemiesDelta") === -2 && G("LANE_PROFILE_PHONE.cssScaleBelow") === 0.55);
 check("wave modifiers", eq(G("WAVE_SPAWN_MUL"), [0.9, 1.0, 1.1]) && eq(G("WAVE_SPEED_MUL"), [0.92, 1.0, 1.10]) && eq(G("WAVE_LETTER_MUL"), [1.15, 1.0, 0.75]) && eq(G("WAVE_MAX_ENEMIES_DELTA"), [-1, 0, 1]));

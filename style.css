@@ -2926,6 +2926,13 @@ body[data-flight-check="on"] .tapToType:not(.hidden) ~ .fcPanel .fcStep { visibi
 /* ===== end track:MEASURE ===== */
 
 /* ===== track:PACE (42-pacing.js) ===== */
+/* Game Over: the Cadet offer's note sits under #retryNote in the same voice. */
+#cadetNote { margin: var(--sp-1) 0 0; text-align: center; opacity: 0.8; }
+#cadetNote:empty { display: none; }
+/* Records: a CADET chip follows FULL / LEGEND in the Run cell; that cell wraps its chips (one per line) instead of
+   widening the table past a phone-width modal, where the second chip was clipped. */
+#highScoreTable td:last-child { white-space: normal; }
+#highScoreTable td:last-child .hsTag { margin: 1px 0; }
 /* ===== end track:PACE ===== */
 
 /* ===== track:WORDS (25-lexicon.js) ===== */
