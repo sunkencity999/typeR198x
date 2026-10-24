@@ -34,7 +34,7 @@ const FC_TOAST_MS = 60000;     // step toasts persist; dismissed explicitly when
 const FC_TOAST_KEY = "fc";     // showToast key (tutorial toasts use "tut")
 const FC_MAX_ERRORS = 3;       // consecutive fcTick throws -> skipFlightCheck("error")
 const FC_COPY = Object.freeze({
-  banner: "FLIGHT CHECK", bannerSub: "3 DRILLS · NO HULL · NO SCORE",
+  banner: "FLIGHT CHECK", bannerSub: "3 DRILLS · NOTHING CAN HIT YOU · NO SCORE",   // srStart's wording: a new pilot does not know "hull" yet
   letter: "TYPE J",                                            // lead copy
   finish: "KEEP TYPING TO FINISH IT",                          // lead copy (same string as TUTORIAL_TIPS.finish)
   release: "PRESS SPACE TO LET GO, THEN TAKE THE NEARER ONE",  // lead copy
