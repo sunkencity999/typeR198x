@@ -507,7 +507,7 @@
               <summary>Controls</summary>
               <ul>
                 <li>Type the first letter of a target to lock on, then keep typing to finish it. Enemies win over powerups when they share a first letter.</li>
-                <li><kbd>Backspace</kbd> releases your lock, and so does <kbd>Space</kbd>, except on a two-word target (from Sector 4): when the next character of your locked target is the gap, shown as a dim dot, <kbd>Space</kbd> types it. Three misses on a locked target also drop it. Wrong keys never cost points, but a hard miss breaks your combo.</li>
+                <li><kbd>Space</kbd> or <kbd>Backspace</kbd> releases your lock. Three misses on a locked target also drop it. Wrong keys never cost points, but a hard miss breaks your combo.</li>
                 <li><kbd>Enter</kbd> advances screens. <kbd>Esc</kbd> pauses or backs out. <kbd>Alt</kbd>+<kbd>Enter</kbd> (<kbd>Cmd</kbd>+<kbd>Enter</kbd> on a Mac) or <kbd>F11</kbd> toggles fullscreen. <kbd>M</kbd> mutes on the title and pause screens. <kbd>?</kbd> or <kbd>F1</kbd> opens this manual.</li>
                 <li>Keys are never counted during the sector card or a boss intro; once the next sector is already unlocked, any key skips the sector card. Once you have beaten a boss before, any key skips its intro after one second; after a boss falls, any key, <kbd>Space</kbd>, <kbd>Enter</kbd> or a tap skips the finale after two seconds.</li>
                 <li>Keep typing through hit-stop and slow motion; input is never dropped while the playfield is live.</li>
@@ -517,11 +517,9 @@
             <details class="helpSection" open>
               <summary>Scoring</summary>
               <ul>
-                <li>Letters pay 50 pts, words 60 + 12 per character (the gap in a two-word target counts), and a word typed without a miss pays ×1.2. Minions pay 40, pickups 100, boss letters 10, a boss segment 30 per letter and a boss phase 300 × sector. Kills made by SPREAD, PIERCE or RAPID pay half.</li>
+                <li>Letters pay 50 pts, words 60 + 12 per letter, and a word typed without a miss pays ×1.2. Minions pay 40, pickups 100, boss letters 10, a boss segment 30 per letter and a boss phase 300 × sector. Kills made by SPREAD, PIERCE or RAPID pay half.</li>
                 <li>Combo tiers: ×2 at 10, ×3 at 25, ×4 at 50, ×5 at 100. MULTI adds two tiers (cap ×7). A hard miss or real hull damage resets the combo.</li>
-                <li>Overdrive: type faster than your own average with no misses and a white arc fills around your ship; full after 2 s, your beams run white-hot and letters, words, kills and boss letters pay +25% (bonuses excluded). A hard miss, a leak, a surge hit or slowing down vents it.</li>
-                <li>Sector clear pays 1,500 + 350 × sector, plus bonuses for time under par, accuracy (90 / 95 / 98%), perfect waves, a flawless boss and every counter-signal you counter. Retrying a sector scales the clear, time, accuracy, flawless-boss and perfect-wave bonuses down 25% per retry (counter-signal and phase bonuses are not reduced). A perfect wave pays only when its quota is met without damage.</li>
-                <li>A wave that runs out of time pays no perfect-wave bonus; whatever is still flying when it drains is counted (<em>WAVE TIMED OUT</em>) and joins the next wave of the sector.</li>
+                <li>Sector clear pays 1,500 + 350 × sector, plus bonuses for time under par, accuracy (90 / 95 / 98%), perfect waves, a flawless boss and countered surges. Retrying a sector scales the clear, time, accuracy, flawless-boss and perfect-wave bonuses down 25% per retry (countered-surge and phase bonuses are not reduced).</li>
                 <li>Your rank (S, A, B, C, D) weighs accuracy 50%, speed 30% and hull 20%; the line under it names the one that held you back.</li>
                 <li>WPM is your hand speed: the time between correct keys inside a word or boss segment. The first key of each target and pauses over 1.5 s are left out; wrong keys count against you. Records → Flight log keeps your speed, misses and slowest keys on this device only.</li>
               </ul>
@@ -543,7 +541,7 @@
               <ul>
                 <li>Each sector ends with a boss made of word segments in three phases (four for the finale). Type the highlighted segment; the lock is automatic.</li>
                 <li>Minions are typable. Their letters count for combo and score, not for wave quotas. A minion that reaches you costs 10 hull.</li>
-                <li>Counter-Signal (from Sector 2): the boss glows red, a red bar fills under its hull meter and the word’s frame pulses. Finish the whole word before the bar fills to counter it for a bonus and bounce the bolt back; miss the window and it hits for 8 + 2 × sector and the word starts over. A boss lands at most two per phase.</li>
+                <li>Signal Surge (from Sector 3): the boss charges a visible attack. Finish the current segment before the charge completes to counter it for a bonus; otherwise it hits for 8 + 2 × sector.</li>
                 <li>Clearing a phase grants 3 s of shield and a boss checkpoint. Once the finale starts, any key or a tap skips the rest after two seconds.</li>
               </ul>
             </details>
@@ -554,18 +552,12 @@
                 <li><strong>Resume</strong> continues a saved run. <strong>Replay</strong> restarts the sector you died in from its checkpoint. <strong>Retry boss</strong> restarts the boss from the phase you reached.</li>
                 <li>Sector select replays any unlocked sector. Only runs started from Sector 1 can set the high score; replays record a sector best instead.</li>
                 <li>Reset save on the title screen erases everything after a confirmation.</li>
-                <li>The stream follows you: at each wave the game compares your typing speed with the sector's pace and sends up to 2.5 × as many enemies, a little faster. It never drops below the standard pace on its own.</li>
-                <li>Sectors 1–3 refill your hull on a clear. From Sector 4 on, a clear repairs half of the missing hull and the rest carries into the next sector. Retry and Continue after a death restore a full hull.</li>
-                <li>Two deaths in the same sector add <strong>Fly at Cadet pace</strong> to Game Over: 75% stream and damage, 80% score, until that sector is cleared. Cards and records show a CADET tag.</li>
-                <li><strong>Daily sortie</strong>: one sector a day from your top three unlocked, three waves, no boss. Your first finished or failed attempt counts; later ones are practice. The medal compares your rating (speed × accuracy²) with your own last seven days.</li>
-                <li><strong>Drill</strong>: 60 seconds, no hull, no score, weighted to the keys you miss most. <strong>Endless drift</strong>: the stream rises every 20 seconds until the first word gets through; your ceiling is the stream speed at that moment.</li>
-                <li>Daily sortie, drill and endless drift never change your saved run, high score, sector bests or unlocks.</li>
               </ul>
             </details>
             <details class="helpSection" open>
               <summary>Playing on touch</summary>
               <ul>
-                <li>Tap the playfield to open the on-screen keyboard; letters fire as you type, and the space bar types the gap in a two-word target. A Bluetooth or USB keyboard gives the best experience.</li>
+                <li>Tap the playfield to open the on-screen keyboard; letters fire as you type. A Bluetooth or USB keyboard gives the best experience.</li>
                 <li>Rotate to landscape for the full playfield. The Fullscreen button hides browser chrome where the browser allows it.</li>
                 <li>Non-Latin keyboard layouts and IME composition are not recognised. Switch to a Latin (QWERTY-style) layout or direct input.</li>
               </ul>

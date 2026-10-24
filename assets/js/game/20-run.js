@@ -503,7 +503,7 @@ Object.assign(Game.prototype, {
       if ((tally.retries | 0) > 0) bonusLines.push({ label: "Retry penalty", value: `x${tally.retryMul}` });
       bankedLines.push({ label: "Perfect waves", value: tally.perfectWaves | 0 });
       bankedLines.push({ label: "Boss phases", value: tally.phases | 0 });
-      bankedLines.push({ id: "surges", label: "Counter-signal bonus", value: tally.surges | 0 });   // ARCADE (D10 copy)
+      bankedLines.push({ id: "surges", label: "Countered surges", value: tally.surges | 0 });   // ARCADE (D10 copy) relabels it "Counter-signal bonus"; release 20261024a ships the Signal Surge
     }
     // review R3: the badge means "beat the headline this run started against", not the live save.highScore.
     // The second term keeps it off a Retry / Restart that ends above that baseline but below a record this same run

@@ -1141,7 +1141,8 @@ Object.assign(Game.prototype, {
     const b = p.bests || {};
     const drill = b.drill && b.drill.speed > 0 ? `${b.drill.speed | 0} · ${typistRound(b.drill.acc, 1)}%` : "--";
     const stat = (label, value, cap) => `<div class="flStat"><span class="flStat__label">${label}</span><span class="flStat__value mono">${value}</span>${cap ? `<span class="flStat__cap">${cap}</span>` : ""}</div>`;
-    const stats = `<div class="flStats">${stat("Best WPM", dash(b.speed | 0))}${stat("Throughput", dash(Math.round(p.thrEma || 0)), "what the stream let you type")}${stat("Days flown", dash(this.typistDaysFlown()))}${stat("Ceiling", dash(b.ceiling | 0))}${stat("Drill", drill)}</div>`;
+    const stats = `<div class="flStats">${stat("Best WPM", dash(b.speed | 0))}${stat("Throughput", dash(Math.round(p.thrEma || 0)), "what the stream let you type")}${stat("Days flown", dash(this.typistDaysFlown()))}${(b.ceiling | 0) > 0 ? stat("Ceiling", b.ceiling | 0) : ""}${b.drill && b.drill.speed > 0 ? stat("Drill", drill) : ""}</div>`;
+    // release 20261024a: Endless drift / Drill are not in this build, so their best tiles show only once a value exists.
     // keyboard glyph
     const med = this.typistKeyMedianMs(ty);
     let keyRows = "";
