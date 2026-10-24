@@ -9,7 +9,106 @@ sector-10 clear) as the end of the sector and idled there until its wall cap whi
 itself ran at 60 fps / 0.97 during those runs (checked separately: sector 10 with an 80 WPM typist, `out/fpstype`). The
 final probe stops on `victory` and paces the typist by `game.playClock`, so its WPM is honest at any frame rate.
 
+## Training update: pace re-pass on the merged tree (WORDS + ARCADE + PACE)
+
+Measured on 2026-10-24 on `training` at `9b39599` (Merge PACE, on Merge ARCADE `ea12b33` and Merge WORDS `6a0ee81`),
+headless Chrome, DPR 1, 1440 x 900, one balance browser at a time with other agents' browsers on the machine (every
+typist is paced by `game.playClock`; b10 play / wall clock 0.93-0.96). These are the reference numbers; the `wt/pace`
+section below is the branch's history. WORDS' exact cps (W7) and two-word plates and ARCADE's Counter-Signal (surges
+from S2), par and surge damage are in every run.
+
+**No constant changed in the re-pass.** Shipped: spec-pace 1 with `PACE.hungryMin2AtMul` 1.35 (the PACE branch's knob),
+`HUNGRY_SPAWN_S` 0.1, `SPAWN_ROLLIN_PX` [10, 30]. Every R26 / Q1 target held in both matrix rounds and in b10 except one
+damage line: in round 1 the 35 / .90 pilot took 12 hull in the S2 boss from one uncountered Counter-Signal surge
+(`DAMAGE.surge(2)` = 12, ARCADE D10). No PACE knob reaches a boss fight (D2: boss pressure is ARCADE's) and the D10
+window numbers are a lead decision, so it is reported, not retuned. The same profile met 0 deaths / 0 damage / rank >= B
+in the other three merged-tree runs (matrix round 2, b10, t-arcade-balance with 2 / 2 surges countered), and ARCADE's own
+pre-merge run had the same kind of hit (S3, 14 hull).
+
+### R26 / Q1 targets (`t-pace-balance --matrix --parallel 1`, two rounds; JSON in `out/t-pace-balance/merged-r1/`, `merged-r2/`)
+
+Round 1 exit 1 (19 pass / 1 fail: `w35-fresh: not made harder in S1-3`, S2 dmg 12), round 2 exit 0 (20 pass / 0 fail).
+
+| profile | S1 idle r1 / r2 (target) | S2 idle r1 / r2 | S3 idle r1 / r2 | longest idle gap | to S1 boss r1 / r2 | deaths / damage S1-3 | min hull S1-3 | rank S1-S3 r1; r2 | hand WPM | paceMul S1 · S2 · S3 (r1) |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 35 / .90 fresh | 6 / 12 % (not harder) | 5 / 3 % | 3 / 4 % | <= 0.50 s | 51 / 42 s | 0 / **12 (r1 S2, one surge)**; r2 0 / 0 | 96 % (r1 S2), else 100 % | A B B; A A A | 30-32 | 1/1/1.35 · 1.31/1.30/1.29 · 1/1/1 |
+| 55 / .93 fresh | 12 / 25 % (<= 30) | 4 / 3 % | 1 / 1 % | <= 0.52 s | 39 / 30 s | 0 / 0 | 100 % | A S S; B S A | 44-51 | 1/1/1.35 · 1.70/2.05/2.09 · 1.74/1.53/1.53 |
+| 80 / .97 fresh | 28 / 18 % (<= 30) | 9 / 11 % | 1 / 1 % | <= 0.55 s | 30 / 32 s | 0 / 0 | 100 % | S S S; S S S | 72-75 | 1/1/1 · 1.35/1.70/2.05 · 2.27/2.28/2.28 |
+| 55 / .93 seeded (51) | 5 / 2 % (<= 15) | 4 / 3 % | 3 / 1 % | <= 0.43 s | 45 / 49 s | 0 / 0 | 100 % | B S A; A S A | 45-51 | 1.35/1.70/2.05 · 1.88/1.92/1.96 · 1.61/1.47/1.47 |
+| 80 / .97 seeded (78) | 7 / 12 % (<= 15) | 5 / 8 % | 5 / 1 % | <= 0.43 s | 37 / 33 s | 0 / 0 | 100 % | S S S; S S S | 72-74 | 1.35/1.70/2.05 · 2.40/2.50/2.50 · 2.23/2.24/2.26 |
+
+Against the branch (`wt/pace` round 4 and its knob runs): 80 fresh S1 28 / 18 % (branch 25-29 %), 80 seeded S1 7 / 12 %
+(8-15 %), 55 fresh S1 12 / 25 % (5-24 %), S2-3 at most 11 % for every 55 / 80 run. The two thin margins stay where the
+branch put them: 80 fresh S1 (bound by the 20-interval run gate at paceMul 1.0) and 80 seeded S1. Wave-3 timeouts with
+0 escaped (the cap issue in the PACE hand-off) appeared in r1 35 S2 / S3, r1 55 seeded S2 and r2 55 fresh S3.
+
+### b10 on the merged tree (three profiles, fresh save, sectors 1-3, `--expect`; JSON `out/b10/merged-*.json`)
+
+`--expect` lines: 35 / .90 4 pass / 0 fail (clears S1, reaches the S2 boss in 46.5 s, boss leaks, page errors), 55 / .93
+7 / 0 (S1 boss at 31 s, no death, min HP 100 %, delivery / stream band, counters >= 70 %, boss leaks, page errors),
+80 / .97 6 / 0 (longest idle gap 0.45 s, rank S in S1-3, boss leaks, page errors). b3 on the merged tree: 14 / 0 (55 / .93
+reaches the S1 boss at 28.8 s; L5 W2 incomingCps at a pinned 1.0 = 1.22 x 3.7, inside -15 % / +50 %).
+
+#### merged-w35-s1-3 — 35 WPM / 0.9 accuracy, minion policy danger, fresh save
+
+| S | outcome | to boss s | boss s | min HP | wave leaks/min | boss leaks/min (per phase) | cps ratio w1/w2/w3 | hungry spawns w1/w2/w3 | idle max s w1/w2/w3 | surges f/c | rank (shipped / level-aware) | WPM (nominal) | acc | dmg | tally | clock | paceMul w1/w2/w3 | quota | cps / (target x mul), all / stream | timed out (escaped) | hull in | throughput |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | clear | 40.1 | 11.1 | 100 % | 0 | 0 (0/0/0) | 1.91/1.85/1.51 | 7/8 10/10 9/12 | 0.53/0.38/0.45 | 0/0 | A / A | 32.6 (14.4) | 94.1 | 0 | 2917 | 0.96 | 1/1/1 | 8/10/12 | 1.91/0.17 1.85/0 1.51/0.46 | no/no/no | 200/200 | 27 |
+| 2 | clear | 46.5 | 24.7 | 100 % | 0 | 0 (0/0/0) | 1.55/3.90/1.46 | 9/14 14/16 9/19 | 0.42/0.03/0 | 1/0 | A / A | 31.1 (20.4) | 90.2 | 0 | 3966 | 0.96 | 1.35/1.35/1.36 | 14/16/19 | 1.15/0.24 2.89/0.29 1.07/0.63 | no/no/no | 300/300 | 30 |
+| 3 | clear | 61.1 | 29.7 | 100 % | 0 | 0 (0/0/0) | 1.17/0.90/1.08 | 3/12 10/14 5/16 | 0.28/0/0.10 | 0/1 | A / A | 32.0 (27.6) | 92.1 | 0 | 4848 | 0.96 | 1.01/1/1 | 12/14/16 | 1.16/0.90 0.90/0.32 1.08/0.66 | no/no/no | 400/400 | 31 |
+
+#### merged-w55-s1-3 — 55 WPM / 0.93 accuracy, minion policy danger, fresh save
+
+| S | outcome | to boss s | boss s | min HP | wave leaks/min | boss leaks/min (per phase) | cps ratio w1/w2/w3 | hungry spawns w1/w2/w3 | idle max s w1/w2/w3 | surges f/c | rank (shipped / level-aware) | WPM (nominal) | acc | dmg | tally | clock | paceMul w1/w2/w3 | quota | cps / (target x mul), all / stream | timed out (escaped) | hull in | throughput |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | clear | 31 | 6.9 | 100 % | 0 | 0 (0/0/0) | 1.66/1.62/2.83 | 7/8 9/10 11/12 | 0.48/0.40/0.42 | 0/0 | B / B | 48.2 (14.4) | 88.2 | 0 | 2825 | 0.95 | 1/1/1 | 8/10/12 | 1.66/0.15 1.62/0.12 2.83/0.33 | no/no/no | 200/200 | 32 |
+| 2 | clear | 45 | 13.3 | 100 % | 0 | 0 (0/0/0) | 2.31/2.25/3.22 | 11/14 11/20 12/28 | 0.35/0.33/0.07 | 0/1 | A / A | 49.6 (20.4) | 91.4 | 0 | 4537 | 0.95 | 1.35/1.70/2.02 | 14/20/28 | 1.71/0.63 1.32/0.46 1.59/0.75 | no/no/no | 300/300 | 45 |
+| 3 | clear | 61.5 | 15.1 | 100 % | 0 | 0 (0/0/0) | 1.72/1.92/1.74 | 2/20 9/21 10/24 | 0.22/0/0 | 0/1 | S / S | 51.0 (27.6) | 95.4 | 0 | 6547 | 0.95 | 1.67/1.51/1.53 | 20/21/24 | 1.03/0.86 1.27/0.82 1.14/0.70 | no/no/no | 400/400 | 50 |
+
+#### merged-w80-s1-3 — 80 WPM / 0.97 accuracy, minion policy danger, fresh save
+
+| S | outcome | to boss s | boss s | min HP | wave leaks/min | boss leaks/min (per phase) | cps ratio w1/w2/w3 | hungry spawns w1/w2/w3 | idle max s w1/w2/w3 | surges f/c | rank (shipped / level-aware) | WPM (nominal) | acc | dmg | tally | clock | paceMul w1/w2/w3 | quota | cps / (target x mul), all / stream | timed out (escaped) | hull in | throughput |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | clear | 28.2 | 4.7 | 100 % | 0 | 0 (0/0/0) | 2.17/2.89/4.15 | 8/8 10/10 16/16 | 0.45/0.40/0.40 | 0/0 | S / S | 74.0 (14.4) | 99.2 | 0 | 3726 | 0.94 | 1/1/1.35 | 8/10/16 | 2.17/0 2.89/0 3.08/0 | no/no/no | 200/200 | 48 |
+| 2 | clear | 46.6 | 8.4 | 100 % | 0 | 0 (0/0/0) | 2.99/3.41/3.57 | 13/17 15/25 18/34 | 0.32/0.27/0.28 | 0/1 | S / S | 74.8 (20.4) | 97.7 | 0 | 5310 | 0.93 | 1.70/2.05/2.40 | 17/25/34 | 1.76/0.67 1.67/0.50 1.49/0.78 | no/no/no | 300/300 | 66 |
+| 3 | clear | 59.7 | 11.5 | 100 % | 0 | 0 (0/0/0) | 2.71/2.51/2.55 | 10/28 12/32 12/37 | 0.22/0.38/0 | 0/1 | S / S | 74.6 (27.6) | 97.8 | 0 | 6923 | 0.93 | 2.30/2.30/2.30 | 28/32/37 | 1.18/0.58 1.09/0.65 1.11/0.76 | no/no/no | 400/400 | 70 |
+
+### Counter-Signal on the merged tree (`t-arcade-balance`, 12 pass / 0 fail, `out/t-arcade-balance/summary.json`)
+
+| profile | S | outcome | boss s | surges started / countered / fired | surge dmg | min HP | rank | WPM | tally clear / time / accuracy / flawless |
+|---|---|---|---|---|---|---|---|---|---|
+| 35 / .90 | 1 | clear | 14.1 | 0 / 0 / 0 | 0 | 100 % | B | 30 | 1850 / 364 / 0 / 500 |
+| 35 / .90 | 2 | clear | 21.6 | 1 / 1 / 0 | 0 | 100 % | A | 31 | 2200 / 684 / 0 / 1000 |
+| 35 / .90 | 3 | clear | 29.9 | 1 / 1 / 0 | 0 | 100 % | B | 31 | 2550 / 224 / 0 / 1500 |
+| 55 / .93 | 1 | clear | 6.9 | 0 / 0 / 0 | 0 | 100 % | A | 51 | 1850 / 521 / 150 / 500 |
+| 55 / .93 | 2 | clear | 12.9 | 1 / 1 / 0 | 0 | 100 % | A | 49 | 2200 / 1089 / 300 / 1000 |
+| 55 / .93 | 3 | clear | 19.0 | 1 / 0 / 1 | 14 | 96.5 % | A | 49 | 2550 / 1003 / 450 / 0 |
+| 80 / .97 | 1 | clear | 5.1 | 0 / 0 / 0 | 0 | 100 % | S | 76 | 1850 / 614 / 800 / 500 |
+| 80 / .97 | 2 | clear | 9.2 | 1 / 1 / 0 | 0 | 100 % | S | 75 | 2200 / 1303 / 800 / 1000 |
+| 80 / .97 | 3 | clear | 11.6 | 1 / 1 / 0 | 0 | 100 % | S | 73 | 2550 / 1703 / 1200 / 1500 |
+| 55 / .93 | 10 (jump) | victory | 73.3 | 7 / 3 / 4 | 112 | **8 %** | B | 50 | 5000 / 0 / 1500 / 0 |
+| 80 / .97 | 10 (jump) | victory | 45.0 | 5 / 5 / 0 | 0 | 97.1 % | S | 74 | 5000 / 0 / 4000 / 5000 |
+
+Sector 10 for 55 / .93 is tighter than on either branch: min HP 8 % here and 8.5 % in the stakes run below (ARCADE's
+branch 20.5 / 41.3 %, PACE's branch stakes 46.6 %); no death in either run. It is not a Q1 target (S1-3) and every wave
+there runs at paceMul 1.0; left for the lead (the Cadet offer is the designed release if it turns into deaths).
+
+### Stakes (D3) on the merged tree, seeded profile, sector jump then consecutive sectors, one retry allowed (none used)
+
+| profile | sector: hull in (card) -> damage, min hull, wave timeouts (escaped), carry, rank |
+|---|---|
+| 25 / .85 from S3 | S3 400/400 -> 86, 78.5 %, W2 (2), carry +2; S4 500/500 -> 222, 55.6 %, W2 (3), carry +3; S5 **467/600** -> 358, **18.2 %**, W1 (4) W2 (4), carry +4 +4; S6 **414/700** -> 380, 19.9 %, W1 (0) W2 (2), carry +2; all waves 1.0, rank C / D / D / C, 0 deaths |
+| 35 / .90 from S4 | S4 500/500 -> 32, 93.6 %, W3 (2); S5 **581/600** -> 114, 77.8 %, W1 (0); S6 **622/700** -> 306, 45.1 %, W2 (0); S7 **581/800** -> 362, **27.4 %**, W2 (0); all waves 1.0, rank B / C / C / C, 0 deaths |
+| 55 / .93 from S7 | S7 800/800 -> 0, 100 %, W3 (0); S8 900/900 -> 294, 67.3 %, W3 (0); S9 **837/1000** -> 502, 33.5 %, W2 (0); S10 **734/1100** -> 806, **8.5 %**, W2 (1), carry +1, victory; all waves 1.0, rank A / A / B / B, 0 deaths |
+
+Bold hull in = carried from the previous clear (S5+). Against the branch: the 25 WPM pilot's low point moved from S6
+12.9 % to S5 18.2 % / S6 19.9 %, the 35 WPM pilot's S7 from 19.1 % to 27.4 %, the 55 WPM pilot's S10 from 46.6 % to
+8.5 % (ARCADE's S10 surges, 4 of 7 fired in the jump run). Nobody died, so the Cadet offer was not seen in natural play
+(t-pace-cadet covers it). Labels `merged-stakes-w25-j3`, `merged-stakes-w35-j4`, `merged-stakes-w55-j7`.
+
 ## Training update: pace (PACE, D2 / D3), measured on `wt/pace` before WORDS / ARCADE
+
+Superseded by the merged-tree re-pass above; kept as the branch's history.
 
 Measured on 2026-10-24 on the PACE worktree (`wt/pace`, base training 0067c1b = scaffold + MEASURE + ONBOARD), headless
 Chrome, DPR 1, 1440 x 900, other agents' browsers running on the machine (every typist is paced by `game.playClock`, so
