@@ -346,9 +346,16 @@ P.check("16. state ring is Float64Array (64); JS heap growth over 10 s of typing
   await installTypist(R);
   await R.g(() => { window.__ty.clear(); window.__ty.hold(); });
   await installOd(R);
+  // 2b (fresh save, S1, tutorial on): an S1 tutorial tip is on screen when the first Overdrive fires; the Overdrive tip
+  //    stacks beside it under its own toast key instead of replacing it (the other S1 tips are marked seen so none
+  //    takes the tip slot meanwhile)
+  await R.g(() => { const g = window.game, ts = g.save.tutorialSeen; ts.lock = ts.finish = ts.release = ts.accuracy = true; g.tutorialToast("powerup", "TYPE SHIELD TO GRAB IT", 20000); });
   await R.g(() => { window.__od.sample = true; });
   wi = 0;
   await run(R, plan(nextWords(5), 120).steps);
+  const tip = await R.g(() => ({ on: window.game.overdriveOn === true, enabled: window.game.tutorialEnabled(), toasts: [...document.querySelectorAll(".toast")].map((e) => e.textContent) }));
+  P.check("2b. first Overdrive on a save with an S1 tutorial tip up: the Overdrive tip stacks beside it (own toast key), the tutorial tip stays",
+    tip.on && tip.enabled && tip.toasts.includes("TYPE SHIELD TO GRAB IT") && tip.toasts.some((t) => /^OVERDRIVE — FAST AND CLEAN/.test(t)), tip);
   const rm = await R.g(() => {
     const g = window.game, O = window.__od;
     O.sample = false;

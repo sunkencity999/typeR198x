@@ -181,12 +181,13 @@ Object.assign(Game.prototype, {
     this.overdriveOn = true;
     if (typeof this.showBanner === "function") this.showBanner({ kind: "callout", title: "OVERDRIVE", color: "text" });
     if (this.sfx && typeof this.sfx.overdrive === "function") this.sfx.overdrive();
-    // First activation on this save: one tip (the flag rides the next autosave), then the one announcement.
+    // First activation on this save: one tip (the flag rides the next autosave), then the one announcement. Its own
+    // toast key: it stacks beside an S1 tutorial tip ("tut") instead of replacing it.
     const save = this.save;
     let first = false;
     if (save && !(save.tutorialSeen && save.tutorialSeen.overdrive)) {
       first = true;
-      if (typeof this.showToast === "function") this.showToast("OVERDRIVE — FAST AND CLEAN PAYS +25% · ANY MISS VENTS IT", { kind: "tip", key: "tut", ms: 3500 });
+      if (typeof this.showToast === "function") this.showToast("OVERDRIVE — FAST AND CLEAN PAYS +25% · ANY MISS VENTS IT", { kind: "tip", key: "od", ms: 3500 });
       if (save.tutorialSeen && typeof save.tutorialSeen === "object") save.tutorialSeen.overdrive = true;
       else save.tutorialSeen = { overdrive: true };
     }
