@@ -1170,7 +1170,8 @@ Object.assign(Game.prototype, {
   },
 
   // L6: boss art under the plates so minions never vanish behind it. Nothing else is drawn inside the art box but
-  // the hit flash (additive copy at alpha flash * .5). Publishes boss.x/y (content centre) and boss.contentRect.
+  // the hit flash (additive copy at alpha flash * .5) and, while a surge charges, the Counter-Signal glow (ARCADE D10,
+  // same additive composite set). Publishes boss.x/y (content centre) and boss.contentRect.
   drawBossArt(ctx, boss) {
     const p = this.bossPlacement(boss);
     boss.contentRect = p.contentRect;
@@ -1181,10 +1182,11 @@ Object.assign(Game.prototype, {
     ctx.save();
     if (p.alpha < 1) ctx.globalAlpha *= p.alpha;
     ctx.drawImage(p.sp.img, r.x, r.y, r.w, r.h);
-    if (boss.flash > 0) {
-      ctx.globalCompositeOperation = "lighter";
-      ctx.globalAlpha = p.alpha * clamp(boss.flash * 0.5, 0, 0.5);
-      ctx.drawImage(p.sp.img, r.x, r.y, r.w, r.h);
+    const glow = !!boss.surge && typeof this.drawCounterSignalGlow === "function";
+    if (boss.flash > 0 || glow) {
+      ctx.globalCompositeOperation = "lighter";                          // one composite set for glow + hit flash
+      if (glow) this.drawCounterSignalGlow(ctx, boss, p);
+      if (boss.flash > 0) { ctx.globalAlpha = p.alpha * clamp(boss.flash * 0.5, 0, 0.5); ctx.drawImage(p.sp.img, r.x, r.y, r.w, r.h); }
     }
     ctx.restore();
   },
@@ -1216,6 +1218,18 @@ Object.assign(Game.prototype, {
       ctx.stroke();
       ctx.globalAlpha = ga;
     }
+    // ARCADE D10: the word's frame (the slab outline) pulses danger red at 2 Hz while a surge charges (.85 steady
+    // under reduced motion).
+    if (boss.surge) {
+      const ga = ctx.globalAlpha;
+      ctx.globalAlpha = ga * (rm ? 0.85 : 0.55 + 0.40 * (0.5 + 0.5 * Math.sin(Math.PI * 4 * (boss.surge.t || 0))));
+      ctx.strokeStyle = PALETTE.rgba("danger", 1);
+      ctx.lineWidth = 3;
+      roundRect(ctx, s.x - 1.5, s.y - 1.5, s.w + 3, s.h + 3, SLAB.r + 1.5);
+      ctx.stroke();
+      ctx.globalAlpha = ga;
+      this._csBorderDraws = (this._csBorderDraws | 0) + 1;
+    }
 
     // left cell: name (Orbitron 13, tracked .2em, fit 184) + SEG k/N + PHASE p/n
     const lx = s.x + SLAB.pad;
@@ -1237,15 +1251,16 @@ Object.assign(Game.prototype, {
     const seg = boss.segment || "";
     const done = seg.slice(0, boss.progress);
     const rem = seg.slice(boss.progress);
+    const cs = typeof this.counterSignalSlabText === "function" ? this.counterSignalSlabText(boss, done, rem) : null;   // ARCADE scramble
     const typoCh = (typeof TYPIST_PAIR_MS === "number" && boss.typoCh && nowMs() - (boss.typoAt || 0) < TYPIST_PAIR_MS) ? boss.typoCh : null;
     ctx.font = FONT.target(40, 700);
     const tw = typoCh ? ctx.measureText(typoCh).width : 0;
     fitText(ctx, seg, SLAB.centreW - 24 - tw, 26, 2, (px) => FONT.target(px, 700));
     const segFont = ctx.font;
-    this.drawSplitText(ctx, done, rem, ccx, s.y + 38, {
+    this.drawSplitText(ctx, done, cs ? cs.rem : rem, ccx, s.y + 38, {
       font: segFont,
       doneColor: PALETTE.rgba("text", 0.45),
-      remColor: PALETTE.rgba("lime", 0.92),
+      remColor: PALETTE.rgba(cs && cs.remColor ? cs.remColor : "lime", 0.92),
       caret: true,
       caretAlpha: this.caretAlpha(),
       typo: typoCh   // MEASURE (D4): the pair sits in the slab's centre cell
