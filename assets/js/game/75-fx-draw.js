@@ -444,14 +444,17 @@ Object.assign(Game.prototype, {
     this._fxAdditive = false;
   },
 
+  // L6b (ARCADE D12, render() calls it after the boss art): smoke frames, source-over, under the beams and the plates
+  // so a kill's smoke never covers a neighbouring plate's text.
+  drawExplosionSmoke(ctx) {
+    for (const ex of this.explosions) if (!ex.done && !ex.isFlash()) ex.drawFrame(ctx);
+  },
+
+  // L12: dying plates (source-over) and the flash frames (additive, on top). The smoke frames moved to L6b (D12).
   drawExplosionSprites(ctx) {
     const list = this.explosions;
     let flashes = 0;
-    for (const ex of list) {
-      if (ex.done) continue;
-      if (ex.isFlash()) { flashes++; continue; }
-      ex.drawFrame(ctx);
-    }
+    for (const ex of list) if (!ex.done && ex.isFlash()) flashes++;
     if (typeof this.drawDyingPlates === "function") this.drawDyingPlates(ctx);   // source-over, before the batch (review R13)
     if (!this.needsAdditiveBatch(flashes)) return;
     this.openAdditive(ctx);

@@ -40,6 +40,7 @@ const IMPACT_FRAME_S = 0.09;        // white / danger plate before the .2 s fade
 const DYING_FADE_S = 0.2;
 const DYING_PLATES_CAP = 24;
 const RAIL_FROM = 0.40;
+const RAIL_STROKE_ALPHA = 0.20;     // ARCADE D12 (was .12): rail hairline alpha, times the rail fade (>= .35 while plates live)
 const VISTA_DRIFT_PX = 20;          // tenth-sector foreground drift amplitude
 const BOSS_BOX_LEFT = 688;          // art box x 688..w-16, y hudSafeTop+8+float..h-24 (VIS-07)
 const BOSS_BOX_RIGHT_PAD = 16;
@@ -705,8 +706,9 @@ Object.assign(Game.prototype, {
     const k = alive ? Math.max(a, 0.35) : a;
     ctx.save();
     ctx.lineWidth = 1;
-    ctx.strokeStyle = PALETTE.rgba("accent", 0.12);
+    ctx.strokeStyle = PALETTE.rgba("accent", RAIL_STROKE_ALPHA);
     ctx.globalAlpha = k;
+    this.debug.railStrokeAlpha = RAIL_STROKE_ALPHA * k;
     ctx.setLineDash([8, 12]);
     ctx.lineDashOffset = this.reduceMotion ? 0 : -((this.starT * 40) % 20);
     ctx.beginPath();
@@ -1345,6 +1347,7 @@ Object.assign(Game.prototype, {
     const boss = (this.inBoss && this.boss) ? this.boss : null;
     if (boss) this.drawBossArt(ctx, boss);                     // L6
     else if (this.bossClear && this.bossDissolve) this.drawBossDissolve(ctx);
+    if (typeof this.drawExplosionSmoke === "function") this.drawExplosionSmoke(ctx);   // L6b (D12): smoke under beams and plates
     this.drawBullets(ctx);                                     // L7
     for (const p of this.powerups) this.drawPowerup(ctx, p);   // L8
     this.drawEnemies(ctx);                                     // L9 (far to near, locked last)
@@ -1352,7 +1355,7 @@ Object.assign(Game.prototype, {
     if (boss) this.drawBossSlab(ctx, boss);                    // L10
     if (boss && typeof this.drawBossHazardMeter === "function") this.drawBossHazardMeter(ctx, this.bossHazardRect()); // L10 surge cell
     this.drawShip(ctx);                                        // L11
-    this.drawExplosionSprites(ctx);                            // L12 (smoke frames, dying plates, then the additive batch opens)
+    this.drawExplosionSprites(ctx);                            // L12 (dying plates, then the additive batch opens with the flash frames; smoke is L6b)
     this.drawParticles(ctx);
     // dying plates are drawn by drawExplosionSprites before its additive batch (review R13); rings / bolts / debris /
     // muzzles by drawBullets (L7) and drawParticles (L12) in 75-fx-draw.js

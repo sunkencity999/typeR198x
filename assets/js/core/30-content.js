@@ -39,6 +39,9 @@ const EXPLOSION_FRAMES = [
 const EXPLOSION_SETS = {
   small:  { frames: [2, 1, 0],                   flashFrames: [2],      scale: 0.9,  frameTime: 0.055 },
   medium: { frames: [9, 7, 6, 5, 4, 3, 8],       flashFrames: [9, 7],   scale: 1.0,  frameTime: 0.06 },
+  // ARCADE D12: word kills use the medium frames at .55 so the blast never hides a neighbouring plate; `medium` (1.0)
+  // stays for the boss finale bursts and the attract kills.
+  kill:   { frames: [9, 7, 6, 5, 4, 3, 8],       flashFrames: [9, 7],   scale: 0.55, frameTime: 0.06 },
   large:  { frames: [15, 14, 12, 11, 13, 19, 17], flashFrames: [15, 14], scale: 1.15, frameTime: 0.07 }
 };
 const BOSS_ARTS = [

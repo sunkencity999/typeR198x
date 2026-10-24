@@ -587,9 +587,10 @@ Object.assign(Game.prototype, {
     return ex;
   },
 
+  // ARCADE D12: 4+ letter words blow up with the kill set (medium frames at .55); letters, short words and minions small.
   getExplosionTypeForEnemy(en) {
     if (!en) return "small";
     if (en.text.length <= 3 || en.kind === "bossMinion") return "small";
-    return "medium";
+    return "kill";
   },
 });
