@@ -9,7 +9,166 @@ sector-10 clear) as the end of the sector and idled there until its wall cap whi
 itself ran at 60 fps / 0.97 during those runs (checked separately: sector 10 with an 80 WPM typist, `out/fpstype`). The
 final probe stops on `victory` and paces the typist by `game.playClock`, so its WPM is honest at any frame rate.
 
+## Training update: lead rulings Z1-Z9 (`wt/rulings`), re-pass on the rulings tree
+
+Measured on 2026-10-24 on `wt/rulings` (training `f02b983` + the ruling commits; the constants are final from `5d111f6`),
+headless Chrome, DPR 1, 1440 x 900, two to eight harness browsers at once plus other agents' browsers (load average
+4-17 on 16 cores; every typist is paced by `game.playClock`, b10 play / wall clock 0.93-0.97). These are the reference
+numbers; the merged-tree re-pass below is their history. JSON: `out/t-pace-balance/*-g1.json`, `*-g2.json` (matrix),
+`*-acq300-g.json` (latency matrix), `stakes-*.json`; `out/b10/final-*.json`, `lat-*.json`; `out/t-arcade-balance/
+summary.json`; the earlier rounds at the two intermediate `fairMul` values in `out/pre-fairmul-1.5/`, `pre-fairmul-1.75/`.
+
+What changed for balance (no PACE knob changed; one ARCADE constant from the rulings retuned twice):
+- **Z5 wave caps** (`42-pacing.js`): a paced wave's cap = max(table cap, stream delivery of its quota at the applied
+  spawn rate x 1.25 + 4 s). W1 stays at the table everywhere, W2 gains 0-1.5 s, W3 6-13 s (S1 W3 22 -> 32.7 s, S5 W3
+  30 -> 43.1 s, S10 W3 40 -> 48.5 s at paceMul 1; delivery barely moves with paceMul because quota and rate scale
+  together). The cap times a wave out only with plates alive (an empty field lifts it) and a timeout's N plates leave
+  the field. A sector's three deliveries stay >= 12 s under its duration at every paceMul, so the sector clock never
+  cuts a pilot who keeps up.
+- **Z6 surge windows** (`50-boss.js`, `COUNTER_SIGNAL.fairMul` / `fairWpm`): a surge charges for max(table window,
+  fairMul x chars x 12 / hand WPM), hand = run speed, else lifetime, else 30 WPM. **fairMul 2.25** (the ruling's floor
+  is 1.5; retune below).
+- **Z2 Overdrive** (a fresh pilot's provisional 25 WPM threshold refreshes with charge / in Overdrive): score only.
+- **Z7 harness**: an optional target-acquisition latency (section "Acquisition latency" below); default typists unchanged.
+
+### R26 / Q1 targets (`t-pace-balance --matrix --parallel 2`, rounds g1 / g2 on the final tree, 20 pass / 0 fail each)
+
+| profile | S1 idle g1 / g2 (target) | S2 idle | S3 idle | longest idle gap | to S1 boss | deaths / damage S1-3 | min hull S1-3 | rank S1-S3 g1; g2 | hand WPM | timeouts | paceMul S1 · S2 · S3 (g1) |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 35 / .90 fresh | 18 / 12 % (not harder) | 8 / 8 % | 5 / 2 % | <= 0.53 s | 39 / 42 s | 0 / 0; 0 / 0 | 100 % | B B B; A A B | 29-33 | none | 1/1/1 · 1.23/1.25/1.24 · 1/1/1 |
+| 55 / .93 fresh | 28 / 24 % (<= 30) | 6 / 2 % | 1 / 3 % | <= 0.55 s | 30 / 32 s | 0 / 0; 0 / 0 | 100 % | S A S; A S A | 49-52 | none | 1/1/1 · 1.35/1.7/2.05 · 1.7/1.52/1.52 |
+| 80 / .97 fresh | 28 / 27 % (<= 30) | 13 / 6 % | 4 / 1 % | <= 0.58 s | 29 / 31 s | 0 / 0; 0 / 0 | 100 % | S S S; S S S | 73-76 | none | 1/1/1 · 1.35/1.7/2.05 · 2.25/2.25/2.25 |
+| 55 / .93 seeded (51) | 6 / 7 % (<= 15) | 2 / 2 % | 2 / 1 % | <= 0.50 s | 42 / 39 s | 0 / 0; 0 / 0 | 100 % | A A A; S S A | 49-50 | none | 1.35/1.7/2.05 · 2.06/2.04/2.07 · 1.72/1.51/1.51 |
+| 80 / .97 seeded (78) | 11 / 11 % (<= 15) | 4 / 4 % | 4 / 2 % | <= 0.58 s | 34 / 32 s | 0 / 0; 0 / 0 | 100 % | S S S; S S S | 70-74 | none | 1.35/1.7/2.05 · 2.4/2.5/2.5 · 2.19/2.2/2.21 |
+
+All six matrix rounds on this branch (r1 / r2 at fairMul 1.5, f1 / f2 at 1.75, g1 / g2 at 2.25) held every target and
+**no wave timed out in any of the 90 sector runs** (the merged-tree re-pass had four 0-escaped wave-3 timeouts). S1 idle
+over the six rounds: 35 fresh 9-18 %, 55 fresh 15-28 %, 80 fresh 20-28 %, 55 seeded 5-8 %, 80 seeded 7-12 %; S2-3 at
+most 13 % for every 55 / 80 run. The thin margins are unchanged in kind: **80 fresh S1** (20-28 % vs 30; paceMul 1.0
+until the 20-interval run gate) and now also **55 fresh S1** (15-28 % vs 30).
+
+### Z6 surge fairness: the fairMul retune (one constant, two steps)
+
+| fairMul | 35 / .90 S1-3 surge damage (runs) | 35 / .90 with 300 ms latency | 55 / .93 S10 jump | 80 / .97 S8-10 jump (started / countered, window / table, window / own time) |
+|---|---|---|---|---|
+| 1.5 (ruling floor) | 14 in 1 of 4 runs (t-arcade-balance S3: 5 chars, window 2.96 s for a 1.98 s segment, a minion and misses inside) | not run | 7 / 4 / 3 fired, 84 surge damage, min hull 45.5 % | 10 / 10, 1.06, 1.61 |
+| 1.75 | 0 in 4 runs (matrix f1 / f2, b10, t-arcade-balance) | **14 (an S3 surge) in 2 of 2 runs** | 7 / 7 / 0, min hull 40 % | 10 / 10, 1.25, 1.75 |
+| **2.25 (shipped)** | **0 in 4 runs** (matrix g1 / g2, b10, t-arcade-balance) | 0 surge damage in 2 of 2 runs (b10 lat took 14 from a wave leak, below) | **7 / 7 / 0, min hull 30.7 %** | **11 / 11, 1.46, 2.25** |
+
+Scratch S3 boss-fight runs of the 35 / .90 typist (window function overridden in the page; `out/z6exp`, git-ignored):
+no latency 1.5: 1 of 12 surges fired (slack down to 0 s), 1.75: 0 of 13 (slack >= 1.23 s); with the 300 ms latency
+1.75: 3 of 24, 2.0: 3 of 24, 2.25: 0 of 24. Every fired surge had a minion on the field (the typist shoots minions past
+the danger line first), 1-4 misses and the re-acquisition of the boss word. Z6 targets on the final tree
+(`t-arcade-balance`, 16 pass / 0 fail): 35 / .90 0 surge damage S1-3; 55 / .93 S10 min hull 30.7 % (>= 15); 80 / .97
+meets real surges in S8-10 (3 / 3 / 5 started, all countered). **For the lead:** at 2.25 a fast pilot's windows are
+1.2-1.6 x the table (the 80 WPM pilot needs ~45 % of its own speed to counter), so S8-10 surges are real but easy for
+it; the ruling's 1.5 keeps them near the table (1.06) but fails the 35 WPM targets. A boss-word-first typist policy
+during a surge (what the tip asks for) would likely pass at a lower fairMul; not changed (harness realism, not a knob).
+
+### Counter-Signal on the final tree (`t-arcade-balance`, 16 pass / 0 fail, `out/t-arcade-balance/summary.json`)
+
+| profile | S | outcome | boss s | surges started / countered / fired | surge dmg | min HP | mean window / table / own time s | rank | WPM |
+|---|---|---|---|---|---|---|---|---|---|
+| 35 / .90 | 1 | clear | 11.9 | 0 / 0 / 0 | 0 | 100 % | - | A | 32 |
+| 35 / .90 | 2 | clear | 22.2 | 1 / 1 / 0 | 0 | 100 % | 5.16 / 2.88 / 2.29 | B | 31 |
+| 35 / .90 | 3 | clear | 31.1 | 1 / 1 / 0 | 0 | 100 % | 4.29 / 2.38 / 1.90 | A | 31 |
+| 55 / .93 | 1 | clear | 6.7 | 0 / 0 / 0 | 0 | 100 % | - | S | 52 |
+| 55 / .93 | 2 | clear | 12.8 | 1 / 1 / 0 | 0 | 100 % | 2.72 / 2.10 / 1.21 | A | 49 |
+| 55 / .93 | 3 | clear | 17.2 | 1 / 1 / 0 | 0 | 100 % | 2.69 / 1.99 / 1.20 | A | 51 |
+| 80 / .97 | 1 | clear | 5.3 | 0 / 0 / 0 | 0 | 100 % | - | S | 74 |
+| 80 / .97 | 2 | clear | 9.0 | 1 / 1 / 0 | 0 | 100 % | 1.80 / 1.80 / 0.67 | S | 71 |
+| 80 / .97 | 3 | clear | 11.6 | 1 / 1 / 0 | 0 | 100 % | 2.26 / 2.26 / 0.99 | S | 72 |
+| 55 / .93 | 10 (jump) | victory | 72.1 | 7 / 7 / 0 | 0 | 30.7 % | 3.79 / 1.41 / 1.68 | B | 48 |
+| 80 / .97 | 10 (jump) | victory | 45.2 | 5 / 5 / 0 | 0 | 100 % | 2.24 / 1.32 / 0.99 | S | 72 |
+| 80 / .97 | 8 (jump, 3 sectors) | clear | 30.8 | 3 / 3 / 0 | 0 | 100 % | 2.11 / 1.53 / 0.94 | S | 72 |
+| 80 / .97 | 9 | clear | 33.2 | 3 / 3 / 0 | 0 | 100 % | 2.33 / 1.50 / 1.03 | S | 75 |
+| 80 / .97 | 10 | victory | 44.3 | 5 / 5 / 0 | 0 | 97.3 % | 1.76 / 1.18 / 0.78 | S | 74 |
+
+Every S2-3 fight starts exactly one surge (Z1: a phase clear keeps the cadence), S1 never surges, no fight fires more
+than 2 per phase, 80 / .97 S10 counters 5 / 5 with the time bonus 0 <= accuracy 4,000 (par). The 55 / .93 S10 min hull
+moved 45.5 -> 40 -> 30.7 % across the three runs while its surge damage went 84 -> 0 -> 0: the rest is minion and wave
+damage, run-to-run variance (merged tree 8 %, ARCADE branch 20-41 %).
+
+### b10 on the final tree (fresh save, sectors 1-3, `--expect`; `out/b10/final-*.json`)
+
+`--expect`: 35 / .90 4 pass / 0 fail, 55 / .93 7 / 0 (S1 boss at 32.2 s, band, counters 2 / 2), 80 / .97 6 / 0 (longest
+idle gap 0.5 s, rank S x3). b3 on the final tree: 14 / 0 (55 / .93 reaches the S1 boss at 30.1 s; L5 W2 incomingCps at a
+pinned 1.0 = 1.36 x 3.7, inside -15 % / +50 %; alive never 0 for > 1.7 s in a spawn phase).
+
+| profile | S | outcome | to boss s | boss s | min HP | dmg | idle max s w1/w2/w3 | surges s/c/f | window / table s | rank | WPM | acc | paceMul w1/w2/w3 | timed out | clock |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 35 / .90 | 1 | clear | 40.7 | 12.1 | 100 % | 0 | 0.28/0.40/0 | 0/0/0 | - | A | 32 | 90.8 | 1/1/1.35 | no/no/no | 0.96 |
+| 35 / .90 | 2 | clear | 61.8 | 18.0 | 100 % | 0 | 0.43/0.37/0.28 | 1/1/0 | 3.48 / 2.16 | A | 31 | 91.0 | 1.32/1.29/1.31 | no/no/no | 0.96 |
+| 35 / .90 | 3 | clear | 69.6 | 29.6 | 100 % | 0 | 0.40/0.07/0 | 1/1/0 | 6.04 / 3.05 | A | 32 | 90.2 | 1/1/1 | no/no/no | 0.97 |
+| 55 / .93 | 1 | clear | 32.2 | 7.7 | 100 % | 0 | 0.32/0.40/0.38 | 0/0/0 | - | S | 50 | 95.8 | 1/1/1 | no/no/no | 0.95 |
+| 55 / .93 | 2 | clear | 53.0 | 12.0 | 100 % | 0 | 0.42/0.27/0.28 | 1/1/0 | 3.24 / 2.40 | S | 51 | 95.1 | 1.35/1.7/2.05 | no/no/no | 0.94 |
+| 55 / .93 | 3 | clear | 61.7 | 18.5 | 100 % | 0 | 0.38/0.35/0 | 1/1/0 | 3.79 / 2.54 | A | 49 | 90.8 | 1.7/1.55/1.56 | no/no/no | 0.95 |
+| 80 / .97 | 1 | clear | 27.4 | 4.6 | 100 % | 0 | 0.50/0.42/0.40 | 0/0/0 | - | S | 74 | 99.0 | 1/1/1 | no/no/no | 0.95 |
+| 80 / .97 | 2 | clear | 34.6 | 8.6 | 100 % | 0 | 0.33/0.27/0.33 | 1/1/0 | 2.40 / 2.40 | S | 73 | 96.6 | 1.35/1.7/2.05 | no/no/no | 0.94 |
+| 80 / .97 | 3 | clear | 58.7 | 11.3 | 100 % | 0 | 0.30/0.23/0.33 | 1/1/0 | 2.55 / 2.54 | S | 75 | 98.5 | 2.26/2.27/2.28 | no/no/no | 0.93 |
+
+### Acquisition latency (lead ruling Z7; `--acquire-ms 300`: 300 ms, 600 ms with probability .1, before the first key of every new target)
+
+The harness typists key every interval with no time to find the next plate, while D2 sets the stream from hand speed
+(intervals inside a target only), so the numbers above are optimistic for humans. With the latency the typist waited
+before the first key of 39-107 targets per sector (mean 314-340 ms; plates, capsules, minions and boss words, on top of
+the key interval). Z7: idle is reported only; deaths and damage targets still apply.
+
+`t-pace-balance --matrix --acquire-ms 300 --tag g` (fairMul 2.25), 5 / 5 profiles exit 0:
+
+| profile | S1 / S2 / S3 idle | longest idle gap | to S1 boss | deaths / damage S1-3 | min hull | rank | hand WPM | timeouts (escaped) |
+|---|---|---|---|---|---|---|---|---|
+| 35 / .90 fresh | 8 / 1 / 1 % | 0.53 s | 57 s | 0 / 0 | 100 % | A A A | 31-33 | none |
+| 55 / .93 fresh | 8 / 1 / 1 % | 0.49 s | 47 s | 0 / 0 | 100 % | A A A | 47-49 | none |
+| 80 / .97 fresh | 14 / 1 / 0 % | 0.52 s | 39 s | 0 / 0 | 100 % | S S S | 71-74 | none |
+| 55 / .93 seeded | 3 / 1 / 1 % | 0.43 s | 55 s | 0 / 0 | 100 % | A A S | 48-51 | S2 W2 (3) |
+| 80 / .97 seeded | 2 / 2 / 1 % | 0.38 s | 43 s | 0 / 0 | 100 % | S S S | 71-73 | none |
+
+b10 with the latency (`out/b10/lat-*.json`):
+
+| profile | S | outcome | to boss s | boss s | min HP | dmg | surges s/c/f | rank | WPM | acc | paceMul w1/w2/w3 | timed out (escaped) | delivery / (target x mul) w1/w2/w3 | acquisitions |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 35 / .90 | 1 | clear | 47.7 | 14.4 | 100 % | 0 | 0/0/0 | B | 30 | 88.1 | 1/1/1 | no/no/no | 1.31/1.35/1.54 | 42 |
+| 35 / .90 | 2 | clear | 69.3 | 30.2 | 100 % | 0 | 1/1/0 | B | 29 | 87.4 | 1.27/1.27/1.23 | no/no/no | 0.75/0.85/0.89 | 63 |
+| 35 / .90 | 3 | clear | 71.7 | 33.5 | 96.5 % | **14 (wave leak)** | 2/2/0 | B | 30 | 89.7 | 1/1/1 | W3 (3) | 0.70/0.79/1.01 | 63 |
+| 55 / .93 | 1 | clear | 37.6 | 9.9 | 100 % | 0 | 0/0/0 | A | 51 | 91.9 | 1/1/1 | no/no/no | 1.29/1.50/1.66 | 39 |
+| 55 / .93 | 2 | clear | 64.3 | 16.0 | 100 % | 0 | 1/1/0 | A | 49 | 93.2 | 1.35/1.7/2.05 | W3 (2) | 0.93/1.09/0.90 | 67 |
+| 55 / .93 | 3 | clear | 82.6 | 23.0 | 100 % | 0 | 1/1/0 | A | 50 | 93.8 | 1.7/1.54/1.55 | W2 (1) | 0.68/0.89/1.07 | 83 |
+| 80 / .97 | 1 | clear | 37.3 | 7.1 | 100 % | 0 | 0/0/0 | S | 73 | 95.3 | 1/1/1.35 | no/no/no | 1.58/1.50/1.78 | 44 |
+| 80 / .97 | 2 | clear | 71.7 | 12.6 | 100 % | 0 | 1/1/0 | S | 73 | 97.3 | 1.7/2.05/2.4 | no/no/no | 1.01/1.07/0.93 | 87 |
+| 80 / .97 | 3 | clear | 82.6 | 17.6 | 100 % | 0 | 1/1/0 | S | 70 | 95.7 | 2.24/2.23/2.2 | W2 (4) | 0.60/0.84/0.91 | 107 |
+
+`--expect` with latency: 35 / .90 4 / 0, 80 / .97 6 / 0, 55 / .93 6 / 1 (b10's delivery band: S3 W1 delivered 0.68 x
+target x paceMul; not a Q1 target). What the latency shows:
+- **Idle drops** (S1 2-14 %, S2-3 0-2 %): the typist spends the acquisition on screen time instead of an empty field.
+- **Deaths: 0 in all 8 latency runs. Damage: 0 except the b10 35 / .90 S3 run (14, one letter leak)** in wave 3 at
+  paceMul 1.0, which then timed out with 3 escaped: with the latency that pilot's throughput (hand 30 WPM, ~25 WPM with
+  the acquisitions) is below sector 3's table stream (W3 = 1.1 x 27.6 WPM). The lever is not a ruling constant: D2
+  never paces below 1.0 and Z5's caps are binding (the longer wave-3 cap keeps the backlog on the field longer). The
+  latency matrix's 35 / .90 run took 0 damage. At fairMul 1.75 both latency runs lost an S3 surge instead (retune above).
+- **paceMul overshoots a latency-bound pilot**: pace follows hand speed (intervals inside a target), so at paceMul
+  1.5-2.4 the stream outruns a typist that also spends ~330 ms per target: the field fills to its caps (delivery 0.6-0.9
+  x the paced target from S2) and waves 2-3 sometimes time out (1-4 escaped), with no damage. If human playtests confirm
+  it, D2's pilotCps could subtract a per-target acquisition time (lead decision; not changed).
+
+### Stakes (D3 + Z5) on the final tree, seeded profile, sector jump then consecutive sectors, one retry allowed (none used)
+
+| profile | sector: hull in (card) -> damage, min hull, wave timeouts (escaped), carry, rank |
+|---|---|
+| 25 / .85 from S3 | S3 400/400 -> 0, 100 %; S4 500/500 -> 198, 60.4 %, W2 (4), carry +4; S5 **481/600** -> 268, 35.5 %, W1 (6) W2 (7), carry +6 +7; S6 **474/700** -> 394, **11.4 %**, W1 (3) W2 (8), carry +3 +8; all waves 1.0, rank C / D / D / D, 0 deaths |
+| 35 / .90 from S4 | S4 500/500 -> 26, 94.8 %; S5 **584/600** -> 176, 68 %, W2 (1), carry +1; S6 **588/700** -> 292, 42.3 %, W1 (3) W2 (6), carry +3 +6; S7 **629/800** -> 494, **16.9 %**, W1 (5) W2 (7), carry +5 +7; all waves 1.0, rank B / C / C / C, 0 deaths |
+| 55 / .93 from S7 | S7 800/800 -> 176, 78 %; S8 **869/900** -> 176, 77 %; S9 **885/1000** -> 454, 43.1 %, W2 (1) W3 (5), carry +1; S10 **787/1100** -> 724, **5.7 %**, W1 (1) W2 (6), carry +1 +6, victory; all waves 1.0, rank B / A / B / B, 0 deaths |
+
+Against the merged tree: the struggling pilots' timeouts now always carry real escapes (1-8 per wave; the merged tree
+had several with 0) and the bigger carries plus the longer wave-3 caps lower the low points: 25 / .85 S6 19.9 -> 11.4 %,
+35 / .90 S7 27.4 -> 16.9 %, 55 / .93 S10 8.5 -> 5.7 %. Nobody died (no Cadet offer). Not a Q1 / Z target; for the lead:
+if S6-7 / S10 become walls in human play, the Cadet offer is the designed release; the escaped carry itself is uncapped
+(every escaped plate joins the next wave's quota, waves 1-2 only).
+
 ## Training update: pace re-pass on the merged tree (WORDS + ARCADE + PACE)
+
+Superseded by the rulings re-pass above; kept as the merged tree's history.
+
 
 Measured on 2026-10-24 on `training` at `9b39599` (Merge PACE, on Merge ARCADE `ea12b33` and Merge WORDS `6a0ee81`),
 headless Chrome, DPR 1, 1440 x 900, one balance browser at a time with other agents' browsers on the machine (every
@@ -205,6 +364,14 @@ ARCADE's surge damage from S2 and its shorter boss time bonus land on exactly th
   nearest targetable enemy, then powerups. In a boss fight the default `danger` policy shoots a minion only once its plate
   has crossed `DANGER_X` (35 % of the width) and otherwise types the boss (`never` is the old harness behaviour where every
   minion leaks; `always` shoots any minion first).
+* Acquisition latency (lead ruling Z7, off by default): `b10.mjs` / `t-pace-balance.mjs` `--acquire-ms N
+  [--acquire-slow-ms 2N] [--acquire-slow-p .1]` (and `typeFor` / `paceType` `{ acquireMs }` in the probe libraries) make
+  the typist wait N ms of play clock (2N with probability .1) before the first key of every target it was not already
+  typing: a new plate, capsule, minion or boss word (a surge reset is the same word), on top of the key interval. An idle
+  gap ends when a target appears, before the wait. `t-pace-balance --matrix --tag x` suffixes the labels per round, and
+  with the latency the idle targets are notes (report only). b10 also records each surge's window, the table window and
+  the pilot's time for the segment (`boss.surgeWindows`), and counts a timed-out wave's escaped plates as the plates
+  alive at its cap (they leave at once, Z5).
 * Profiles: 35 WPM / .90, 55 WPM / .93 (the reference typist), 80 WPM / .97; each from a fresh save through sectors 1-3,
   and sector 10 by `game.startSector(9)` (direct jump, fresh run, 1100 HP). One baseline run and one confirmation run per
   profile and sector set, as the budget asked.

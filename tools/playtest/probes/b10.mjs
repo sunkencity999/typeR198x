@@ -18,14 +18,17 @@
 //                   every minion leaks); 'danger' (default) = a minion whose plate has crossed DANGER_X is shot
 //                   first, otherwise the boss; 'always' = any targetable minion first
 //   --expect        adds the pass/fail lines of that profile's B10 targets (see balance.md)
+//   --acquire-ms N  lead ruling Z7: a target-acquisition latency of N ms (play clock) before the first key of every new
+//                   target, N x 2 (--acquire-slow-ms) with probability .1 (--acquire-slow-p); off by default
 // PACE (D2 / D3): every wave also records the paceMul / quota PACE applied (waveTuning, read after PACE's waveWillStart
-// listener), whether it timed out and how many plates escaped; every sector the hull its card showed (hullIn) and the
-// gross throughput. The incomingCps band is judged per wave against targetCps x the applied paceMul, [0.85, 1.35]
-// (the 0.1 s empty-field rule and the 2-alive top-up from PACE.hungryMin2AtMul feed a fast typist above the stream).
+// listener), whether it timed out and how many plates escaped (alive at the cap, lead ruling Z5); every sector the hull
+// its card showed (hullIn) and the gross throughput. The incomingCps band is judged per wave against targetCps x the
+// applied paceMul, [0.85, 1.35] (the 0.1 s empty-field rule and the 2-alive top-up from PACE.hungryMin2AtMul feed a
+// fast typist above the stream).
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { openProbe, sleep, waitFor } from "./b_lib.mjs";
+import { openProbe, sleep, waitFor, typistTarget, acquireOpts, acquireDelayMs } from "./b_lib.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const args = Object.fromEntries(process.argv.slice(2).map((a, i, arr) => a.startsWith("--") ? [a.slice(2), arr[i + 1]] : null).filter(Boolean));
@@ -36,7 +39,8 @@ const SECTORS = Number(args.sectors || (JUMP ? 1 : 3));
 const MINIONS = args.minions || "danger";
 const EXPECT = args.expect || null;
 const SECONDS = Number(args.seconds || 420);               // wall-clock cap per sector (a sector-10 clear takes ~4 min)
-const LABEL = args.label || `w${WPM}-a${String(ACC).replace(/^0/, "")}-${JUMP ? "j" + JUMP : "s1-" + SECTORS}-${MINIONS}`;
+const ACQ = acquireOpts({ acquireMs: args["acquire-ms"], acquireSlowMs: args["acquire-slow-ms"] ?? null, acquireSlowP: args["acquire-slow-p"] ?? 0.1 });
+const LABEL = args.label || `w${WPM}-a${String(ACC).replace(/^0/, "")}-${JUMP ? "j" + JUMP : "s1-" + SECTORS}-${MINIONS}${ACQ.ms ? `-acq${ACQ.ms}` : ""}`;
 const OUT_DIR = path.resolve(HERE, "../out/b10");
 fs.mkdirSync(OUT_DIR, { recursive: true });
 
@@ -48,8 +52,8 @@ async function installHooks() {
   await P.g(() => {
     const g = window.game;
     if (window.__b10) return;
-    const B = window.__b10 = { spawns: [], leaks: [], damage: [], surges: [], phases: [], boss: [], pace: [], hullIn: null, lastCard: null,
-      reset() { B.spawns = []; B.leaks = []; B.damage = []; B.surges = []; B.phases = []; B.boss = []; B.pace = []; B.hullIn = B.lastCard; } };
+    const B = window.__b10 = { spawns: [], leaks: [], damage: [], surges: [], windows: [], phases: [], boss: [], pace: [], hullIn: null, lastCard: null,
+      reset() { B.spawns = []; B.leaks = []; B.damage = []; B.surges = []; B.windows = []; B.phases = []; B.boss = []; B.pace = []; B.hullIn = B.lastCard; } };
     const ctx = () => ({ t: g.playClock || 0, L: g.levelIndex + 1, wave: g.wave | 0, phase: g.inBoss ? "boss" + (((g.boss && g.boss.phase) | 0) + 1) : g.wavePhase });
     const wrap = (name, after) => {
       const orig = g[name];
@@ -78,9 +82,17 @@ async function installHooks() {
     // PACE: the tuning each wave really ran with (listeners after 42-pacing.js read what it wrote), timeouts, card hull
     if (typeof onGameHook === "function") {
       onGameHook("waveWillStart", function (e) { B.pace.push({ L: e.level, wave: e.wave, mul: e.tuning ? e.tuning.spawnMul : 1, quota: e.tuning ? e.tuning.quota : null, timedOut: false, escaped: 0 }); });
-      onGameHook("waveWillEnd", function (e) { const p = B.pace[B.pace.length - 1]; if (p && !e.byQuota) p.timedOut = true; });
-      onGameHook("waveDrained", function (e) { const p = B.pace[B.pace.length - 1]; if (p && !e.byQuota) p.escaped = e.detonated | 0; });
+      // Z5: the plates alive at the cap leave at once (waveWillEnd's alive); a drain timeout would detonate the rest
+      onGameHook("waveWillEnd", function (e) { const p = B.pace[B.pace.length - 1]; if (p && !e.byQuota) { p.timedOut = true; p.escaped = e.alive | 0; } });
+      onGameHook("waveDrained", function (e) { const p = B.pace[B.pace.length - 1]; if (p && !e.byQuota) p.escaped += e.detonated | 0; });
       onGameHook("sectorCardWillShow", function () { B.lastCard = { hp: this.player.hp, maxHp: this.player.maxHp }; });
+      // Counter-Signal windows (lead ruling Z6): each surge's window, the table window and the pilot's time for the
+      // segment at their hand speed (pilotWpm("base"): run, else lifetime)
+      onGameHook("counterSignal", function (e) {
+        if (e.result !== "start") return;
+        const hand = typeof this.pilotWpm === "function" ? this.pilotWpm("base") : null;
+        B.windows.push({ ...ctx(), chars: e.chars, dur: e.dur, table: typeof surgeDuration === "function" ? surgeDuration(e.chars, e.level, !!e.slow) : null, hand, need: hand > 0 ? e.chars * 12 / hand : null });
+      });
     }
   });
 }
@@ -135,7 +147,8 @@ function tick() {
 }
 
 const interval = 60000 / (Math.max(1, WPM) * 5);
-const report = { label: LABEL, wpm: WPM, accuracy: ACC, minions: MINIONS, jump: JUMP, sectors: [] };
+const report = { label: LABEL, wpm: WPM, accuracy: ACC, minions: MINIONS, jump: JUMP, acquire: ACQ.ms ? ACQ : null, sectors: [] };
+let lastTargetId = null;
 const r1 = (x) => (x === null || x === undefined ? null : Math.round(x * 10) / 10);
 const r2 = (x) => (x === null || x === undefined ? null : Math.round(x * 100) / 100);
 
@@ -144,7 +157,7 @@ for (let s = 0; s < SECTORS; s++) {
   const sectorStart = Date.now();
   const playClock0 = await P.g(() => window.game.playClock || 0);
   const rec = { sector: null, level: null, targetCps: null, secondsToBoss: null, wallSecondsToBoss: null, minHp: Infinity, maxHp: null, death: null, keys: 0, wrongKeys: 0,
-    idleMaxS: 0, idleByWave: [0, 0, 0], samples: 0 };
+    idleMaxS: 0, idleByWave: [0, 0, 0], samples: 0, acquisitions: 0, acquireMs: 0 };
   const idle = { since: null, wave: 0 };
   const dbgAcc = {};   // phase label -> { sum, n, max }
   let bossShot = false;
@@ -169,7 +182,31 @@ for (let s = 0; s < SECTORS; s++) {
     if (!st.inBoss && st.wavePhase === "spawn" && st.waveT >= 10) { a.sum += st.incomingCps; a.n++; }
     rec.samples++;
 
-    const k = st.levelIntro || st.introLocked ? null : await nextKey(MINIONS);
+    let k = null;
+    if (st.levelIntro || st.introLocked) k = null;
+    else if (ACQ.ms > 0) {
+      // Z7: a new target costs an acquisition delay on the play clock before its first key (not counted as idle: a
+      // target is on screen), then the target in front of the typist at that moment is typed
+      let t = await typistTarget(P, MINIONS);
+      if (t && idle.since !== null) {   // a target is up: the idle gap ends here, before the acquisition delay
+        const gap = st.playClock - idle.since;
+        rec.idleMaxS = Math.max(rec.idleMaxS, gap); rec.idleByWave[idle.wave] = Math.max(rec.idleByWave[idle.wave], gap); idle.since = null;
+      }
+      if (t && t.id !== lastTargetId) {
+        const d = acquireDelayMs(ACQ);
+        rec.acquisitions++; rec.acquireMs += d;
+        const due = st.playClock + d / 1000, wallLimit = Date.now() + d * 4 + 50;
+        while (Date.now() < wallLimit) {
+          const pc = await P.g(() => (window.game && window.game.playClock) || 0);
+          if (pc >= due || pc < st.playClock) break;
+          await sleep(Math.min(25, Math.max(5, ((due - pc) * 1000) / 2)));
+        }
+        t = await typistTarget(P, MINIONS);
+        st.playClock = await P.g(() => (window.game && window.game.playClock) || 0);
+      }
+      lastTargetId = t ? t.id : lastTargetId;
+      k = t ? t.k : null;
+    } else k = await nextKey(MINIONS);
     const inSpawn = !st.inBoss && st.wavePhase === "spawn" && !st.levelIntro;
     if (k && /^[a-z ]$/.test(k)) {
       if (idle.since !== null) { const gap = st.playClock - idle.since; rec.idleMaxS = Math.max(rec.idleMaxS, gap); rec.idleByWave[idle.wave] = Math.max(rec.idleByWave[idle.wave], gap); idle.since = null; }
@@ -286,6 +323,7 @@ for (let s = 0; s < SECTORS; s++) {
     damage: B.damage.filter((d) => d.t >= bossUnlock.t).reduce((a, d) => a + d.dmg, 0),
     damageBySource: B.damage.filter((d) => d.t >= bossUnlock.t).reduce((a, d) => { a[d.source] = (a[d.source] || 0) + d.dmg; return a; }, {}),
     surgesFired: B.surges.filter((x) => x.fired).length, surgesCountered: B.surges.filter((x) => x.countered).length,
+    surgeWindows: B.windows.map((w) => ({ chars: w.chars, dur: r2(w.dur), table: r2(w.table), need: r2(w.need), hand: r1(w.hand) })),
     phases: bossPhases.map((bp) => {
       const leaks = B.leaks.filter((l) => l.t >= bp.t0 && l.t < bp.t1).length;
       const a = dbgAcc[`boss${bp.phase}`];

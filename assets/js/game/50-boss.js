@@ -309,7 +309,9 @@ Object.assign(Game.prototype, {
 
   // ------------------------- Counter-Signal (ARCADE D10) -------------------------
   // From sector 2 a boss arms a surge min(COUNTER_SIGNAL.firstAtS, surgeEvery) s after the intro unlock, then every
-  // surgeEvery s; it starts at a segment start and covers the whole segment: window surgeDuration(chars, L, slow).
+  // surgeEvery s; it starts at a segment start and covers the whole segment: window surgeWindow(chars, L, slow, hand
+  // speed), the table's surgeDuration or COUNTER_SIGNAL.fairMul (2.25) x the pilot's time for the segment, whichever
+  // is longer (Z6).
   // Finishing the word counters it (bonus, the bolt reflects into the boss); otherwise it fires from the boss's aim
   // point (DAMAGE.surge, the word starts over with a scramble). At most maxFiredPerPhase fired surges per phase.
   // Telegraph: red glow on the art (drawCounterSignalGlow), the slab outline pulse (70-render.js drawBossSlab), the DOM
@@ -330,13 +332,20 @@ Object.assign(Game.prototype, {
     return !(w > 0) || w < COUNTER_SIGNAL.slowWpm;
   },
 
+  // Z6: the charge window for a segment of `chars` at sector L, from the pilot's measured hand speed (run, else
+  // lifetime, else COUNTER_SIGNAL.fairWpm).
+  counterSignalWindow(chars, L, slow) {
+    const w = typeof this.pilotWpm === "function" ? this.pilotWpm("base") : null;
+    return surgeWindow(chars, L, slow, w > 0 ? w : 0);
+  },
+
   startSurge() {
     const boss = this.boss;
     if (!boss || boss.surge || boss.done || !boss.segment) return null;
     const cfg = LEVELS[this.levelIndex], L = cfg.level;
     const chars = boss.segment.length - (boss.progress | 0);          // === segment length at a segment start
     const slow = this.counterSignalSlow();
-    const dur = surgeDuration(chars, L, slow);
+    const dur = this.counterSignalWindow(chars, L, slow);
     boss.surge = { t: 0, dur, armed: true, chars, seg: boss.segmentIndex, slow };   // one object per surge (rare)
     boss.surgeTimer = 0; boss.surgePending = false; boss.surgeCount = (boss.surgeCount | 0) + 1;
     this._csBarAcc = 0;

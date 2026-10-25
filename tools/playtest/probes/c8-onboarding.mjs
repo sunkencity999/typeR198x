@@ -118,11 +118,15 @@ const finish = await P.g(() => ({ kills: window.game.levelStats.kills, seenFinis
 P.check("FINISH display sets tutorialSeen.finish (memory and storage)", finish.seenFinish === true && !!(finish.blob && finish.blob.finish === true) &&
   finish.log.some((s) => /FINISH/.test(s)), JSON.stringify({ kills: finish.kills, seenFinish: finish.seenFinish, blobFinish: finish.blob && finish.blob.finish }));
 
-// Powerup tip: spawn one in view.
+// Powerup tip: spawn one in view. The tip is one-time: a natural capsule that reached the screen first (a PIERCE drop in
+// the first seconds of wave 1) takes it, and then the probe's SHIELD must not repeat it.
+const puBefore = await P.g(() => window.__toastLog.filter((s) => /TO GRAB IT/.test(s)));
 await P.g(() => { const g = window.game; g.spawnPowerup({ type: "SHIELD", x: 900, y: 320, fromKill: true }); });
 await sleep(300);
 const pu = await P.g(() => window.__toastLog.slice());
-P.check("first powerup on screen -> 'TYPE SHIELD TO GRAB IT'", pu.some((s) => /TYPE SHIELD TO GRAB IT/.test(s)), JSON.stringify(pu.slice(-3)));
+const puTips = pu.filter((s) => /TO GRAB IT/.test(s));
+P.check("first powerup on screen -> its tip 'TYPE <LABEL> TO GRAB IT' once ('TYPE SHIELD TO GRAB IT' for the probe's SHIELD unless a natural capsule came first)",
+  puBefore.length ? (puTips.length === 1 && /^TYPE [A-Z]+ TO GRAB IT$/.test(puTips[0])) : puTips.some((s) => /TYPE SHIELD TO GRAB IT/.test(s)), JSON.stringify({ before: puBefore, last: pu.slice(-3) }));
 
 // Boss tip after the intro.
 await P.forceBoss();

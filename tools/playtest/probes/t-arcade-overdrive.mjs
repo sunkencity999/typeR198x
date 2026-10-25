@@ -1,11 +1,12 @@
-// t-arcade-overdrive (ARCADE D11 Overdrive, ~2.5 min, DPR 1 + a reduced-motion context): the threshold relative to the
-// pilot (25 fresh, 1.05 x run speed), activation from MEASURE's honest intervals at 100 WPM, x1.25 on kill / bossChar /
-// segment only, white-hot beams / amber floaters / plume x2 / the arc, vent on a miss / a leak (hiss, announce, steam),
-// the slow exit, holding through pause and an empty field, a silent charge reset, the silent end on a boss kill and the
-// reset at the next sector, the card note, no per-key save writes, scripted input never charging, reduced motion,
-// drill / Flight Check blocking, the typed-array state and heap growth. Keys go through game.handleTyped(ch) from a
-// setTimeout chain scheduled on performance.now() (exact intervals). PASS = the feature works; exits 1 on any fail or
-// page / console error.
+// t-arcade-overdrive (ARCADE D11 Overdrive, ~3 min, DPR 1 + a fresh-pilot and a reduced-motion context): the
+// threshold relative to the pilot (25 fresh, 1.05 x run speed; a first Overdrive started at the provisional floor meets
+// the real T and ends by the slow rule, lead ruling Z2), activation from MEASURE's honest intervals at 100 WPM, x1.25 on
+// kill / bossChar / segment only, white-hot beams / amber floaters / plume x2 / the arc, vent on a miss / a leak (hiss,
+// announce, steam), the slow exit, holding through pause and an empty field, a silent charge reset, the silent end on a
+// boss kill and the reset at the next sector, the card note, no per-key save writes, scripted input never charging,
+// reduced motion, drill (a real MODES drill, a daily as the control) / Flight Check blocking, the typed-array state and heap growth. Keys go through
+// game.handleTyped(ch) from a setTimeout chain scheduled on performance.now() (exact intervals). PASS = the feature
+// works; exits 1 on any fail or page / console error.
 import { openProbe, sleep, waitFor, installTypist, freshControlled } from "./measure_lib.mjs";
 import { harnessFlags } from "./_lib.mjs";
 
@@ -19,7 +20,8 @@ async function installOd(T) {
     const g = window.game;
     const O = window.__od = { ev: [], ann: [], keyT: [], score: [], lasers: [], floaters: [], frames: [], sample: false, snaps: [], store: 0, countStore: false, steam: [], pushes: 0 };
     onGameHook("overdrive", function (e) {
-      O.ev.push({ on: e.on, reason: e.reason, ms: e.ms, t: performance.now(), cue: this.sfx.lastCue, titles: [this.callout && this.callout.title, ...(this.calloutQueue || []).map((c) => c.title)], ann: O.ann[O.ann.length - 1] || "" });
+      O.ev.push({ on: e.on, reason: e.reason, ms: e.ms, t: performance.now(), cue: this.sfx.lastCue, titles: [this.callout && this.callout.title, ...(this.calloutQueue || []).map((c) => c.title)], ann: O.ann[O.ann.length - 1] || "",
+        T: this._od ? this._od.threshold : null, provisional: this._od ? this._od.provisional : null });
     });
     onGameHook("keyCorrect", function (e) { if (O.keyT.length < 6000) O.keyT.push(e.t); });
     const wrap = (name, fn) => { const o = g[name]; g[name] = function () { return fn.call(this, o, arguments); }; };
@@ -57,7 +59,7 @@ async function installOd(T) {
         else if (s.clear) T.clear();
         else if (s.plate) T.plate(s.plate, s.lane == null ? 2 : s.lane, s.x == null ? null : s.x);
         else if (s.capsule) T.capsule(s.capsule, s.lane == null ? 2 : s.lane);
-        else if (s.snap) { const S = g._od; O.snaps.push({ label: s.snap, t: performance.now(), on: g.overdriveOn === true, charge: S.charge, burst: S.burst, threshold: S.threshold, count: S.count, clock: S.clock, reason: S.lastReason, cue: g.sfx.lastCue, ev: O.ev.length, ann: O.ann.length }); }
+        else if (s.snap) { const S = g._od; O.snaps.push({ label: s.snap, t: performance.now(), on: g.overdriveOn === true, charge: S.charge, burst: S.burst, threshold: S.threshold, count: S.count, clock: S.clock, reason: S.lastReason, cue: g.sfx.lastCue, ev: O.ev.length, ann: O.ann.length, run: typeof g.typistSpeed === "function" ? { ...g.typistSpeed("run") } : null }); }
         else if (s.ch) g.handleTyped(s.ch);
       };
       const next = () => {
@@ -78,15 +80,27 @@ const PoolW = ["skylines", "galaxies", "moonbeam", "starship", "sunbeams", "cros
 let wi = 0;
 const nextWords = (n) => Array.from({ length: n }, () => PoolW[(wi++) % PoolW.length]);
 // Typing plan: each word is pushed as a plate just before its first key; extra = [{ afterWord, steps(t) }].
-function plan(words, ms, { start = 40, hold = true } = {}) {
+// gap: extra ms between two words, with the next plate already up (a between-target pause inside the 600 ms grace: the
+// arc keeps filling, no interval is added), so MEASURE's 20th interval comes later than a fresh pilot's first activation.
+function plan(words, ms, { start = 40, hold = true, gap = 0 } = {}) {
   const steps = [];
   let t = start;
-  for (const w of words) {
-    if (hold) steps.push({ at: t - 20, hold: true });
-    steps.push({ at: t - 10, plate: w });
+  words.forEach((w, i) => {
+    const up = t;
+    if (i && gap) t += gap;
+    if (hold) steps.push({ at: up - 20, hold: true });
+    steps.push({ at: up - 10, plate: w });
     for (const ch of w) { steps.push({ at: t, ch }); t += ms; }
-  }
+  });
   return { steps, end: t };
+}
+// A fresh pilot's first Overdrive (checks 2 and 2b): three words at 120 ms / key (100 WPM) with 400 ms between words
+// activate it at ~2.5 s while T is the provisional 25 WPM floor, before the 20th interval (~3.7 s); the next words at
+// 90 ms / key (133 WPM) keep it on once T meets 1.05 x the run speed (Z2), whatever the timer jitter.
+function firstOdPlan() {
+  const a = plan(nextWords(3), 120, { gap: 400 });
+  const b = plan(nextWords(2), 90, { start: a.end + 120 });
+  return { steps: [...a.steps, ...b.steps], end: b.end };
 }
 const run = (T, steps) => T.g((s) => window.__odrun(s), steps);
 const od = (T = P) => T.g(() => { const S = window.game._od; return { on: window.game.overdriveOn === true, charge: S.charge, burst: S.burst, threshold: S.threshold, count: S.count, clock: S.clock, reason: S.lastReason, ventT: S.ventT, activations: S.activations }; });
@@ -109,12 +123,12 @@ const t1 = await P.g(() => {
 P.check("1. overdriveState() fields; fresh threshold 25 (no run / lifetime speed); stubbed run 60 (n 50) -> pilotWpm('run') 60 and threshold 63; n 19 -> run ignored (25)",
   t1.missing.length === 0 && t1.typed && t1.fresh.T === 25 && t1.fresh.S === 25 && t1.fresh.run === null && t1.fresh.base === null && t1.stub.run === 60 && near(t1.stub.T, 63) && t1.stubFew.run === null && t1.stubFew.T === 25 && t1.measure, t1);
 
-// 2-4. Run A at 120 ms / key (100 WPM) on a fresh pilot (T 25): words, a SHIELD capsule, more words
+// 2-4. Run A on a fresh pilot (T 25): 100 WPM words (firstOdPlan), a SHIELD capsule and more words at 133 WPM
 await P.g(() => { window.__od.sample = true; window.__od.frames.length = 0; window.__od.keyT.length = 0; });
-const A1 = plan(nextWords(5), 120);
+const A1 = firstOdPlan();
 const capT = A1.end;
-const capSteps = [{ at: capT - 20, hold: true }, { at: capT - 10, capsule: "SHIELD" }, ...[..."shield"].map((ch, k) => ({ at: capT + k * 120, ch }))];
-const A2 = plan(nextWords(4), 120, { start: capT + 6 * 120 });
+const capSteps = [{ at: capT - 20, hold: true }, { at: capT - 10, capsule: "SHIELD" }, ...[..."shield"].map((ch, k) => ({ at: capT + k * 90, ch }))];
+const A2 = plan(nextWords(4), 90, { start: capT + 6 * 90 });
 await run(P, [...A1.steps, ...capSteps, ...A2.steps]);
 await P.g(() => { window.__od.sample = false; });
 const A = await P.g(() => { const O = window.__od; return { ev: O.ev.slice(), key2: O.keyT[1], ann: O.ann.slice(), frames: O.frames.slice(), lasers: O.lasers.slice(), floaters: O.floaters.slice(), score: O.score.slice(), on: window.game.overdriveOn === true }; });
@@ -295,27 +309,37 @@ const t13b = await P.g(() => { const O = window.__od; O.sample = false; const ch
 await P.g(() => window.__ty.clear());
 P.check("13b. 6 keys at 80 WPM then a 2 s pause with the plate up, T at the 25 WPM floor: the charge never fills (peak < .6) and drains during the pause, no activation", T13b === 25 && !t13b.anyOn && t13b.peak > 0 && t13b.peak < 0.6 && t13b.end < t13b.peak, { T: T13b, ...t13b });
 
-// 15. Drill (MODES): blocked. MODES is not merged on this branch: the block is checked with run.mode = "drill" (what
-// MODES sets) and re-run after MODES merges (CONTRACT 4.1); the Flight Check block reads ONBOARD's flightCheck.
+// 15. Drill (MODES): blocked, in a real drill (MODES' beginModeRun from the menu, lead ruling Z8), with a Daily Sortie as
+//     the control (Overdrive charges there); the Flight Check block reads ONBOARD's flightCheck. Both runs hold the
+//     field and type the same 6 words at 75 ms / key (160 WPM) over the stubbed T of 63 WPM.
+async function modeRunCharge(mode) {
+  const ok = await P.g((m) => { const g = window.game; g.stopToMenu(true); return g.beginModeRun(m); }, mode);
+  const live = ok && await waitFor(P, () => { const g = window.game; return g.mode === "playing" && !g.levelIntro && g.wavePhase === "spawn"; }, 15000);
+  await P.g(() => { window.__ty.clear(); window.__ty.hold(); window.__od.frames.length = 0; window.__od.sample = true; });
+  if (live) await run(P, plan(nextWords(6), 75).steps);
+  return P.g((ok) => {
+    const g = window.game, O = window.__od;
+    O.sample = false;
+    const r = { ok, runMode: g.runMode(), runRecordMode: g.run && g.run.mode, blocked: g.odBlocked(), frames: O.frames.length,
+      maxCharge: Math.round(Math.max(0, ...O.frames.map((f) => f.charge)) * 100) / 100, anyOn: O.frames.some((f) => f.on) };
+    window.__ty.clear();
+    return r;
+  }, !!live);
+}
 const hasModes = await P.g(() => typeof window.game.beginModeRun === "function");
-if (!hasModes) P.note("15. drill via MODES' beginModeRun", "MODES absent on this branch: simulated with run.mode = 'drill'; re-run after MODES merges");
-await P.g(() => { const g = window.game; g.run.mode = "drill"; window.__od.frames.length = 0; window.__od.sample = true; });
-await run(P, plan(nextWords(6), 75).steps);
-const t15 = await P.g(() => {
-  const g = window.game, O = window.__od;
-  O.sample = false;
-  const maxCharge = Math.max(0, ...O.frames.map((f) => f.charge)), anyOn = O.frames.some((f) => f.on);
-  const drillBlocked = g.odBlocked();
-  g.run.mode = "campaign";
-  const fc0 = g.flightCheck;
+const t15d = hasModes ? await modeRunCharge("drill") : { ok: false };
+const t15c = hasModes ? await modeRunCharge("daily") : { ok: false };
+const t15f = await P.g(() => {
+  const g = window.game, fc0 = g.flightCheck;
+  const daily = g.odBlocked();
   g.flightCheck = { probe: true };
   const fcBlocked = g.odBlocked();
   g.flightCheck = fc0 || null;
-  return { maxCharge, anyOn, drillBlocked, fcBlocked, campaignBlocked: g.odBlocked(), frames: O.frames.length };
+  return { daily, fcBlocked };
 });
-await P.g(() => window.__ty.clear());
-P.check("15. drill (run mode 'drill'): 3.6 s at 160 WPM never charges or activates; the Flight Check (flightCheck set) blocks it too; campaign does not",
-  t15.frames > 60 && !t15.anyOn && t15.maxCharge === 0 && t15.drillBlocked && t15.fcBlocked && !t15.campaignBlocked, t15);
+P.check("15. a real drill (beginModeRun): 3.6 s at 160 WPM never charges or activates (odBlocked); the Daily Sortie control with the same typing charges and activates; the Flight Check (flightCheck set) blocks it too",
+  hasModes && t15d.ok && t15d.runMode === "drill" && t15d.runRecordMode === "drill" && t15d.blocked && t15d.frames > 60 && !t15d.anyOn && t15d.maxCharge === 0
+    && t15c.ok && t15c.runMode === "daily" && !t15c.blocked && t15c.maxCharge > 0.5 && t15c.anyOn && !t15f.daily && t15f.fcBlocked, { drill: t15d, daily: t15c, flightCheck: t15f });
 
 // 16. Typed arrays; heap growth over 10 s of Overdrive typing < 1 MB (after a forced GC)
 const cdp = await P.cdp();
@@ -331,31 +355,63 @@ const t16 = await P.g(() => ({ endAt: window.game._od.endAt instanceof Float64Ar
 P.check("16. state ring is Float64Array (64); JS heap growth over 10 s of typing in Overdrive < 1 MB (forced GC)", t16.endAt && t16.ms && t16.len === 64 && onAt0 && onAt1 && h1 - h0 < 1024 * 1024,
   { ...t16, onAt0, onAt1, heapDeltaKB: Math.round((h1 - h0) / 1024) });
 
-// 14. Reduced motion: steady arc alpha while active, no vent particles
-{
-  const ctx = await P.browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
+// A second browser context on a fresh save, started from the menu (sector 1, typist installed, field held).
+async function freshContext(tag, name, opts = {}) {
+  const ctx = await P.browser.newContext({ viewport: { width: 1440, height: 900 }, ...opts });
   await harnessFlags(ctx);
   await ctx.addInitScript((k) => { try { localStorage.removeItem(k); } catch {} }, "typesmup198x.save.v1");
   const page = await ctx.newPage();
-  page.on("pageerror", (e) => P.errors.pageErrors.push("rm: " + String(e && e.stack || e)));
-  page.on("console", (m) => { if (m.type() === "error") P.errors.consoleErrors.push("rm: " + m.text()); });
-  const R = { g: (fn, a) => page.evaluate(fn, a), page };
+  page.on("pageerror", (e) => P.errors.pageErrors.push(tag + ": " + String(e && e.stack || e)));
+  page.on("console", (m) => { if (m.type() === "error") P.errors.consoleErrors.push(tag + ": " + m.text()); });
+  const R = { g: (fn, a) => page.evaluate(fn, a), page, ctx };
   await page.goto(P.base, { waitUntil: "load" });
   await page.waitForFunction(() => { const el = document.getElementById("loadingOverlay"); return !el || el.classList.contains("hidden") || getComputedStyle(el).visibility === "hidden"; }, null, { timeout: 120000 });
-  await page.fill("#playerName", "CALM").catch(() => {});
+  await page.fill("#playerName", name).catch(() => {});
   await page.click("#btnStart");
   try { const s = page.locator("#btnStoryLaunch"); await s.waitFor({ state: "visible", timeout: 2500 }); await s.click(); } catch {}
   await page.waitForFunction(() => window.game && window.game.mode === "playing" && !window.game.levelIntro, null, { timeout: 30000 });
   await installTypist(R);
   await R.g(() => { window.__ty.clear(); window.__ty.hold(); });
   await installOd(R);
+  return R;
+}
+
+// 2c. Lead ruling Z2: a fresh pilot's first Overdrive starts while T is the provisional 25 WPM floor (no run speed yet);
+//     once MEASURE has 20 intervals T refreshes to 1.05 x the run speed while it is active, so slowing down ends it by the
+//     normal rule (slow, 1 s under 0.9 T) instead of lasting until a miss. 3-letter words at 200 ms / key (60 WPM)
+//     activate at ~3 s, well before the 20th interval (~5.8 s); then 420 ms / key (29 WPM, above the floor's 22.5 exit).
+{
+  const R = await freshContext("z2", "FIRSTOD");
+  const W3 = ["sky", "map", "cat", "dog", "sun", "red", "box", "pen", "cup", "hat", "jet", "kit", "log", "net"];
+  const A = plan(W3, 200);
+  const B = plan(["fog", "tin", "rug", "wax", "yak", "elk"], 420, { start: A.end });
+  await run(R, [...A.steps, { at: A.end - 1, snap: "slow2c" }, ...B.steps]);
+  const r = await R.g(() => {
+    const O = window.__od, g = window.game, S = g._od, snap = O.snaps.find((x) => x.label === "slow2c");
+    const s = g.typistSpeed("run");
+    return { ev: O.ev.map((e) => ({ on: e.on, reason: e.reason, T: e.T && Math.round(e.T * 10) / 10, provisional: e.provisional, dt: snap ? Math.round(e.t - snap.t) : null })),
+      snap: snap && { on: snap.on, T: Math.round(snap.threshold * 10) / 10, runWpm: snap.run && Math.round(snap.run.wpm * 10) / 10, runN: snap.run && snap.run.n },
+      T: Math.round(S.threshold * 10) / 10, provisional: S.provisional, run: { wpm: Math.round(s.wpm * 10) / 10, n: s.n },
+      misses: g.levelStats.total - g.levelStats.correct, reason: S.lastReason, on: g.overdriveOn === true };
+  });
+  const first = r.ev.find((e) => e.on), end = r.ev.find((e) => !e.on);
+  P.check("2c. Z2: a fresh pilot's first Overdrive (activated at the provisional floor, T 25) meets T = 1.05 x run speed once the run speed exists and ends by the slow rule after slowing to 29 WPM (no miss), within 4.5 s of the slowdown",
+    !!first && first.T === 25 && first.provisional === true && !!r.snap && r.snap.on && r.snap.T > 50 && r.snap.runN >= 20 && Math.abs(r.snap.T - 1.05 * r.snap.runWpm) < 3 && !r.provisional
+      && !!end && end.reason === "slow" && end.dt !== null && end.dt >= 0 && end.dt <= 4500 && r.misses === 0 && !r.on, r);
+  await R.ctx.close();
+}
+
+// 14. Reduced motion: steady arc alpha while active, no vent particles
+{
+  const R = await freshContext("rm", "CALM", { reducedMotion: "reduce" });
+  const page = R.page, ctx = R.ctx;
   // 2b (fresh save, S1, tutorial on): an S1 tutorial tip is on screen when the first Overdrive fires; the Overdrive tip
   //    stacks beside it under its own toast key instead of replacing it (the other S1 tips are marked seen so none
   //    takes the tip slot meanwhile)
   await R.g(() => { const g = window.game, ts = g.save.tutorialSeen; ts.lock = ts.finish = ts.release = ts.accuracy = true; g.tutorialToast("powerup", "TYPE SHIELD TO GRAB IT", 20000); });
   await R.g(() => { window.__od.sample = true; });
   wi = 0;
-  await run(R, plan(nextWords(5), 120).steps);
+  await run(R, firstOdPlan().steps);
   const tip = await R.g(() => ({ on: window.game.overdriveOn === true, enabled: window.game.tutorialEnabled(), toasts: [...document.querySelectorAll(".toast")].map((e) => e.textContent) }));
   P.check("2b. first Overdrive on a save with an S1 tutorial tip up: the Overdrive tip stacks beside it (own toast key), the tutorial tip stays",
     tip.on && tip.enabled && tip.toasts.includes("TYPE SHIELD TO GRAB IT") && tip.toasts.some((t) => /^OVERDRIVE — FAST AND CLEAN/.test(t)), tip);

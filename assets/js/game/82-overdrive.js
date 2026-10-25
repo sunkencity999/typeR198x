@@ -4,7 +4,9 @@
 // leak, tick, modeChange, sectorStart, runWillStart, scoreWillAdd, results, checkpoint, checkpointRestored, counterSignal,
 // bossKill; emitted: overdrive. Top-level names OVERDRIVE / OD_*. Off in Drill and during the Flight Check.
 //
-// Model (spec-arcade 3): T = max(1.05 x the pilot's run speed (else lifetime), 25 WPM). The burst is the speed of the
+// Model (spec-arcade 3): T = max(1.05 x the pilot's run speed (else lifetime), 25 WPM); while no run / lifetime speed
+// exists T is the provisional 25 WPM floor and refreshes every 1 s even with charge or in Overdrive (lead ruling Z2), so
+// a fresh pilot's first Overdrive meets 1.05 x the run speed and ends by the normal rule. The burst is the speed of the
 // qualifying intervals (MEASURE's typistInterval; an own D1 chain from keyCorrect when MEASURE is absent) that ended in
 // the last 2.5 s of ENGAGED time (something typable on screen, not paused / card / intro / finale), with the open interval
 // counted once it is slower than the average. A charge fills at 1/2 s while the burst >= T and the pilot is typing (the
@@ -33,7 +35,7 @@ Object.assign(Game.prototype, {
     let S = this._od;
     if (!S) {
       S = this._od = {
-        enabled: true, on: false, charge: 0, below: 0, threshold: OVERDRIVE.floorWpm, burst: NaN, clock: 0, open: 0, chainLive: false,
+        enabled: true, on: false, charge: 0, below: 0, threshold: OVERDRIVE.floorWpm, provisional: true, burst: NaN, clock: 0, open: 0, chainLive: false,
         endAt: new Float64Array(OD_RING_N), ms: new Float64Array(OD_RING_N), head: 0, count: 0, lastRef: null, lastT: 0, runN: 0, runMs: 0,
         refreshAcc: 0, ventT: 0, ventFrom: 0, ventDanger: false, activations: 0, lastReason: "", arcDraws: 0, arcAlpha: 0
       };
@@ -106,9 +108,16 @@ Object.assign(Game.prototype, {
     return sum > 0 ? 12000 * n / sum : null;
   },
 
-  odThreshold() {
-    const b = this.pilotWpm("base");
+  odThreshold(base) {
+    const b = base === undefined ? this.pilotWpm("base") : base;
     return Math.max(OVERDRIVE.thresholdMul * (b > 0 ? b : 0), OVERDRIVE.floorWpm);
+  },
+
+  // T from the pilot's speed now; provisional while there is no run / lifetime speed (T is the 25 WPM floor).
+  odRefreshThreshold() {
+    const S = this.odState(), b = this.pilotWpm("base");
+    S.provisional = !(b > 0);
+    return (S.threshold = this.odThreshold(b));
   },
 
   // One qualifying interval into the burst ring (ignored under 25 ms: scripted input / key chatter). own = the
@@ -162,12 +171,15 @@ Object.assign(Game.prototype, {
       // low threshold (the 25 WPM floor) long enough to fill the arc with nobody typing.
       const typing = (S.chainLive ? S.open : S.open - OVERDRIVE.acquireGraceMs) <= OVERDRIVE.typingGapMs;
       if (b === b) S.charge = clamp(S.charge + (b >= T && typing ? raw / OVERDRIVE.fillS : -OVERDRIVE.drainPerS * raw), 0, 1);
+      // T refreshes every 1 s while the arc is empty, and while it is still the provisional floor also with charge (Z2).
       if (S.charge >= 1) this.odActivate();
-      else if (S.charge === 0 && (S.refreshAcc += raw) >= OVERDRIVE.refreshS) { S.refreshAcc = 0; S.threshold = this.odThreshold(); }
+      else if ((S.charge === 0 || S.provisional) && (S.refreshAcc += raw) >= OVERDRIVE.refreshS) { S.refreshAcc = 0; this.odRefreshThreshold(); }
     } else {
       const ms = raw * 1000;
       if (this.levelStats) this.levelStats.overdriveMs = (Number(this.levelStats.overdriveMs) || 0) + ms;
       if (this.stats) this.stats.overdriveMs = (Number(this.stats.overdriveMs) || 0) + ms;
+      // Z2: an Overdrive that started at the provisional floor meets the real T as soon as the run speed exists.
+      if (S.provisional && (S.refreshAcc += raw) >= OVERDRIVE.refreshS) { S.refreshAcc = 0; this.odRefreshThreshold(); }
       if (b === b) {
         if (b >= OVERDRIVE.exitMul * T) S.below = 0;
         else if ((S.below += raw) >= OVERDRIVE.exitBelowS) this.odEnd("slow", true);
@@ -242,7 +254,7 @@ Object.assign(Game.prototype, {
     S.lastRef = null; S.lastT = 0; S.refreshAcc = 0; S.ventT = 0; S.burst = NaN;
     if (newRun) { S.runN = 0; S.runMs = 0; }
     this.overdriveOn = false;
-    S.threshold = this.odThreshold();
+    this.odRefreshThreshold();
   },
 
   // ------------------------- Effects -------------------------

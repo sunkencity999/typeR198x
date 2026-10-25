@@ -78,7 +78,7 @@ const PHRASES = Object.freeze([
 ]);
 
 const LEXICON_INVENTIONS = Object.freeze([
-  "tokyo", "saturn", "digi", "retrobit", "chrono", "lazer", "sparkplug", "polystar", "afterburn", "cyberline",
+  "tokyo", "saturn", "japan", "digi", "retrobit", "chrono", "lazer", "sparkplug", "polystar", "afterburn", "cyberline",
   "turbowave", "nighttrain", "skybridge", "hyperjump", "nanoforge", "phasegate", "neonforge", "datastream",
   "holomatrix", "retroshock", "geostorm", "ionlanes", "spectralink", "quantaflux", "metadrift", "laserbank",
   "dreamline", "citylight", "hyperlane", "dataglide", "omnivoid", "nanoloom", "stormrail", "polyverse", "synthwave",

@@ -1,7 +1,7 @@
 // Type-R 198X — PACE track (D2 / D3): pace follows the pilot (paceMul per wave into this.waveTuning), PERFECT WAVE by
 // quota only, WAVE TIMED OUT with quota carry, hull carry from sector 4, the Cadet assist and the diff() row. Loads after
 // 40-combat.js. Hooks consumed: waveWillStart, waveWillEnd, waveDrained, levelWillStart, checkpointRestored,
-// clearWillRepair, results, recordWillSave, gameOverWillShow, levelCompleteWillShow, sectorCardWillShow (plus
+// clearWillRepair, results, recordWillSave, gameOverWillShow, levelCompleteWillShow, sectorCardWillShow, modesRunStart (plus
 // bossWillApproach: a wave-3 timeout whose drain the sector clock cuts short still gets its callout). Top-level names
 // PACE* / pace*. No per-frame code, no canvas drawing, no save writes of its own (run.pace rides the existing save points).
 //
@@ -10,9 +10,11 @@
 // (>= 60 intervals, so a Flight Check alone never moves a fresh pilot's S1 W1 off 1.0), else the table. The wave's
 // tuning (scaffold, 40-combat.js beginWave) gets quota x mul (+ escaped carry), spawn rate x mul, maxEnemies +
 // min(3, round(2 (mul - 1))), plate speed x (1 + 0.15 (mul - 1)) and, from paceMul 1.35, an empty-field top-up to 2 alive.
-// Stakes (D3): a wave that ends by its cap pays no PERFECT WAVE and plays no clear sting; at its drain end the leftovers
-// detonate as before and "WAVE TIMED OUT · N ESCAPED" counts them into the next wave of the sector. Clears of sectors
-// 4-9 repair half of the missing hull and carry the rest. Cadet (D2): from the second death in one sector the Game Over
+// Stakes (D3, lead ruling Z5): a wave's cap is computed from its quota and stream (>= delivery x 1.25 + 4 s, never below
+// the table), and the cap times a wave out only with plates alive (40-combat.js), so a pilot who kills everything that
+// spawns never times out. A timed-out wave pays no PERFECT WAVE and plays no clear sting; its N plates leave the field at
+// once (they warp off, no explosion, no damage) and at the drain end "WAVE TIMED OUT · N ESCAPED" counts them into the
+// next wave of the sector. Clears of sectors 4-9 repair half of the missing hull and carry the rest. Cadet (D2): from the second death in one sector the Game Over
 // card offers "Fly at Cadet pace" (stream x0.75, damage x0.75, score x0.8, tag CADET) until that sector is cleared.
 
 // ----------------------------- Tuning: every PACE number (the balance re-pass retunes here) -----------------------------
@@ -40,6 +42,8 @@ const PACE = {
   hullCarryFromLevel: 4,      // clears of sectors 4..9 carry hull; clears of 1..3 refill; 10 is the victory
   hullRepairFrac: 0.5,        // a carrying clear repairs 50 % of the missing hull fraction
   timeoutCalloutS: 1.6,       // WAVE TIMED OUT callout duration
+  capDeliveryMul: 1.25,       // Z5: wave cap >= stream delivery of the quota x 1.25 + 4 s, never below the table cap
+  capMarginS: 4,
   paceTagMin: 1.1,            // results tag "PACE xN.N" when the sector's mean paceMul is at least this
   pinMin: 0.5                 // pacePin (probes) lower bound; the normaliser accepts the same range
 };
@@ -88,6 +92,20 @@ function paceStepMul(prev, target) {
   return paceRound2(clamp(clamp(t, p - PACE.stepMax, p + PACE.stepMax), PACE.mulMin, PACE.mulMax));
 }
 
+// Z5: seconds the stream needs to deliver a wave's quota at its spawn rate x spawnMul (spawnAcc primed at
+// SPAWN_ACC_PRIME, the intra-wave ramp as for a pilot who keeps up: the kills trail the spawns by one plate).
+function paceDeliveryS(cfg, wave, quota, spawnMul) {
+  const q = Math.max(1, quota | 0), m = spawnMul > 0 ? spawnMul : 1;
+  let s = (1 - SPAWN_ACC_PRIME) / (waveSpawnRate(cfg, wave, 0, q) * m);
+  for (let j = 2; j <= q; j++) s += 1 / (waveSpawnRate(cfg, wave, j - 2, q) * m);
+  return s;
+}
+
+// Z5: the wave cap, max(table cap, delivery x 1.25 + 4 s), rounded up to 0.01 s.
+function paceWaveCap(cfg, wave, quota, spawnMul) {
+  return Math.ceil(100 * Math.max(cfg.cap, PACE.capDeliveryMul * paceDeliveryS(cfg, wave, quota, spawnMul) + PACE.capMarginS)) / 100;
+}
+
 // Writes the wave tuning the scaffold spawner reads (40-combat.js tickSpawner / spawnEnemy / tickWaves, 60-hud.js).
 function paceApplyTuning(t, cfg, wave, mul, carry) {
   const w = clamp(wave | 0, 0, 2);
@@ -96,6 +114,7 @@ function paceApplyTuning(t, cfg, wave, mul, carry) {
   t.maxEnemiesAdd = clamp(Math.round(PACE.maxEnemiesPerMul * (mul - 1)), 0, PACE.maxEnemiesAddMax) || 0;   // -0 -> 0
   t.speedMul = 1 + PACE.speedPerMul * (mul - 1);
   t.hungryMinAlive = mul >= PACE.hungryMin2AtMul ? 2 : HUNGRY_MIN_ALIVE;
+  t.cap = paceWaveCap(cfg, w, t.quota, mul);
   return t;
 }
 
@@ -161,6 +180,7 @@ function paceNormalizeState(s) {
   on("gameOverWillShow", "paceOnGameOverWillShow");
   on("levelCompleteWillShow", "paceOnLevelCompleteWillShow");
   on("sectorCardWillShow", "paceOnSectorCardWillShow");
+  on("modesRunStart", "paceOnModesRunStart");
 })();
 
 Object.assign(Game.prototype, {
@@ -240,6 +260,7 @@ Object.assign(Game.prototype, {
       // Continue / a wave replayed after a reload: the same tuning, no new step; the replay makes its own carry.
       paceApplyTuning(t, cfg, w, a.mul, 0);
       t.quota = a.quota;
+      t.cap = paceWaveCap(cfg, w, t.quota, a.mul);
       if (ps.carryTo && ps.carryTo.level === L && ps.carryTo.wave === w + 1) { ps.carry = 0; ps.carryTo = null; }
       this._paceLast = { level: L, wave: w, mul: a.mul, target: null, source: "replay", cps: null, wpm: null, n: null, carry: 0, quota: t.quota };
       return;
@@ -270,32 +291,53 @@ Object.assign(Game.prototype, {
     if (evt.byQuota || this.paceInCheck()) return;
     evt.perfect = false;     // a wave that runs out of time never pays PERFECT WAVE
     evt.clearSfx = false;    // and plays no clear sting
-    this._paceTimeout = { level: evt.level | 0, wave: evt.wave | 0 };
+    // Z5: the plates still alive at the cap leave the field now (no explosion); they are the N that escaped.
+    this._paceTimeout = { level: evt.level | 0, wave: evt.wave | 0, n: this.paceEscapeLeftovers() };
   },
 
-  // Drain end of a timed-out wave: the leftovers have just detonated (harmlessly, as before); count them.
+  // Z5: every wave plate still alive leaves (alive false, the "escape" ceremony of 70-render.js): no damage, no score,
+  // no quota. Returns how many left.
+  paceEscapeLeftovers() {
+    let n = 0;
+    for (const en of this.enemies) {
+      if (!en.alive || en.dying || en.kind === "bossMinion") continue;
+      en.alive = false;
+      en.dying = true;
+      en.locked = false;
+      if (this.lock && this.lock.ref === en) { this.lock = null; this.lockMisses = 0; }
+      if (typeof this.notePlateDeath === "function") this.notePlateDeath(en, "escape");
+      n++;
+    }
+    return n;
+  },
+
+  // Drain end of a timed-out wave: N = the plates that left at the cap (plus any a drain timeout detonated).
   paceOnWaveDrained(evt) {
     if (evt.byQuota !== false || this.paceInCheck()) return;
+    const to = this._paceTimeout;
     this._paceTimeout = null;
-    this.paceTimedOut(evt.level | 0, evt.wave | 0, Math.max(0, evt.detonated | 0), true);
+    const n = (to && to.level === (evt.level | 0) && to.wave === (evt.wave | 0) ? to.n | 0 : 0) + Math.max(0, evt.detonated | 0);
+    this.paceTimedOut(evt.level | 0, evt.wave | 0, n, true);
   },
 
-  // levelT reached the sector duration while a timed-out wave 3 was still draining: the approach detonates the
-  // leftovers itself (no waveDrained), so the callout comes from here. Reused payload: never emits bossWillApproach.
+  // levelT reached the sector duration while a timed-out wave 3 was still draining: no waveDrained follows, so the
+  // callout comes from here. Reused payload: never emits bossWillApproach.
   paceOnBossWillApproach() {
     const to = this._paceTimeout;
     if (!to || this.wavePhase !== "drain" || this.inBoss) return;
     this._paceTimeout = null;
     const cfg = LEVELS[this.levelIndex];
     if (!cfg || cfg.level !== to.level || (this.wave | 0) !== to.wave) return;
-    this.paceTimedOut(to.level, to.wave, this.countAliveEnemies(), false);   // no wave follows the approach
+    this.paceTimedOut(to.level, to.wave, (to.n | 0) + this.countAliveEnemies(), false);   // no wave follows the approach
   },
 
-  // One callout at the drain end (lead ruling Q4), the escaped count carried into the next wave of the sector.
+  // One callout at the drain end (lead ruling Q4), the escaped count carried into the next wave of the sector. Z5: a
+  // timeout always has N >= 1 (the cap needs plates alive); a forced one with nothing left says nothing.
   paceTimedOut(level, wave, n, allowCarry) {
+    if (!(n > 0)) return;
     const carried = !!allowCarry && wave < 2 && n > 0 && this.paceApplies();
     this.showBanner({ kind: "callout", title: PACE_COPY.timeout(n), color: "magenta", dur: PACE.timeoutCalloutS });
-    if (this.sfx && typeof this.sfx.lockLost === "function") this.sfx.lockLost();   // detonateLeftovers played its explosion
+    if (this.sfx && typeof this.sfx.lockLost === "function") this.sfx.lockLost();
     if (typeof this.announce === "function") this.announce(PACE_COPY.timeoutSay(wave, n, carried));
     const st = this.paceStats();
     st.timeouts++;
@@ -446,6 +488,14 @@ Object.assign(Game.prototype, {
     if (ctl.btn) ctl.btn.classList.remove("hidden");
     if (ctl.note) { ctl.note.textContent = PACE_COPY.cadetOffer(L); ctl.note.classList.remove("hidden"); }
     if (Array.isArray(evt.notes)) evt.notes.push(PACE_COPY.cadetOfferSay);
+  },
+
+  // Z9: a mode run starts with no campaign Cadet offer: the button and its note are hidden again, the offer dropped.
+  paceOnModesRunStart() {
+    this._paceOffer = null;
+    const btn = document.getElementById("btnCadetPace"), note = document.getElementById("cadetNote");
+    if (btn) btn.classList.add("hidden");
+    if (note) { note.classList.add("hidden"); note.textContent = ""; }
   },
 
   // #btnCadetPace / #cadetNote (index.html, scaffold); created after Retry boss / #retryNote when missing. Bound once.
