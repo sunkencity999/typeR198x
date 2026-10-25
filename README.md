@@ -148,8 +148,8 @@ the wave only while plates are alive; an empty field lifts it and the wave ends 
 Every results card stamps a rank from `rankFor(accPct, wpm, hpPts, level)`: accuracy 50 %, speed 30 %, hull 20 %
 (`RANK` in 20-constants.js, thresholds S 0.90 / A 0.75 / B 0.55 / C 0.35, D below). Speed is hand speed (below) and
 every sector measures it against its own stream rate (`targetCps x 12`): the speed term runs from 0.5 x nominal to
-1.22 x nominal, never wider than the absolute 20-60 WPM window, so a pilot at the sector's nominal WPM with 98 %
-accuracy and no damage reaches S (S at 98 %: 14 WPM in S1, 27 in S3, 35 in S4, 41 in S5, 47 from S7). A line under
+1.22 x nominal, never wider than the absolute 20-60 WPM window, so a pilot at about the sector's nominal WPM with 98 %
+accuracy and no damage reaches S (S at 98 %: 15 WPM in S1, 28 in S3, 36 in S4, 42 in S5, 47 from S7). A line under
 the stamp names the term that held the rank back and the value for the next grade
 (`ACCURACY HELD YOU BACK · 93% · S AT 95%`); an S shows none, and Game Over names the cause instead
 (`SIGNAL LOST · 4 WORDS LEAKED IN WAVE 2`). The ACC tile is captioned with the miss count and up to three

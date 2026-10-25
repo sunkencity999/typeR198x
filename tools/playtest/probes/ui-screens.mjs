@@ -295,7 +295,8 @@ try {
       startPrimary: q("#btnStart").classList.contains("primary"),
       shipFieldset: q(".shipGrid").tagName + (q(".shipGrid legend") ? "+LEGEND" : ""),
       helpSections: document.querySelectorAll("#helpModal .helpSection").length,
-      helpCopy: ["10", "25", "50", "100", "Space", "HEAL"].every((s) => help.includes(s)) && !help.includes("15 pts") && !help.includes("x2 at 15"),
+      // release review CT-B3: one name for the measured speed in the help (WPM is hand speed; never "typing speed").
+      helpCopy: ["10", "25", "50", "100", "Space", "HEAL"].every((s) => help.includes(s)) && !help.includes("15 pts") && !help.includes("x2 at 15") && !/typing speed/i.test(help),
       oldHelp: q(".help"), kbHint: q("#keyboardHint"), tipsRow: [...document.querySelectorAll(".statRow .label")].some((l) => /tips/i.test(l.textContent)),
       crtShade: getComputedStyle(q("#crtShade")).mixBlendMode, crtLines: getComputedStyle(q("#crtLines")).mixBlendMode, crtFilter: getComputedStyle(q("#crtOverlay")).filter,
       crtNoiseBg: getComputedStyle(q("#crtNoise")).backgroundImage,
