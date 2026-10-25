@@ -73,7 +73,7 @@ const ratingOk = rating === "--" || (wpm !== "--" && Math.abs(Number(rating) - M
 P.check("D5 card: DAILY SORTIE · 2026-10-23, tiles RATING/WPM/ACC/TIME/SCORE/WORDS, RATING = round(WPM x (ACC/100)^2) +-1, medal badge GOLD/SILVER/BRONZE/—, COUNTED SORTIE, focus #btnModeAgain, announce carries the rating",
   c5.eyebrow === "DAILY SORTIE · 2026-10-23" && c5.labels.join() === "RATING,WPM,ACC,TIME,SCORE,WORDS" && ratingOk && rating !== "--" && ["GOLD", "SILVER", "BRONZE", "—"].includes(c5.badge) &&
   c5.badgeShown && c5.head === "COUNTED SORTIE" && c5.focus === "btnModeAgain" && /Rating \d+, (gold|silver|bronze)\./.test(c5.said) && /Counted\. Sorties 1\. Press Enter to fly again\.$/.test(c5.said) &&
-  c5.sub === "FIRST DAYS · GOLD AT 97% · SILVER AT 93%" && c5.again === "Fly again", c5);
+  c5.sub === "BY ACCURACY · GOLD AT 97% · SILVER AT 93%" && c5.again === "Fly again", c5);
 
 // D6 save
 const d6 = await P.g((k) => { const b = JSON.parse(localStorage.getItem(k)); return { modes: b.modes, sess: window.game.typistSessions(5).map((s) => s.mode) }; }, "typesmup198x.save.v1");
@@ -134,14 +134,14 @@ await P.page.keyboard.press("Escape");
 await waitMode(P, "paused", 2000);
 await P.page.click("#btnRestart");
 await sleep(250);
-const conf = await P.g(() => ({ title: document.getElementById("confirmTitle").textContent, open: window.game.modalStack.length, ok: document.getElementById("btnConfirmOk").textContent, cancel: document.getElementById("btnConfirmCancel").textContent }));
+const conf = await P.g(() => ({ title: document.getElementById("confirmTitle").textContent, body: document.getElementById("confirmBody").textContent, open: window.game.modalStack.length, ok: document.getElementById("btnConfirmOk").textContent, cancel: document.getElementById("btnConfirmCancel").textContent }));
 await P.page.click("#btnConfirmCancel");
 await sleep(200);
 const kept = await P.g(() => ({ mode: window.game.mode, date: window.game._modes && window.game._modes.dateKey, n: window.game.typistSpeed("sector").n }));
 await P.page.keyboard.press("Escape");
 await waitMode(P, "playing", 2000);
-P.check("D3b Restart on a counted attempt in progress asks 'Restart the sortie?' (Restart / Keep flying); Keep flying keeps the attempt (same run, same intervals)",
-  conf.title === "Restart the sortie?" && conf.open === 1 && conf.ok === "Restart" && conf.cancel === "Keep flying" && kept.mode === "paused" && kept.date === 20261024 && kept.n >= 20, { conf, kept });
+P.check("D3b Restart on a counted attempt in progress asks 'Restart the sortie?' (Restart / Keep flying; the body says a finished or failed sortie counts, D9); Keep flying keeps the attempt (same run, same intervals)",
+  conf.title === "Restart the sortie?" && conf.body === "This attempt ends without a result. Your next finished or failed sortie counts." && conf.open === 1 && conf.ok === "Restart" && conf.cancel === "Keep flying" && kept.mode === "paused" && kept.date === 20261024 && kept.n >= 20, { conf, kept });
 await P.g(() => {
   const g = window.game;
   g.player.hp = 1; g.player.shield = 0; g.invulnT = 0;
@@ -218,8 +218,8 @@ await sleep(2600);
 const c5b = await card(P);
 await P.g(() => window.game.stopToMenu(false));
 await sleep(150);
-P.check("D5b 96.67 % accuracy in the first days: badge SILVER under FIRST DAYS · GOLD AT 97%, ACC tile 96%, share line · 96% ·, announce 'at 96 percent' (never a printed 97 % beside a SILVER)",
-  c5b.result && c5b.result.acc === 96.67 && c5b.badge === "SILVER" && c5b.sub === "FIRST DAYS · GOLD AT 97% · SILVER AT 93%" && tileOf(c5b, "ACC") === "96%" && c5b.share.includes(" · 96% · RATING ") &&
+P.check("D5b 96.67 % accuracy in the first days: badge SILVER under BY ACCURACY · GOLD AT 97%, ACC tile 96%, share line · 96% ·, announce 'at 96 percent' (never a printed 97 % beside a SILVER)",
+  c5b.result && c5b.result.acc === 96.67 && c5b.badge === "SILVER" && c5b.sub === "BY ACCURACY · GOLD AT 97% · SILVER AT 93%" && tileOf(c5b, "ACC") === "96%" && c5b.share.includes(" · 96% · RATING ") &&
   / at 96 percent\./.test(c5b.said), { acc: c5b.result && c5b.result.acc, badge: c5b.badge, sub: c5b.sub, acc_tile: tileOf(c5b, "ACC"), share: c5b.share, said: c5b.said });
 
 const iso3 = await isolation(P);
@@ -232,13 +232,19 @@ const d14a = [];
 for (let d = 1; d <= 12; d++) { await setNow(P, await localMs(P, 2026, 11, d)); d14a.push(await P.g(() => document.getElementById("dailySector").textContent.slice(7, 9))); }
 await P.goto(null);
 await sleep(300);
-const d14b = await P.g(() => ({ aria: document.getElementById("btnDaily").getAttribute("aria-disabled"), status: document.getElementById("dailyStatus").textContent, drill: document.getElementById("btnDrill").getAttribute("aria-disabled") }));
+const d14b = await P.g(() => {
+  const fits = (id) => { const el = document.getElementById(id); return el.scrollWidth <= el.clientWidth + 1; };
+  return { aria: document.getElementById("btnDaily").getAttribute("aria-disabled"), status: document.getElementById("dailyStatus").textContent, drill: document.getElementById("btnDrill").getAttribute("aria-disabled"),
+    endless: document.getElementById("btnEndless").getAttribute("aria-disabled"), drillSub: document.getElementById("drillSub").textContent, endlessSub: document.getElementById("endlessSub").textContent,
+    fit: fits("drillSub") && fits("endlessSub") && fits("dailyStatus") };
+});
 await P.page.click("#btnDaily", { force: true });   // aria-disabled tiles stay focusable and clickable (they explain why)
 await P.page.click("#btnDrill", { force: true });
 await sleep(500);
 const d14c = await P.g(() => ({ mode: window.game.mode, modes: window.game._modes || null, run: window.game.runMode() }));
-P.check("D14 legacy-postvictory (U 10): the daily sector is 08 / 09 / 10 on 12 dates; fresh save: tiles aria-disabled, status START A RUN TO UNLOCK, clicks leave mode menu",
-  d14a.every((s) => ["08", "09", "10"].includes(s)) && new Set(d14a).size >= 2 && d14b.aria === "true" && d14b.drill === "true" && d14b.status === "START A RUN TO UNLOCK" && d14c.mode === "menu" && d14c.modes === null && d14c.run === "campaign", { d14a, d14b, d14c });
+P.check("D14 legacy-postvictory (U 10): the daily sector is 08 / 09 / 10 on 12 dates; fresh save: tiles aria-disabled, the daily status and both practice tiles say START A RUN TO UNLOCK (untruncated; review CT-B10), clicks leave mode menu",
+  d14a.every((s) => ["08", "09", "10"].includes(s)) && new Set(d14a).size >= 2 && d14b.aria === "true" && d14b.drill === "true" && d14b.endless === "true" && d14b.status === "START A RUN TO UNLOCK" &&
+  d14b.drillSub === "START A RUN TO UNLOCK" && d14b.endlessSub === "START A RUN TO UNLOCK" && d14b.fit && d14c.mode === "menu" && d14c.modes === null && d14c.run === "campaign", { d14a, d14b, d14c });
 
 checkErrors(P);
 await P.finish();

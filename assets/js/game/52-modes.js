@@ -397,7 +397,7 @@ Object.assign(Game.prototype, {
     const M = this._modes;
     if (!M) return false;
     if (M.mode === "daily" && M.counted && !M.ended && ((this.wave | 0) > 0 || (this.stats.score | 0) > 0)) {
-      const ok = await this.confirm({ eyebrow: "Daily sortie", title: "Restart the sortie?", body: "This attempt ends without a result. Your next finished sortie counts.",
+      const ok = await this.confirm({ eyebrow: "Daily sortie", title: "Restart the sortie?", body: "This attempt ends without a result. Your next finished or failed sortie counts.",
         okLabel: "Restart", cancelLabel: "Keep flying" });
       if (!ok || this._modes !== M) return false;
     }
@@ -787,7 +787,7 @@ Object.assign(Game.prototype, {
     const rule = r.rule || {}, p = r.prevBest;
     set(q(".resultsTitle"), daily ? (r.counted && !r.todayCounted ? "COUNTED SORTIE" : "PRACTICE · NOT COUNTED") : endless ? `CEILING ${r.ceiling} WPM` : `${r.speed != null ? r.speed : "--"} WPM AT ${r.accInt}%`);
     set(q(".resultsHead .resultsSub"), daily
-      ? (rule.none ? "TOO FEW KEYS TO RATE" : rule.acc ? "FIRST DAYS · GOLD AT 97% · SILVER AT 93%" : `7-DAY MEDIAN ${Math.round(rule.median)} · GOLD AT ${rule.goldAt} · SILVER AT ${rule.silverAt}`)
+      ? (rule.none ? "TOO FEW KEYS TO RATE" : rule.acc ? "BY ACCURACY · GOLD AT 97% · SILVER AT 93%" : `7-DAY MEDIAN ${Math.round(rule.median)} · GOLD AT ${rule.goldAt} · SILVER AT ${rule.silverAt}`)
       : endless ? (r.newBest ? (p ? `NEW CEILING · WAS ${p} WPM` : "FIRST CEILING") : `BEST CEILING ${p} WPM`)
         : (r.newBest && p ? "NEW DRILL BEST" : p ? `DRILL BEST ${p.speed} WPM AT ${Math.floor(p.acc)}%` : "FIRST DRILL"));
     const n = (v) => String(Math.round(v)), pct = (v) => `${Math.round(v)}%`, big = (v) => formatInt(Math.round(v)), combo = (v) => `x${Math.round(v)}`;
@@ -891,10 +891,12 @@ Object.assign(Game.prototype, {
     attr(E.daily, "aria-label", `Daily sortie, ${where}${!open ? "." + lock : info.flown ? `, flown today${info.medal ? `, ${info.medal.toLowerCase()} medal, rating ${info.rating}` : ""}. Fly a practice attempt.` : ", not flown yet."}`);
     const targets = this.modesTargetsText(this.modesWeakPlan());
     const ceiling = this.modesBests().ceiling;
+    // Locked practice tiles say why on the tile, like the daily (release review CT-B10; spec-modes 3.4.1).
+    const locked = supported && !open;
     set(E.drillTitle, "DRILL · 60 S");
-    set(E.drillSub, targets ? `TARGETS ${targets}` : "COMMON WORDS");
+    set(E.drillSub, locked ? "START A RUN TO UNLOCK" : targets ? `TARGETS ${targets}` : "COMMON WORDS");
     set(E.endlessTitle, "ENDLESS DRIFT");
-    set(E.endlessSub, ceiling > 0 ? `CEILING ${ceiling} WPM` : "FIND YOUR CEILING");
+    set(E.endlessSub, locked ? "START A RUN TO UNLOCK" : ceiling > 0 ? `CEILING ${ceiling} WPM` : "FIND YOUR CEILING");
     attr(E.drill, "aria-label", `Drill, 60 seconds, ${targets ? `targets ${targets.split(" · ").join(", ")}` : "common words"}.${lock}`);
     attr(E.endless, "aria-label", `Endless drift, ${ceiling > 0 ? `best ceiling ${ceiling} words per minute` : "find your ceiling"}.${lock}`);
     for (const b of [E.daily, E.drill, E.endless]) attr(b, "aria-disabled", open ? "false" : "true");

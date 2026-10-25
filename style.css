@@ -3001,6 +3001,8 @@ body[data-flight-check="on"] .tapToType:not(.hidden) ~ .fcPanel .fcStep { visibi
 .modeTile--daily .modeTile__status { grid-row: 1; grid-column: 2; color: var(--c-score); }
 .modeTile--daily[aria-disabled="true"] .modeTile__status { grid-row: auto; grid-column: 1 / -1; }   /* the longer lock reason gets its own line */
 .modeTile[aria-disabled="true"] { opacity: 0.55; cursor: not-allowed; }
+/* Locked practice tiles carry the lock reason (release review CT-B10); it wraps rather than clip on a narrow phone. */
+.modeTile[aria-disabled="true"] > .modeTile__sub { white-space: normal; }
 .modeDeck.is-unavailable .modeTile { filter: grayscale(0.8); }
 :root.reduce-motion .modeTile { transition: none; }
 @media (max-width: 480px) { .modeDeck { grid-template-columns: 1fr; } .practicePanel { grid-template-columns: 1fr 1fr; } .practicePanel > .label { grid-column: 1 / -1; } }
