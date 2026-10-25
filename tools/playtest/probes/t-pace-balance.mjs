@@ -10,8 +10,13 @@
 //   p55: reaches the S1 boss in 25-70 s of play clock, clears S1-3, min hull > 25 %
 //   p80: no idle gap > 2 s inside a spawn phase
 // Lead ruling Z7: --acquire-ms N adds a target-acquisition latency (N ms on the play clock before the first key of every
-// new target, 2N with probability .1; --acquire-slow-ms / --acquire-slow-p) to the typist; off by default. With it the
-// idle targets are reported, not judged (the deaths / damage / rank / boss-time / hull targets still apply).
+// new target, 2N with probability .1; --acquire-slow-ms / --acquire-slow-p) to the typist; off by default.
+// Lead ruling Z12 (pace counts the pilot's acquisition time): with --acquire-ms the p55 / p80 runs judge "no S2 / S3 wave
+// times out with 0 leaks", S2-3 idle <= 15 % and 0 deaths (S1 idle and the 2 s gap line are reported only); every run
+// also records per wave the leaks, the acquisition PACE used (acq ms, mean target length, effective cps, back-off), and
+// per sector the PERFECT WAVE count and whether the sector clock cut the waves (the boss approach started before wave
+// 3's drain). --matrix prints the clock-cut share and PERFECT WAVE of S2 / S3 over its 55 / 80 runs (Z12: cuts <= 15 %
+// of those sectors over >= 4 runs per profile; PERFECT WAVE no worse than live a0a3845 with the same typist).
 // Usage: node tools/playtest/probes/t-pace-balance.mjs --wpm 55 --accuracy .93 [--sectors 3] [--seed-profile auto|WPM]
 //          [--jump L] [--retry N] [--expect auto|none|p35|p55|p80] [--set hungryMin2AtMul=1.3,rollin=10-20] [--label x]
 //          [--acquire-ms 300]
@@ -68,15 +73,21 @@ if (args.matrix === "true") {
     if (!fs.existsSync(f)) { table.push({ label: r.label, missing: true }); continue; }
     const rep = JSON.parse(fs.readFileSync(f, "utf8"));
     table.push({ label: r.label, exit: (results.find((x) => x.label === r.label) || {}).code, sectors: rep.sectors.map((s) => ({ S: s.level, outcome: s.outcome, idle: s.idleShare, gap: s.idleMaxGapS,
-      toBoss: s.toBossS, deaths: s.deaths, minHullPct: s.minHullPct, dmg: s.damage, rank: s.rank, wpm: s.wpm, muls: s.waves.map((w) => w.mul), timeouts: s.waves.filter((w) => w.timedOut).length, escaped: s.waves.reduce((a, w) => a + (w.escaped || 0), 0) })) });
+      toBoss: s.toBossS, deaths: s.deaths, minHullPct: s.minHullPct, dmg: s.damage, rank: s.rank, wpm: s.wpm, muls: s.waves.map((w) => w.mul), timeouts: s.waves.filter((w) => w.timedOut).length, escaped: s.waves.reduce((a, w) => a + (w.escaped || 0), 0),
+      cleanTimeouts: s.waves.filter((w) => w.timedOut && !(w.leaks > 0)).length, clockCut: !!s.clockCut, perfectWaves: s.perfectWaves, acq: s.waves.map((w) => w.acq) })) });
   }
-  fs.writeFileSync(path.join(OUT_DIR, `summary${sfx}.json`), JSON.stringify({ when: new Date().toISOString(), set: args.set || null, acquireMs: args["acquire-ms"] || null, table }, null, 1));
-  console.log("\nSUMMARY (idle share / longest idle gap s / deaths / min hull % / damage / rank / hand WPM / paceMul per wave)");
+  // Z12 aggregate over this round's 55 / 80 runs: S2 / S3 clock cuts and PERFECT WAVE
+  const z12 = table.filter((r) => !r.missing && /^w(55|80)/.test(r.label)).flatMap((r) => r.sectors.filter((s) => s.S === 2 || s.S === 3));
+  const cuts = z12.filter((s) => s.clockCut).length;
+  fs.writeFileSync(path.join(OUT_DIR, `summary${sfx}.json`), JSON.stringify({ when: new Date().toISOString(), set: args.set || null, acquireMs: args["acquire-ms"] || null,
+    z12: { sectors: z12.length, clockCuts: cuts, cutShare: z12.length ? Math.round(1000 * cuts / z12.length) / 1000 : null, perfectWaves: z12.map((s) => s.perfectWaves) }, table }, null, 1));
+  console.log("\nSUMMARY (idle share / longest idle gap s / deaths / min hull % / damage / rank / hand WPM / paceMul per wave / acquisition ms per wave)");
   for (const row of table) {
     if (row.missing) { console.log(`${row.label}: no report`); continue; }
     console.log(`${row.label} (exit ${row.exit})`);
-    for (const s of row.sectors) console.log(`  S${s.S} ${s.outcome} idle ${Math.round(s.idle * 100)}% gap ${s.gap}s toBoss ${s.toBoss}s deaths ${s.deaths} minHull ${s.minHullPct}% dmg ${s.dmg} rank ${s.rank} wpm ${s.wpm} mul ${s.muls.join("/")} timeouts ${s.timeouts} escaped ${s.escaped}`);
+    for (const s of row.sectors) console.log(`  S${s.S} ${s.outcome} idle ${Math.round(s.idle * 100)}% gap ${s.gap}s toBoss ${s.toBoss}s deaths ${s.deaths} minHull ${s.minHullPct}% dmg ${s.dmg} rank ${s.rank} wpm ${s.wpm} mul ${s.muls.join("/")} acq ${s.acq.join("/")} timeouts ${s.timeouts} (0-leak ${s.cleanTimeouts}) escaped ${s.escaped} PW ${s.perfectWaves}${s.clockCut ? " CLOCK-CUT" : ""}`);
   }
+  console.log(`Z12 S2 / S3 of the 55 / 80 runs: ${cuts} clock cuts in ${z12.length} sectors (${z12.length ? Math.round(100 * cuts / z12.length) : 0} %), PERFECT WAVE ${z12.map((s) => s.perfectWaves).join(" ")}`);
   console.log("wrote", path.join(OUT_DIR, `summary${sfx}.json`));
   process.exit(results.some((r) => r.code !== 0) ? 1 : 0);
 }
@@ -120,7 +131,7 @@ if (SETS.length) {
 // page-side classifier and per-wave log (listeners registered after PACE's, so they read the tuning PACE wrote)
 await P.g(() => {
   const B = window.__bal = {
-    reset() { B.st = { card: 0, bossIntro: 0, finale: 0, transition: 0, boss: 0, active: 0, idle: 0, total: 0 }; B.gap = 0; B.gapMax = 0; B.waves = B.waves ? B.waves.filter((w) => w.L === LEVELS[window.game.levelIndex].level) : []; B.minHp = Infinity; B.dmg = 0; B.toBoss = null; B.t0 = window.game.playClock || 0; B.hullIn = B.lastCard || null; },
+    reset() { B.st = { card: 0, bossIntro: 0, finale: 0, transition: 0, boss: 0, active: 0, idle: 0, total: 0 }; B.gap = 0; B.gapMax = 0; B.waves = B.waves ? B.waves.filter((w) => w.L === LEVELS[window.game.levelIndex].level) : []; B.minHp = Infinity; B.dmg = 0; B.toBoss = null; B.t0 = window.game.playClock || 0; B.hullIn = B.lastCard || null; B.approach = null; },
     st: null
   };
   B.reset();
@@ -141,8 +152,12 @@ await P.g(() => {
   });
   onGameHook("waveWillStart", function (e) {
     const l = this._paceLast || {};
-    B.waves.push({ L: e.level, w: e.wave, mul: e.tuning.spawnMul, quota: e.tuning.quota, source: l.source || null, target: l.target ?? null, runN: l.n ?? null, carry: l.carry || 0, timedOut: false, escaped: 0 });
+    B.waves.push({ L: e.level, w: e.wave, mul: e.tuning.spawnMul, quota: e.tuning.quota, source: l.source || null, target: l.target ?? null, runN: l.n ?? null, carry: l.carry || 0,
+      acq: l.acq ?? null, len: l.len ?? null, eff: l.eff ?? null, backoff: !!l.backoff, leaks: 0, timedOut: false, escaped: 0 });
   });
+  // Z12: wave leaks (a timeout with none is the "WAVE TIMED OUT for a pilot who missed nothing" case) and the clock cut
+  onGameHook("leak", function (e) { const w = B.waves[B.waves.length - 1]; if (w && !this.inBoss && e.kind !== "bossMinion" && w.L === LEVELS[this.levelIndex].level) w.leaks++; });
+  onGameHook("bossWillApproach", function () { if (!B.approach) B.approach = { wave: this.wave | 0, phase: this.wavePhase, levelT: Math.round(this.levelT * 10) / 10, cut: !(this.wave === 2 && this.wavePhase === "drain") }; });
   // Z5: the plates alive at the cap leave at once, so escaped = alive at the cap (+ any a drain timeout detonated)
   onGameHook("waveWillEnd", function (e) { const w = B.waves[B.waves.length - 1]; if (w && !e.byQuota) { w.timedOut = true; w.aliveAtCap = e.alive; w.escaped = e.alive | 0; } });
   onGameHook("waveDrained", function (e) { const w = B.waves[B.waves.length - 1]; if (w && !e.byQuota) w.escaped += e.detonated | 0; });
@@ -183,7 +198,8 @@ for (let s = 0; s < SECTORS; s++) {
   const ev = await P.g(() => {
     const g = window.game, B = window.__bal, r = g.lastResults;
     return { st: B.st, gapMax: B.gapMax, waves: B.waves, minHp: B.minHp, dmg: B.dmg, toBoss: B.toBoss, playS: (g.playClock || 0) - B.t0, hullIn: B.hullIn,
-      results: r && { rank: r.rank, wpm: r.wpm, throughput: r.throughput, acc: r.acc, tags: r.tags }, maxHp: g.player.maxHp, hpEnd: g.player.hp, pace: g.paceSnapshot().state };
+      results: r && { rank: r.rank, wpm: r.wpm, throughput: r.throughput, acc: r.acc, tags: r.tags }, maxHp: g.player.maxHp, hpEnd: g.player.hp, pace: g.paceSnapshot().state,
+      approach: B.approach, perfectWaves: g.levelStats ? g.levelStats.perfectWaves | 0 : null, acqMs: typeof g.typistAcquireMs === "function" ? Math.round(g.typistAcquireMs()) : null };
   });
   const tot = Math.max(1e-6, ev.st.total);
   const rec = {
@@ -192,12 +208,14 @@ for (let s = 0; s < SECTORS; s++) {
     minHp: ev.minHp === Infinity ? null : ev.minHp, minHullPct: ev.minHp === Infinity ? null : Math.round(1000 * ev.minHp / Math.max(1, ev.hullIn ? ev.hullIn.maxHp : ev.maxHp)) / 10,
     hullIn: ev.hullIn, damage: ev.dmg, rank: ev.results && ev.results.rank, wpm: ev.results && Math.round(ev.results.wpm), throughput: ev.results && ev.results.throughput,
     acc: ev.results && ev.results.acc, tags: ev.results && ev.results.tags,
-    waves: ev.waves.map((w) => ({ ...w, target: r2(w.target) })), cadet: ev.pace && ev.pace.cadetLevel === level, acquisitions: acquired
+    waves: ev.waves.map((w) => ({ ...w, target: r2(w.target) })), cadet: ev.pace && ev.pace.cadetLevel === level, acquisitions: acquired,
+    approach: ev.approach, clockCut: !!(ev.approach && ev.approach.cut), perfectWaves: ev.perfectWaves, acqMsEnd: ev.acqMs
   };
   report.sectors.push(rec);
   console.log(`SECTOR ${rec.level} ${rec.outcome} play ${rec.playS}s toBoss ${rec.toBossS}s idle ${Math.round(rec.idleShare * 100)}% (spawn-phase ${Math.round(rec.spawnPhaseIdle * 100)}%) gap ${rec.idleMaxGapS}s deaths ${rec.deaths} ` +
     `hullIn ${rec.hullIn ? `${rec.hullIn.hp}/${rec.hullIn.maxHp}` : "-"} minHull ${rec.minHullPct}% dmg ${rec.damage} rank ${rec.rank} wpm ${rec.wpm} acc ${rec.acc} ` +
-    `waves ${rec.waves.map((w) => `${w.mul}(${w.source}${w.carry ? `+${w.carry}` : ""}) q${w.quota}${w.timedOut ? ` TIMEOUT esc ${w.escaped}` : ""}`).join(" / ")}${ACQ.ms ? ` acquisitions ${acquired}` : ""}`);
+    `waves ${rec.waves.map((w) => `${w.mul}(${w.source}${w.carry ? `+${w.carry}` : ""}${w.backoff ? " backoff" : ""} acq ${w.acq} eff ${w.eff}) q${w.quota}${w.leaks ? ` lk ${w.leaks}` : ""}${w.timedOut ? ` TIMEOUT esc ${w.escaped}` : ""}`).join(" / ")}` +
+    ` PW ${rec.perfectWaves}${rec.clockCut ? ` CLOCK-CUT (W${rec.approach.wave + 1} ${rec.approach.phase})` : ""}${ACQ.ms ? ` acquisitions ${acquired}` : ""}`);
   if (outcome !== "levelComplete") break;
   if (s + 1 < SECTORS) {
     await sleep(600);
@@ -217,9 +235,18 @@ const idleLine = S.map((r) => `S${r.level} ${Math.round(r.idleShare * 100)}%`).j
 const judge = (name, pass, evidence) => (ACQ.ms ? P.note(`${name} (Z7 acquisition latency: report only; ${pass ? "would pass" : "would fail"})`, typeof evidence === "string" ? evidence : JSON.stringify(evidence)) : P.check(name, pass, evidence));
 if (EXPECT === "p55" || EXPECT === "p80") {
   const s1 = by(1), s2 = by(2), s3 = by(3);
-  judge(`${LABEL}: S2 and S3 idle share <= 15 %`, !!s2 && !!s3 && s2.idleShare <= 0.15 && s3.idleShare <= 0.15, idleLine);
+  // Z12: S2-3 idle is judged with the acquisition latency too (S1 idle stays report-only under Z7)
+  P.check(`${LABEL}: S2 and S3 idle share <= 15 %`, !!s2 && !!s3 && s2.idleShare <= 0.15 && s3.idleShare <= 0.15, idleLine);
   const s1Max = SEED ? 0.15 : 0.30;
   judge(`${LABEL}: S1 idle share <= ${Math.round(s1Max * 100)} % (${SEED ? "returning, seeded" : "fresh"} profile)`, !!s1 && s1.idleShare <= s1Max, idleLine);
+  if (ACQ.ms) {
+    const s23 = S.filter((r) => r.level === 2 || r.level === 3);
+    P.check(`${LABEL}: Z12 no S2 / S3 wave times out with 0 leaks`, s23.length === 2 && s23.every((r) => r.waves.every((w) => !(w.timedOut && !(w.leaks > 0)))),
+      s23.map((r) => `S${r.level}: ${r.waves.map((w) => `W${w.w + 1} ${w.timedOut ? `TO esc ${w.escaped} lk ${w.leaks}` : "ok"}`).join(" ")}`).join(" · "));
+    P.check(`${LABEL}: Z12 0 deaths in S1-3`, S.length === 3 && S.every((r) => r.deaths === 0 && r.outcome === "levelComplete"), S.map((r) => `S${r.level}:${r.outcome}/${r.deaths}`));
+    P.note(`${LABEL}: Z12 S2 / S3 clock cuts and PERFECT WAVE (aggregate targets: cuts <= 15 % of sectors over >= 4 runs; PERFECT WAVE no worse than live a0a3845)`,
+      s23.map((r) => `S${r.level} ${r.clockCut ? "CUT" : "no cut"} PW ${r.perfectWaves}`).join(" · "));
+  }
 }
 if (EXPECT === "p55") {
   const s1 = by(1);
