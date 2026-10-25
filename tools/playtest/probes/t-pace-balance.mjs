@@ -9,9 +9,14 @@
 //   p35 (35 / .90, fresh): 0 deaths, 0 hull damage, rank >= B in S1-3 (not made harder)
 //   p55: reaches the S1 boss in 25-70 s of play clock, clears S1-3, min hull > 25 %
 //   p80: no idle gap > 2 s inside a spawn phase
+// Lead ruling Z7: --acquire-ms N adds a target-acquisition latency (N ms on the play clock before the first key of every
+// new target, 2N with probability .1; --acquire-slow-ms / --acquire-slow-p) to the typist; off by default. With it the
+// idle targets are reported, not judged (the deaths / damage / rank / boss-time / hull targets still apply).
 // Usage: node tools/playtest/probes/t-pace-balance.mjs --wpm 55 --accuracy .93 [--sectors 3] [--seed-profile auto|WPM]
 //          [--jump L] [--retry N] [--expect auto|none|p35|p55|p80] [--set hungryMin2AtMul=1.3,rollin=10-20] [--label x]
-//        node tools/playtest/probes/t-pace-balance.mjs --matrix [--parallel 2] [--set ...]   (35 / 55 / 80 fresh + 55 / 80 seeded)
+//          [--acquire-ms 300]
+//        node tools/playtest/probes/t-pace-balance.mjs --matrix [--parallel 2] [--set ...] [--acquire-ms 300] [--tag r1]
+//          (35 / 55 / 80 fresh + 55 / 80 seeded; --tag suffixes the labels so rounds do not overwrite each other)
 // Writes tools/playtest/out/t-pace-balance/<label>.json (and summary.json for --matrix). ~4-6 min per profile.
 import fs from "node:fs";
 import path from "node:path";
@@ -33,13 +38,15 @@ for (let i = 0; i < argv.length; i++) {
 if (args.matrix === "true") {
   const PAR = Math.max(1, Number(args.parallel || 2));
   const extra = args.set ? ["--set", args.set] : [];
+  for (const k of ["acquire-ms", "acquire-slow-ms", "acquire-slow-p"]) if (args[k]) extra.push(`--${k}`, args[k]);
+  const sfx = (args["acquire-ms"] ? `-acq${args["acquire-ms"]}` : "") + (args.tag ? `-${args.tag}` : "");
   const runs = [
     { label: "w35-fresh", argv: ["--wpm", "35", "--accuracy", ".90"] },
     { label: "w55-fresh", argv: ["--wpm", "55", "--accuracy", ".93"] },
     { label: "w80-fresh", argv: ["--wpm", "80", "--accuracy", ".97"] },
     { label: "w55-seeded", argv: ["--wpm", "55", "--accuracy", ".93", "--seed-profile", "auto"] },
     { label: "w80-seeded", argv: ["--wpm", "80", "--accuracy", ".97", "--seed-profile", "auto"] }
-  ];
+  ].map((r) => ({ ...r, label: r.label + sfx }));
   const results = [];
   let next = 0;
   const runOne = (r) => new Promise((resolve) => {
@@ -48,7 +55,7 @@ if (args.matrix === "true") {
     child.stdout.on("data", (d) => { out += d; });
     child.stderr.on("data", (d) => { out += d; });
     child.on("close", (code) => {
-      const lines = out.split("\n").filter((l) => /^(PASS|FAIL|SECTOR|  )/.test(l));
+      const lines = out.split("\n").filter((l) => /^(PASS|FAIL|SKIP|SECTOR|  )/.test(l));
       console.log(`== ${r.label} exit ${code}\n${lines.join("\n")}`);
       resolve({ label: r.label, code });
     });
@@ -63,19 +70,21 @@ if (args.matrix === "true") {
     table.push({ label: r.label, exit: (results.find((x) => x.label === r.label) || {}).code, sectors: rep.sectors.map((s) => ({ S: s.level, outcome: s.outcome, idle: s.idleShare, gap: s.idleMaxGapS,
       toBoss: s.toBossS, deaths: s.deaths, minHullPct: s.minHullPct, dmg: s.damage, rank: s.rank, wpm: s.wpm, muls: s.waves.map((w) => w.mul), timeouts: s.waves.filter((w) => w.timedOut).length, escaped: s.waves.reduce((a, w) => a + (w.escaped || 0), 0) })) });
   }
-  fs.writeFileSync(path.join(OUT_DIR, "summary.json"), JSON.stringify({ when: new Date().toISOString(), set: args.set || null, table }, null, 1));
+  fs.writeFileSync(path.join(OUT_DIR, `summary${sfx}.json`), JSON.stringify({ when: new Date().toISOString(), set: args.set || null, acquireMs: args["acquire-ms"] || null, table }, null, 1));
   console.log("\nSUMMARY (idle share / longest idle gap s / deaths / min hull % / damage / rank / hand WPM / paceMul per wave)");
   for (const row of table) {
     if (row.missing) { console.log(`${row.label}: no report`); continue; }
     console.log(`${row.label} (exit ${row.exit})`);
     for (const s of row.sectors) console.log(`  S${s.S} ${s.outcome} idle ${Math.round(s.idle * 100)}% gap ${s.gap}s toBoss ${s.toBoss}s deaths ${s.deaths} minHull ${s.minHullPct}% dmg ${s.dmg} rank ${s.rank} wpm ${s.wpm} mul ${s.muls.join("/")} timeouts ${s.timeouts} escaped ${s.escaped}`);
   }
-  console.log("wrote", path.join(OUT_DIR, "summary.json"));
+  console.log("wrote", path.join(OUT_DIR, `summary${sfx}.json`));
   process.exit(results.some((r) => r.code !== 0) ? 1 : 0);
 }
 
 // ----------------------------- one profile -----------------------------
 const { openProbe, sleep, waitFor, paceType } = await import("./pace_lib.mjs");
+const { acquireOpts } = await import("./b_lib.mjs");
+const ACQ = acquireOpts({ acquireMs: args["acquire-ms"], acquireSlowMs: args["acquire-slow-ms"] ?? null, acquireSlowP: args["acquire-slow-p"] ?? 0.1 });
 const WPM = Number(args.wpm || 55);
 const ACC = Number(args.accuracy || 0.93);
 const SEED = args["seed-profile"] ? (args["seed-profile"] === "auto" ? Math.round(WPM * ACC) : Number(args["seed-profile"])) : 0;
@@ -86,7 +95,7 @@ const SECONDS = Number(args.seconds || 420);
 const SETS = args.set ? String(args.set).split(",").map((kv) => kv.split("=")).filter((p) => p.length === 2) : [];
 let EXPECT = args.expect || "auto";
 if (EXPECT === "auto") EXPECT = JUMP ? "none" : WPM <= 40 ? "p35" : WPM <= 65 ? "p55" : "p80";
-const LABEL = args.label || `w${WPM}-a${String(ACC).replace(/^0/, "")}${SEED ? `-seed${SEED}` : "-fresh"}${JUMP ? `-j${JUMP}` : ""}`;
+const LABEL = args.label || `w${WPM}-a${String(ACC).replace(/^0/, "")}${SEED ? `-seed${SEED}` : "-fresh"}${JUMP ? `-j${JUMP}` : ""}${ACQ.ms ? `-acq${ACQ.ms}` : ""}`;
 
 const P = await openProbe(`t-pace-balance-${LABEL}`);
 if (SEED) {
@@ -150,14 +159,15 @@ if (JUMP) {
   await P.g(() => window.__bal.reset());
 }
 
-const report = { label: LABEL, wpm: WPM, accuracy: ACC, seedProfile: SEED || null, jump: JUMP, sets: SETS, expect: EXPECT, sectors: [] };
+const report = { label: LABEL, wpm: WPM, accuracy: ACC, seedProfile: SEED || null, jump: JUMP, sets: SETS, expect: EXPECT, acquire: ACQ.ms ? ACQ : null, sectors: [] };
 const r2 = (x) => (x === null || x === undefined || !Number.isFinite(x) ? null : Math.round(x * 100) / 100);
 for (let s = 0; s < SECTORS; s++) {
   const t0 = Date.now();
-  let deaths = 0, outcome = "timeout";
+  let deaths = 0, outcome = "timeout", acquired = 0;
   const level = await P.g(() => window.game.levelIndex + 1);
   while (Date.now() - t0 < SECONDS * 1000) {
-    await paceType(P, SECONDS, { wpm: WPM, accuracy: ACC, until: (st) => st.mode !== "playing" });
+    const typed = await paceType(P, SECONDS, { wpm: WPM, accuracy: ACC, until: (st) => st.mode !== "playing", acquireMs: ACQ.ms, acquireSlowMs: ACQ.slowMs, acquireSlowP: ACQ.slowP });
+    acquired += typed.acquired | 0;
     const mode = await P.g(() => window.game.mode);
     if (mode === "gameOver") {
       deaths++;
@@ -182,12 +192,12 @@ for (let s = 0; s < SECTORS; s++) {
     minHp: ev.minHp === Infinity ? null : ev.minHp, minHullPct: ev.minHp === Infinity ? null : Math.round(1000 * ev.minHp / Math.max(1, ev.hullIn ? ev.hullIn.maxHp : ev.maxHp)) / 10,
     hullIn: ev.hullIn, damage: ev.dmg, rank: ev.results && ev.results.rank, wpm: ev.results && Math.round(ev.results.wpm), throughput: ev.results && ev.results.throughput,
     acc: ev.results && ev.results.acc, tags: ev.results && ev.results.tags,
-    waves: ev.waves.map((w) => ({ ...w, target: r2(w.target) })), cadet: ev.pace && ev.pace.cadetLevel === level
+    waves: ev.waves.map((w) => ({ ...w, target: r2(w.target) })), cadet: ev.pace && ev.pace.cadetLevel === level, acquisitions: acquired
   };
   report.sectors.push(rec);
   console.log(`SECTOR ${rec.level} ${rec.outcome} play ${rec.playS}s toBoss ${rec.toBossS}s idle ${Math.round(rec.idleShare * 100)}% (spawn-phase ${Math.round(rec.spawnPhaseIdle * 100)}%) gap ${rec.idleMaxGapS}s deaths ${rec.deaths} ` +
     `hullIn ${rec.hullIn ? `${rec.hullIn.hp}/${rec.hullIn.maxHp}` : "-"} minHull ${rec.minHullPct}% dmg ${rec.damage} rank ${rec.rank} wpm ${rec.wpm} acc ${rec.acc} ` +
-    `waves ${rec.waves.map((w) => `${w.mul}(${w.source}${w.carry ? `+${w.carry}` : ""}) q${w.quota}${w.timedOut ? ` TIMEOUT esc ${w.escaped}` : ""}`).join(" / ")}`);
+    `waves ${rec.waves.map((w) => `${w.mul}(${w.source}${w.carry ? `+${w.carry}` : ""}) q${w.quota}${w.timedOut ? ` TIMEOUT esc ${w.escaped}` : ""}`).join(" / ")}${ACQ.ms ? ` acquisitions ${acquired}` : ""}`);
   if (outcome !== "levelComplete") break;
   if (s + 1 < SECTORS) {
     await sleep(600);
@@ -203,11 +213,13 @@ console.log("wrote", path.join(OUT_DIR, `${LABEL}.json`));
 const S = report.sectors;
 const by = (L) => S.find((r) => r.level === L);
 const idleLine = S.map((r) => `S${r.level} ${Math.round(r.idleShare * 100)}%`).join(" ");
+// Z7: with an acquisition latency the idle targets are reported only (P.note); every other target is still judged.
+const judge = (name, pass, evidence) => (ACQ.ms ? P.note(`${name} (Z7 acquisition latency: report only; ${pass ? "would pass" : "would fail"})`, typeof evidence === "string" ? evidence : JSON.stringify(evidence)) : P.check(name, pass, evidence));
 if (EXPECT === "p55" || EXPECT === "p80") {
   const s1 = by(1), s2 = by(2), s3 = by(3);
-  P.check(`${LABEL}: S2 and S3 idle share <= 15 %`, !!s2 && !!s3 && s2.idleShare <= 0.15 && s3.idleShare <= 0.15, idleLine);
+  judge(`${LABEL}: S2 and S3 idle share <= 15 %`, !!s2 && !!s3 && s2.idleShare <= 0.15 && s3.idleShare <= 0.15, idleLine);
   const s1Max = SEED ? 0.15 : 0.30;
-  P.check(`${LABEL}: S1 idle share <= ${Math.round(s1Max * 100)} % (${SEED ? "returning, seeded" : "fresh"} profile)`, !!s1 && s1.idleShare <= s1Max, idleLine);
+  judge(`${LABEL}: S1 idle share <= ${Math.round(s1Max * 100)} % (${SEED ? "returning, seeded" : "fresh"} profile)`, !!s1 && s1.idleShare <= s1Max, idleLine);
 }
 if (EXPECT === "p55") {
   const s1 = by(1);
@@ -215,7 +227,7 @@ if (EXPECT === "p55") {
   P.check(`${LABEL}: clears S1-3 without dying, min hull > 25 % in every sector`, S.length === 3 && S.every((r) => r.outcome === "levelComplete" && r.deaths === 0 && r.minHullPct > 25), S.map((r) => `S${r.level}:${r.outcome}/${r.deaths}/${r.minHullPct}%`));
 }
 if (EXPECT === "p80") {
-  P.check(`${LABEL}: no idle gap > 2 s inside a spawn phase`, S.every((r) => r.idleMaxGapS <= 2), S.map((r) => `S${r.level}:${r.idleMaxGapS}s`));
+  judge(`${LABEL}: no idle gap > 2 s inside a spawn phase`, S.every((r) => r.idleMaxGapS <= 2), S.map((r) => `S${r.level}:${r.idleMaxGapS}s`));
 }
 if (EXPECT === "p35") {
   const order = ["S", "A", "B", "C", "D"];

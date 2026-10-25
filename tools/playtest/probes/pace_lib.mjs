@@ -5,7 +5,7 @@
 //   dieNow(P)                   the hull to 1 and one unshielded hit: Game Over.
 //   reloadInPlace(P)            the stored blob re-read through loadSave() (b3's in-place reload), then Continue.
 //   installBudget(P)            per-frame canvas budget counters (play.mjs installProbe, compact): call BEFORE goto().
-import { openProbe, sleep, state, waitFor, startFresh, jumpTo, press, clearField, placeEnemy, continueRun, nextKey, hold } from "./b_lib.mjs";
+import { openProbe, sleep, state, waitFor, startFresh, jumpTo, press, clearField, placeEnemy, continueRun, nextKey, hold, typistTarget, acquireOpts, acquireDelayMs } from "./b_lib.mjs";
 export { openProbe, sleep, state, waitFor, startFresh, jumpTo, press, clearField, placeEnemy, continueRun, nextKey, hold };
 
 // The b10 typist choice (boss minions past DANGER_X first, then the boss, the lock, the nearest targetable plate).
@@ -38,20 +38,48 @@ export function typistKey(P, policy = "danger") {
   }, policy);
 }
 
+// Waits until game.playClock has advanced `ms` (a wall cap of 4 x ms + 50 when the clock stalls).
+export async function waitPlay(P, ms) {
+  if (!(ms > 0)) return;
+  const pc0 = await P.g(() => (window.game && window.game.playClock) || 0);
+  const due = pc0 + ms / 1000, wallLimit = Date.now() + ms * 4 + 50;
+  await sleep(Math.max(5, ms * 0.5));
+  while (Date.now() < wallLimit) {
+    const pc = await P.g(() => (window.game && window.game.playClock) || 0);
+    if (pc >= due || pc < pc0) break;
+    await sleep(Math.min(25, Math.max(5, ((due - pc) * 1000) / 2)));
+  }
+}
+
 // Types like the harness (interval 60000 / (wpm x 5) ms, +-20 % jitter, a wrong key with probability 1 - accuracy) but
-// waits on game.playClock. onTick(st, wallElapsedMs) runs every loop; until(st) ends it.
-export async function paceType(P, seconds, { wpm = 80, accuracy = 0.97, until = null, onTick = null, policy = "danger" } = {}) {
+// waits on game.playClock. onTick(st, wallElapsedMs) runs every loop; until(st) ends it. acquireMs / acquireSlowMs /
+// acquireSlowP: lead ruling Z7's target-acquisition latency on the play clock (b_lib acquireOpts), off by default.
+export async function paceType(P, seconds, { wpm = 80, accuracy = 0.97, until = null, onTick = null, policy = "danger", acquireMs = 0, acquireSlowMs = null, acquireSlowP = 0.1 } = {}) {
   const interval = 60000 / (Math.max(1, wpm) * 5);
+  const acq = acquireOpts({ acquireMs, acquireSlowMs, acquireSlowP });
   const t0 = Date.now();
-  let keys = 0, wrong = 0;
+  let keys = 0, wrong = 0, acquired = 0, lastId = null;
   while (Date.now() - t0 < seconds * 1000) {
-    const loopStart = Date.now();
+    let loopStart = Date.now();
     const st = await state(P);
     st.playClock = await P.g(() => window.game.playClock || 0);
     if (onTick) await onTick(st, Date.now() - t0);
     if (until && until(st)) break;
     if (st.mode !== "playing") { await sleep(80); continue; }
-    const k = st.levelIntro || st.bossIntroLocked ? null : await typistKey(P, policy);
+    let k = null;
+    if (st.levelIntro || st.bossIntroLocked) k = null;
+    else if (acq.ms > 0) {
+      let t = await typistTarget(P, policy);
+      if (t && t.id !== lastId) {
+        acquired++;
+        await waitPlay(P, acquireDelayMs(acq));
+        t = await typistTarget(P, policy);
+        loopStart = Date.now();
+        st.playClock = await P.g(() => window.game.playClock || 0);
+      }
+      lastId = t ? t.id : lastId;
+      k = t ? t.k : null;
+    } else k = await typistKey(P, policy);
     if (k && /^[a-z ]$/.test(k)) {
       const bad = Math.random() > accuracy;
       const key = bad ? "abcdefghijklmnopqrstuvwxyz".replace(k, "")[Math.floor(Math.random() * 25)] : k;
@@ -70,7 +98,7 @@ export async function paceType(P, seconds, { wpm = 80, accuracy = 0.97, until = 
       await sleep(30);
     }
   }
-  return { keys, wrong };
+  return { keys, wrong, acquired };
 }
 
 // Force the boss of the current sector and kill it at once; hp (optional) is the hull at the kill (what the clear sees).

@@ -18,6 +18,8 @@
 //                   every minion leaks); 'danger' (default) = a minion whose plate has crossed DANGER_X is shot
 //                   first, otherwise the boss; 'always' = any targetable minion first
 //   --expect        adds the pass/fail lines of that profile's B10 targets (see balance.md)
+//   --acquire-ms N  lead ruling Z7: a target-acquisition latency of N ms (play clock) before the first key of every new
+//                   target, N x 2 (--acquire-slow-ms) with probability .1 (--acquire-slow-p); off by default
 // PACE (D2 / D3): every wave also records the paceMul / quota PACE applied (waveTuning, read after PACE's waveWillStart
 // listener), whether it timed out and how many plates escaped (alive at the cap, lead ruling Z5); every sector the hull
 // its card showed (hullIn) and the gross throughput. The incomingCps band is judged per wave against targetCps x the
@@ -26,7 +28,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { openProbe, sleep, waitFor } from "./b_lib.mjs";
+import { openProbe, sleep, waitFor, typistTarget, acquireOpts, acquireDelayMs } from "./b_lib.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const args = Object.fromEntries(process.argv.slice(2).map((a, i, arr) => a.startsWith("--") ? [a.slice(2), arr[i + 1]] : null).filter(Boolean));
@@ -37,7 +39,8 @@ const SECTORS = Number(args.sectors || (JUMP ? 1 : 3));
 const MINIONS = args.minions || "danger";
 const EXPECT = args.expect || null;
 const SECONDS = Number(args.seconds || 420);               // wall-clock cap per sector (a sector-10 clear takes ~4 min)
-const LABEL = args.label || `w${WPM}-a${String(ACC).replace(/^0/, "")}-${JUMP ? "j" + JUMP : "s1-" + SECTORS}-${MINIONS}`;
+const ACQ = acquireOpts({ acquireMs: args["acquire-ms"], acquireSlowMs: args["acquire-slow-ms"] ?? null, acquireSlowP: args["acquire-slow-p"] ?? 0.1 });
+const LABEL = args.label || `w${WPM}-a${String(ACC).replace(/^0/, "")}-${JUMP ? "j" + JUMP : "s1-" + SECTORS}-${MINIONS}${ACQ.ms ? `-acq${ACQ.ms}` : ""}`;
 const OUT_DIR = path.resolve(HERE, "../out/b10");
 fs.mkdirSync(OUT_DIR, { recursive: true });
 
@@ -144,7 +147,8 @@ function tick() {
 }
 
 const interval = 60000 / (Math.max(1, WPM) * 5);
-const report = { label: LABEL, wpm: WPM, accuracy: ACC, minions: MINIONS, jump: JUMP, sectors: [] };
+const report = { label: LABEL, wpm: WPM, accuracy: ACC, minions: MINIONS, jump: JUMP, acquire: ACQ.ms ? ACQ : null, sectors: [] };
+let lastTargetId = null;
 const r1 = (x) => (x === null || x === undefined ? null : Math.round(x * 10) / 10);
 const r2 = (x) => (x === null || x === undefined ? null : Math.round(x * 100) / 100);
 
@@ -153,7 +157,7 @@ for (let s = 0; s < SECTORS; s++) {
   const sectorStart = Date.now();
   const playClock0 = await P.g(() => window.game.playClock || 0);
   const rec = { sector: null, level: null, targetCps: null, secondsToBoss: null, wallSecondsToBoss: null, minHp: Infinity, maxHp: null, death: null, keys: 0, wrongKeys: 0,
-    idleMaxS: 0, idleByWave: [0, 0, 0], samples: 0 };
+    idleMaxS: 0, idleByWave: [0, 0, 0], samples: 0, acquisitions: 0, acquireMs: 0 };
   const idle = { since: null, wave: 0 };
   const dbgAcc = {};   // phase label -> { sum, n, max }
   let bossShot = false;
@@ -178,7 +182,31 @@ for (let s = 0; s < SECTORS; s++) {
     if (!st.inBoss && st.wavePhase === "spawn" && st.waveT >= 10) { a.sum += st.incomingCps; a.n++; }
     rec.samples++;
 
-    const k = st.levelIntro || st.introLocked ? null : await nextKey(MINIONS);
+    let k = null;
+    if (st.levelIntro || st.introLocked) k = null;
+    else if (ACQ.ms > 0) {
+      // Z7: a new target costs an acquisition delay on the play clock before its first key (not counted as idle: a
+      // target is on screen), then the target in front of the typist at that moment is typed
+      let t = await typistTarget(P, MINIONS);
+      if (t && idle.since !== null) {   // a target is up: the idle gap ends here, before the acquisition delay
+        const gap = st.playClock - idle.since;
+        rec.idleMaxS = Math.max(rec.idleMaxS, gap); rec.idleByWave[idle.wave] = Math.max(rec.idleByWave[idle.wave], gap); idle.since = null;
+      }
+      if (t && t.id !== lastTargetId) {
+        const d = acquireDelayMs(ACQ);
+        rec.acquisitions++; rec.acquireMs += d;
+        const due = st.playClock + d / 1000, wallLimit = Date.now() + d * 4 + 50;
+        while (Date.now() < wallLimit) {
+          const pc = await P.g(() => (window.game && window.game.playClock) || 0);
+          if (pc >= due || pc < st.playClock) break;
+          await sleep(Math.min(25, Math.max(5, ((due - pc) * 1000) / 2)));
+        }
+        t = await typistTarget(P, MINIONS);
+        st.playClock = await P.g(() => (window.game && window.game.playClock) || 0);
+      }
+      lastTargetId = t ? t.id : lastTargetId;
+      k = t ? t.k : null;
+    } else k = await nextKey(MINIONS);
     const inSpawn = !st.inBoss && st.wavePhase === "spawn" && !st.levelIntro;
     if (k && /^[a-z ]$/.test(k)) {
       if (idle.since !== null) { const gap = st.playClock - idle.since; rec.idleMaxS = Math.max(rec.idleMaxS, gap); rec.idleByWave[idle.wave] = Math.max(rec.idleByWave[idle.wave], gap); idle.since = null; }
