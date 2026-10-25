@@ -73,21 +73,26 @@ const afterLetter = await P.g(() => ({ kills: window.game.levelStats.kills, fini
 P.check("a letter kill before any word lock leaves tutorialSeen.finish false (no FINISH toast)", afterLetter.kills >= 1 && afterLetter.finish === false &&
   !afterLetter.log.some((s) => /FINISH/.test(s)) && !(afterLetter.blob && afterLetter.blob.finish), JSON.stringify({ letter: letterCh, ...afterLetter }));
 
-// First lock on a WORD target -> FINISH toast (marks tutorialSeen.finish when displayed), tutorialSeen.lock true.
+// First lock on a WORD target -> FINISH toast (marks tutorialSeen.finish when displayed), tutorialSeen.lock true. The probe
+// places its own static word plate (lead ruling Z8: S1 W1 can open with five letter plates, the field caps at 5, and a
+// natural capsule can take the key), with a first letter no live plate or capsule starts with.
+const ownWord = await P.g(() => {
+  const g = window.game;
+  const used = new Set([...g.enemies, ...g.powerups].filter((e) => e.alive && !e.dying).map((e) => e.nextChar()));
+  const word = ["vortex", "quasar", "zephyr", "jumbo", "kayak", "lumen", "matrix", "nebula", "orbit", "photon", "radar", "tango"].find((w) => !used.has(w[0])) || "vortex";
+  g.enemies.push(new Enemy({ text: word, x: 820, y: LANE_YS[3], speed: 0, lane: 3 }));
+  return word;
+});
 let locked = false;
-for (let i = 0; i < 150 && !locked; i++) {
-  const k = await P.g(() => {
-    const g = window.game;
-    const words = g.enemies.filter((e) => e.alive && !e.dying && e.text.length >= 3 && g.isTargetable(e)).sort((a, b) => a.x - b.x);
-    return words.length ? words[0].nextChar() : null;
-  });
+for (let i = 0; i < 3 && !locked; i++) {
+  const k = await P.g((w) => { const en = window.game.enemies.find((e) => e.text === w && e.alive); return en ? en.nextChar() : null; }, ownWord);
   if (k && /^[a-z]$/.test(k)) await page.keyboard.press(k);
   await sleep(80);
-  locked = await P.g(() => !!window.game.lock);
+  locked = await P.g((w) => !!(window.game.lock && window.game.lock.ref && window.game.lock.ref.text === w), ownWord);
 }
 await sleep(150);
 const afterLock = await P.g(() => ({ lock: !!window.game.lock, seenLock: window.game.save.tutorialSeen.lock, log: window.__toastLog.slice(), blob: (JSON.parse(localStorage.getItem("typesmup198x.save.v1")) || {}).tutorialSeen }));
-P.check("first lock -> 'FINISH' toast and tutorialSeen.lock === true (persisted)", afterLock.seenLock === true && afterLock.log.some((s) => /FINISH/.test(s)) && afterLock.blob && afterLock.blob.lock === true, JSON.stringify(afterLock));
+P.check("first lock (on the probe's own word plate) -> 'FINISH' toast and tutorialSeen.lock === true (persisted)", locked && afterLock.seenLock === true && afterLock.log.some((s) => /FINISH/.test(s)) && afterLock.blob && afterLock.blob.lock === true, JSON.stringify({ word: ownWord, locked, ...afterLock }));
 // Lock loss: three wrong keys on the current lock.
 for (let i = 0; i < 3; i++) {
   const next = await P.g(() => (window.game.lock && window.game.lock.ref) ? window.game.lock.ref.nextChar() : null);

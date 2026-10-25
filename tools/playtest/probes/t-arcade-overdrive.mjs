@@ -4,7 +4,7 @@
 // kill / bossChar / segment only, white-hot beams / amber floaters / plume x2 / the arc, vent on a miss / a leak (hiss,
 // announce, steam), the slow exit, holding through pause and an empty field, a silent charge reset, the silent end on a
 // boss kill and the reset at the next sector, the card note, no per-key save writes, scripted input never charging,
-// reduced motion, drill / Flight Check blocking, the typed-array state and heap growth. Keys go through
+// reduced motion, drill (a real MODES drill, a daily as the control) / Flight Check blocking, the typed-array state and heap growth. Keys go through
 // game.handleTyped(ch) from a setTimeout chain scheduled on performance.now() (exact intervals). PASS = the feature
 // works; exits 1 on any fail or page / console error.
 import { openProbe, sleep, waitFor, installTypist, freshControlled } from "./measure_lib.mjs";
@@ -297,27 +297,37 @@ const t13b = await P.g(() => { const O = window.__od; O.sample = false; const ch
 await P.g(() => window.__ty.clear());
 P.check("13b. 6 keys at 80 WPM then a 2 s pause with the plate up, T at the 25 WPM floor: the charge never fills (peak < .6) and drains during the pause, no activation", T13b === 25 && !t13b.anyOn && t13b.peak > 0 && t13b.peak < 0.6 && t13b.end < t13b.peak, { T: T13b, ...t13b });
 
-// 15. Drill (MODES): blocked. MODES is not merged on this branch: the block is checked with run.mode = "drill" (what
-// MODES sets) and re-run after MODES merges (CONTRACT 4.1); the Flight Check block reads ONBOARD's flightCheck.
+// 15. Drill (MODES): blocked, in a real drill (MODES' beginModeRun from the menu, lead ruling Z8), with a Daily Sortie as
+//     the control (Overdrive charges there); the Flight Check block reads ONBOARD's flightCheck. Both runs hold the
+//     field and type the same 6 words at 75 ms / key (160 WPM) over the stubbed T of 63 WPM.
+async function modeRunCharge(mode) {
+  const ok = await P.g((m) => { const g = window.game; g.stopToMenu(true); return g.beginModeRun(m); }, mode);
+  const live = ok && await waitFor(P, () => { const g = window.game; return g.mode === "playing" && !g.levelIntro && g.wavePhase === "spawn"; }, 15000);
+  await P.g(() => { window.__ty.clear(); window.__ty.hold(); window.__od.frames.length = 0; window.__od.sample = true; });
+  if (live) await run(P, plan(nextWords(6), 75).steps);
+  return P.g((ok) => {
+    const g = window.game, O = window.__od;
+    O.sample = false;
+    const r = { ok, runMode: g.runMode(), runRecordMode: g.run && g.run.mode, blocked: g.odBlocked(), frames: O.frames.length,
+      maxCharge: Math.round(Math.max(0, ...O.frames.map((f) => f.charge)) * 100) / 100, anyOn: O.frames.some((f) => f.on) };
+    window.__ty.clear();
+    return r;
+  }, !!live);
+}
 const hasModes = await P.g(() => typeof window.game.beginModeRun === "function");
-if (!hasModes) P.note("15. drill via MODES' beginModeRun", "MODES absent on this branch: simulated with run.mode = 'drill'; re-run after MODES merges");
-await P.g(() => { const g = window.game; g.run.mode = "drill"; window.__od.frames.length = 0; window.__od.sample = true; });
-await run(P, plan(nextWords(6), 75).steps);
-const t15 = await P.g(() => {
-  const g = window.game, O = window.__od;
-  O.sample = false;
-  const maxCharge = Math.max(0, ...O.frames.map((f) => f.charge)), anyOn = O.frames.some((f) => f.on);
-  const drillBlocked = g.odBlocked();
-  g.run.mode = "campaign";
-  const fc0 = g.flightCheck;
+const t15d = hasModes ? await modeRunCharge("drill") : { ok: false };
+const t15c = hasModes ? await modeRunCharge("daily") : { ok: false };
+const t15f = await P.g(() => {
+  const g = window.game, fc0 = g.flightCheck;
+  const daily = g.odBlocked();
   g.flightCheck = { probe: true };
   const fcBlocked = g.odBlocked();
   g.flightCheck = fc0 || null;
-  return { maxCharge, anyOn, drillBlocked, fcBlocked, campaignBlocked: g.odBlocked(), frames: O.frames.length };
+  return { daily, fcBlocked };
 });
-await P.g(() => window.__ty.clear());
-P.check("15. drill (run mode 'drill'): 3.6 s at 160 WPM never charges or activates; the Flight Check (flightCheck set) blocks it too; campaign does not",
-  t15.frames > 60 && !t15.anyOn && t15.maxCharge === 0 && t15.drillBlocked && t15.fcBlocked && !t15.campaignBlocked, t15);
+P.check("15. a real drill (beginModeRun): 3.6 s at 160 WPM never charges or activates (odBlocked); the Daily Sortie control with the same typing charges and activates; the Flight Check (flightCheck set) blocks it too",
+  hasModes && t15d.ok && t15d.runMode === "drill" && t15d.runRecordMode === "drill" && t15d.blocked && t15d.frames > 60 && !t15d.anyOn && t15d.maxCharge === 0
+    && t15c.ok && t15c.runMode === "daily" && !t15c.blocked && t15c.maxCharge > 0.5 && t15c.anyOn && !t15f.daily && t15f.fcBlocked, { drill: t15d, daily: t15c, flightCheck: t15f });
 
 // 16. Typed arrays; heap growth over 10 s of Overdrive typing < 1 MB (after a forced GC)
 const cdp = await P.cdp();
