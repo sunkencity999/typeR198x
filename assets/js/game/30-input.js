@@ -297,6 +297,7 @@ Object.assign(Game.prototype, {
   // ------------------------- Typing -------------------------
   // Order (CONTRACT §10): finale skip -> intro lockouts -> boss branch -> lock branch.
   handleTyped(ch) {
+    this.typedThisPage = true;   // the next-sector prefetch waits for it (05-boot.js tickBoot, CONTRACT 8.z Z11)
     if (this.bossClear) { this.skipFinale("key"); return; }
     if (this.mode !== "playing") return;
     if (this.inputLockedOut()) {

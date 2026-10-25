@@ -657,7 +657,8 @@ Object.assign(Game.prototype, {
     this.invulnT = Math.max(0, (this.invulnT || 0) - dt);   // the flash channels and player.hitT/kick decay in tickEffects (80-fx.js)
   },
 
-  // Prefetch the next sector's art and music once per level (at 25 % of the duration, and when the finale starts).
+  // Prefetch the next sector's art and music once per level (at 25 % of the duration once the pilot has typed in this
+  // page session, and when the finale starts).
   maybePrefetchNext() {
     if (this._prefetched) return;
     this._prefetched = true;
@@ -765,7 +766,7 @@ Object.assign(Game.prototype, {
     tk.dt = dt;
     this.hook("tick", tk);   // MODES clocks, ARCADE Overdrive meter
 
-    if (!this._prefetched && this.levelT >= 0.25 * cfg.duration) this.maybePrefetchNext();
+    if (!this._prefetched && this.typedThisPage && this.levelT >= 0.25 * cfg.duration) this.maybePrefetchNext();   // Z11: after the first typed key
 
     // autosave (never during the finale: the clear is committed once, by the finale itself)
     if (!this.bossClear) this.saveRun(false);

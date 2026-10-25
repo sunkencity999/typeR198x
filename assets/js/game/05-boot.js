@@ -10,7 +10,9 @@
 // tickBoot() the first frame a new levelIndex is seen while playing. It sets levelReady=false, releases the
 // previous sector's art, loads bg/fg/boss at high priority and applies the theme accent. isLevelGateOpen() is
 // the spawn/input gate (levelReady || levelWait >= LEVEL_INTRO_MAX_S). prefetchNextSector() is idempotent per
-// sector and feeds the slim #sectorPrefetch bar on Level Complete.
+// sector and feeds the slim #sectorPrefetch bar on Level Complete. It waits for the page's first typed key
+// (typedThisPage, set by handleTyped): a run resumed past 25 % of a sector (Continue into a wave or a boss) used to
+// fetch the next sector's art during the boss intro, before the pilot could type (CONTRACT 8.z Z11 budget).
 
 const CRITICAL_KEYS = ["ships/coconut", "ships/little-dark-one", "ships/sofrito", "ships/honeybee", "bg/first", "fg/first", "fx/explosions"];
 const ASSET_LABELS = {
@@ -400,7 +402,7 @@ Object.assign(Game.prototype, {
     this.ensureLevelAssets();
     if (!this.levelReady) this.levelWait += dt;
     const cfg = LEVELS[this.levelIndex];
-    if (cfg && (this.bossClear || this.levelT >= 0.25 * cfg.duration)) this.prefetchNextSector();
+    if (cfg && (this.bossClear || (this.typedThisPage && this.levelT >= 0.25 * cfg.duration))) this.prefetchNextSector();
   },
 
   // Next sector's bg/fg/boss at low priority plus its music; idempotent per sector. Feeds #sectorPrefetch.
