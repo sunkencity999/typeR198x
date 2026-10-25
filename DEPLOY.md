@@ -47,8 +47,9 @@ bash tools/deploy-check.sh --local                            # source checks + 
 Look at `tools/playtest/out/matrix/summary.tsv`: zero page errors on every row, fps >= 58, every `fixture-*` row
 `pass`, and non-media MB before the first keystroke <= 2.5 on the DPR 1 rows and <= 2.75 on the DPR 2 rows (CONTRACT
 8.y W2). `fixture-legacy-inboss` continues a run inside a boss, so it loads the boss art before its first keystroke
-and is gated at 2.75 too (2.46 at a0a3845; 2.61 with this release's JS/CSS; 2.69 with the stale-shell guard's
-revalidation of the four pages, which every fixture row with a save does after load, about +0.07 MB).
+and is gated at 2.75 too (2.46 at a0a3845; 2.61 with the 20261024a JS/CSS). The stale-shell guard's revalidation of
+the four pages (about +0.07 MB in every fixture row with a save) waits for the first keystroke (CONTRACT 8.z Z11), so
+it no longer counts toward that figure.
 
 ## 3. Dry run
 

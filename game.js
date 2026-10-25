@@ -94,10 +94,23 @@ const ASSET_VERSION = "20261024a";
         try { fetch(new URL(page, location.href).toString(), { cache: "no-cache" }).then((r) => r.arrayBuffer()).catch(() => {}); } catch (_) { /* offline / blocked */ }
       }
     };
-    // 2 s after load, then at idle: out of the way of the boot's own requests (the links do not depend on it).
-    const later = () => setTimeout(() => (typeof requestIdleCallback === "function" ? requestIdleCallback(run, { timeout: 3000 }) : run()), 2000);
-    if (document.readyState === "complete") later();
-    else addEventListener("load", later, { once: true });
+    // At idle after the first keystroke (keydown, or the touch field's input), else 30 s after load for a visit that
+    // never types: never inside the boot budget measured up to the first keystroke (CONTRACT 8.z Z11; a returning
+    // save's matrix rows paid ~0.07 MB for it), and out of the way of the boot's own requests.
+    let fired = false, timer = 0;
+    const go = () => {
+      if (fired) return;
+      fired = true;
+      clearTimeout(timer);
+      removeEventListener("keydown", go, true);
+      removeEventListener("input", go, true);
+      if (typeof requestIdleCallback === "function") requestIdleCallback(run, { timeout: 3000 }); else setTimeout(run, 0);
+    };
+    addEventListener("keydown", go, true);
+    addEventListener("input", go, true);
+    const arm = () => { if (!fired) timer = setTimeout(go, 30000); };
+    if (document.readyState === "complete") arm();
+    else addEventListener("load", arm, { once: true });
   }
 })();
 const withAssetVersion = (path) => {

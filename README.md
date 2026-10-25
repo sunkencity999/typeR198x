@@ -233,7 +233,8 @@ reach a browser that cached the whole older build at `/index.html` (shell and sc
 footer pages' "Back to the game" links): that browser runs the old build with zero requests until the player
 reloads, opens `/` (served no-cache) or the cache expires. Once a returning browser runs this shell (a save exists,
 or it arrived through `?v=`), the guard revalidates `/index.html`, `privacy-policy.html`, `support.html` and
-`info.html` after load with `cache: "no-cache"` (a 304 without a body while the copy is current, the new page once
+`info.html` at idle after the first keystroke (30 s after load when the player never types, so it stays out of the
+boot budget) with `cache: "no-cache"` (a 304 without a body while the copy is current, the new page once
 after a release; nothing is stored), and every in-site page link carries `?v=<shell token>` (`bump-version.sh`
 rewrites the `<a href>` tokens and the `privacy.html` refresh), so the footer pages, their back links and the next
 `/index.html` visit are this release. It never runs on a `file:` origin or under the native user agent.
