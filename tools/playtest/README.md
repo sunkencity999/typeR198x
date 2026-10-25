@@ -38,6 +38,7 @@ itself failed; `0` otherwise. Resource-load failures (404s, injected faults) are
 | `--expect-resource-errors` | off | Documents that resource errors are injected on purpose (`report.config`, summary line) |
 | `--ignore-errors <regex>` | none | Page/console errors matching the regex go to `report.ignoredErrors` instead of failing the run |
 | `--no-music` | off | Perf-only runs: `SFX.prototype.playMusic/prefetchMusic` are stubbed the moment `sfx.js` publishes the class (a `window.SFX` setter trap), so no media element ever streams. Cues and the bus are untouched; `sfx.noMusicCalls` lists what the game asked for; `report.config.noMusic` records the flag |
+| `--flight-check` | off | Plays the first-run Flight Check instead of skipping it: `window.TypeRHarness.flightCheck = "play"` (the default run sets `"skip"`, so every other row measures sector 1 as before). The typist plays it with `--wpm` / `--accuracy`, presses Space when the check asks for the release (`insertText(" ")` on `--mobile`), shots 17-20, `report.flightCheck` |
 | `--file` | off | Open `file://<root>/index.html` instead of starting the server (pair with `--ua native` for the synced bundle) |
 | `--headed` | off | Show the browser |
 
@@ -61,6 +62,16 @@ the true `timings.startToPlayingMs`. Treat that note as a failure of the game's 
 the harness. (`--ua native` over HTTP used to trip this when a media `play()` promise never settled
 inside `sfx.unlock()`; `unlock()` now races its media primes and `ctx.resume()` against 1.5 s, and the
 native-UA row enters play in ~0.4 s.)
+
+### Flight Check flag (`window.TypeRHarness`)
+
+A fresh save's first Start runs the Flight Check (17-onboarding.js) before the sector card. The game reads
+`window.TypeRHarness.flightCheck`: `"skip"` never runs it, `"play"` runs it once per page session whatever the save,
+anything else uses the real eligibility rule. play.mjs and `openProbe` install `"skip"` with an init script, so
+scenarios, fixtures and the ~45 openProbe probes behave as before. Probes pick it with
+`openProbe(name, { flightCheck: "skip" | "play" | "auto" })` (`auto` = the real rule); a probe that builds its own
+context calls `await harnessFlags(context, { flightCheck })` from `_lib.mjs`. `P.flightCheck()` returns
+`game.flightCheckState()` (null when none runs).
 
 ## Local server
 
@@ -94,7 +105,9 @@ everything else:
 `01-boot 02-menu 03-story 04-gameplay-early 05-gameplay-mid 06-paused 07-boss-intro 08-boss-fight
 09-boss-finale 10-level-complete 11-level2-start 12-game-over 13-final-boss 14-victory
 15-victory-dialogue 16-menu-after`. A shot keeps its number even when earlier ones are skipped
-(fixtures with `storySeen` produce no `03-story`); extra shots continue from 17. `03-story` is taken once the
+(fixtures with `storySeen` produce no `03-story`); extra shots continue from 17. `--flight-check` adds
+`17-flight-check-1`, `18-flight-check-2`, `19-flight-check-3` (the first frame each step's plate is targetable) and
+`20-flight-check-complete`. `03-story` is taken once the
 modal has settled (400 ms), `05-gameplay-mid` waits up to 4 s for at least three enemies on screen, and
 `07-boss-intro` captures the intro ceremony at ~1.2 s before the hand-off.
 
@@ -127,6 +140,8 @@ modal has settled (400 ms), `05-gameplay-mid` waits up to 4 s for at least three
 | `reduceMotion` | `{rootClass, gameFlag, mediaQuery}` — what the page resolved |
 | `canvas` | Backing store vs CSS size and DPR (`renderScale` acceptance) |
 | `fixture` | `{name, description, entry, expect, save, check:{pass, details[], snapshot}}` |
+| `flightCheck` | `{played:false}` by default; with `--flight-check` `{played, sectorCard, result, reason, ms, keys, correct, misses, releasedBy, steps[]}` (`game.flightCheckLastResult()`) |
+| `config.flightCheck` | The `--flight-check` flag |
 | `entryUsed`, `notes[]`, `screenshots[]`, `harnessError` | Bookkeeping |
 
 ## Fixtures (`fixtures/*.json`)
@@ -151,7 +166,8 @@ does not change the exit code (the owning task's acceptance decides).
 
 Rows: `dpr1`, `dpr2`, `reduced-motion` (`all` at DPR 2 with `prefers-reduced-motion: reduce`),
 `mobile` (smoke), `native-ua` (the WKWebView user agent served over HTTP, `all`), `no-music` (smoke,
-DPR 2, media transport stubbed: the perf-only row) and `fixture-<name>` (smoke) for the six fixtures.
+DPR 2, media transport stubbed: the perf-only row), `flight-check` (smoke with `--flight-check`) and
+`fixture-<name>` (smoke) for the six fixtures.
 Output goes to `out/matrix/<name>/` with a log beside each folder and a `summary.tsv`; the table
 printed at the end has exit codes, error counts, `reqFail`/`mediaAbort`, fps, `maxRenderMs`,
 `shadowBlurPerFrame`, `fullFrameFillMaxAlpha`, `layoutCountPer5s`, the non-media MB before the first
@@ -163,7 +179,7 @@ selects rows; `PLAY_ARGS="--cpu 4"` is appended to every row.
 Extra one-off scripts live in `probes/` (shipped) or `out/` (ignored). They can import nothing from
 `play.mjs`; copy the `installProbe` function if they need the canvas counters. Shipped:
 
-- Staged acceptance probes from the build (`probes/a2.mjs`, `a3.mjs`, `a4.mjs`) keep the expectations of their stage (a 40-click budget for the ending, the pre-tally clear-bonus sums, a Cyrillic layout fallback) and are kept for history; they are not release gates. The gates are the matrix, `e2-*`, `c*`, `d*`, `b-fixtures` and `review-runtime`.
+- Staged acceptance probes from the build (`probes/a2.mjs`, `a3.mjs`, `a4.mjs`) are kept for history; they are not release gates. `a3.mjs` now checks schema 3 and compares the clear bonus with `game.lastTally.total` (it confirms the Reset save / Abandon-run dialogs added after A3); `a2.mjs` and `a4.mjs` keep their stage expectations (a 40-click budget for the ending, a Cyrillic layout fallback). The gates are the matrix, `e2-*`, `c*`, `d*`, `b-fixtures` and `review-runtime`.
 - `probes/harness-report-check.mjs <report.json> [--all] [--budget-mb 2.5]` — asserts every v2 report
   field is present (including `mediaAborts`, `networkTotals.mediaBytes`,
   `bytesFinishedBeforeFirstKeystrokeNonMedia/Media`, `config.noMusic`), checks their shapes
@@ -191,7 +207,16 @@ Extra one-off scripts live in `probes/` (shipped) or `out/` (ignored). They can 
 - `probes/b-run.mjs --root ../.. [--wpm N] [--accuracy A] [--sectors 1-3]` — the typist-profile runs behind
   the balance pass (PLAN B10): time to the sector-1 boss, deaths per sector, `incomingCps` vs `targetCps` per wave,
   boss-phase `leaksPerMin`, rank reached. The measured numbers and the knobs they drove live in
-  [`balance.md`](./balance.md).
+  [`balance.md`](./balance.md) (its first sections are the training update's re-passes: the lead rulings tree, then
+  the merged tree and PACE's own pass).
+- `probes/b10.mjs --wpm W --accuracy A [--sectors N] [--jump L] [--minions danger|never|always] [--expect p35|p55|p80]
+  [--acquire-ms N]` — one typist profile through consecutive sectors on the play clock (deaths, min HP, leaks, incoming
+  cps, damage by source, surges fired / countered, rank, idle gaps); `b10-report.mjs` renders `out/b10/*.json`. It
+  records the paceMul / quota PACE applied per wave, timeouts and the plates that escaped (alive at the cap, lead ruling
+  Z5), the carried hull on each sector card, the surge windows (Z6) and the throughput; its band is delivery >= 0.85
+  and stream <= 1.35 x targetCps x paceMul. `--acquire-ms N` (lead ruling Z7, off by default) waits N ms of play clock
+  before the first key of every new target, 2N with probability .1 (`--acquire-slow-ms`, `--acquire-slow-p`), so the
+  typist is not a machine that never looks for the next plate.
 - `probes/d8.mjs [--dpr 2]` — attract-mode acceptance (PLAN D8, `assets/js/game/85-attract.js`): attract active
   on the title screen, canvas changes, save blob byte-identical over 15 s on the legacy-midwave menu, no
   `game.enemies` on the menu, frameCount ≥ 58/s fresh and ≤ 22/s after `attract.idleT > 90`, no
@@ -205,6 +230,120 @@ Extra one-off scripts live in `probes/` (shipped) or `out/` (ignored). They can 
 - `probes/e2-budget.mjs [--dpr 2] [--sector 10]` — combined budget: 14 plates, 3 chips, toast + banner, CRT on: fps >= 58, maxRenderMs <= 16, shadowBlur 0, composite sets <= 6. Run it alone (fps-sensitive).
 - `probes/e2-vision.mjs` — six scenes under normal / deuteranopia / achromatopsia vision (`Emulation.setEmulatedVisionDeficiency`), 15 PNGs under `out/e2-vision/`, plus DOM/state assertions on the shape cues.
 - `probes/e2-menu.mjs` — CRT top-bar toggle (label, aria-pressed, dot, data-crt), NEW RUN + confirm, Enter -> Continue, Escape restores focus.
+- `probes/t-measure-speed.mjs [--dpr 2]` — D1 hand speed (~4 min): 200 ms/key typing gives 60 WPM in S1 and S5,
+  errors cost time, single letters / first keys / pauses / > 1.5 s gaps / bursts add nothing, boss segments and
+  capsules, HUD `--` then live speed holding while idle, results / rank / records rows from hand speed, Best WPM
+  badge rules, touch `insertText` bursts.
+- `probes/t-measure-typo.mjs [--dpr 2]` — D4: the struck pair in the locked plate and the boss slab (pixels + draw
+  calls), one pair at a time, gun pop + nearest-plate pulse, the danger-zone guard, HUD ACC `--` / warn / bad /
+  `.is-miss` and its restart on a second miss, lead underline, reduced motion, 10 s at 40 % misses inside the frame
+  budget. Run alone for the budget.
+- `probes/t-measure-rank.mjs [--dpr 2]` — D5 (~5 min, includes a sector-10 run): shortfall copy and a 651k-case
+  threshold sweep, the `-- WPM` form when speed was not measured, card line / caption / chips, announcements, Game
+  Over causes (leaks, minions, surge), Victory, reduced motion, 844 x 390 and the two-line wrap at 390 x 844.
+- `probes/t-measure-profile.mjs` — D6 data: migration fixed point and legacy flags, lazy profile and Reset save,
+  key / bigram EMAs, the 200-bigram cap, the 16 KB budget, no extra storage writes while typing, weak key / bigram
+  formulas, sessions / speedEma / days (acc null under 10 keys), sector bests, practice sessions and mode bests
+  through the `typistEndSession` API (the daily, drill and endless runs call it), goal, blocked storage, a static
+  allocation scan of the per-key / per-frame functions. Check 6 counts autosave writes only (an existing tutorial-flag
+  save point on the first typed word is not a per-key write).
+- `probes/t-measure-flightlog.mjs` — D6 UI: Records tabs by pointer and keyboard, the Flight Log from an injected
+  profile, empty state, legacy rows, menu Best WPM / goal, phone portrait / landscape / desktop / 1280 x 800 (stat
+  labels inside their tiles, every value on one line, the Drill tile's speed with its accuracy in the caption), the
+  note under the sector bests when a cleared sector has no timed WPM, the sparkline legend / lone-point dots / gaps,
+  colour-vision luminance of the key buckets (screenshots under `out/t-measure-flightlog/`).
+- `probes/t-measure-api.mjs` — the MEASURE API for the later tracks: scopes, reuse, `typistInterval`, keyMiss
+  `expected`, shapes, `typistEndSession` mode bests, cost, the null-run (Flight Check) contract.
+- `probes/measure_lib.mjs` — helpers for the above: a controlled in-page typist (frozen spawner, scripted static
+  plates, `handleTyped` from a `setTimeout` chain scheduled on `performance.now()`), `clearBoss`, `dieByLeak`.
+- `probes/t-onboard-flight.mjs [--dpr 2]`, `t-onboard-paths.mjs`, `t-onboard-briefing.mjs`, `t-onboard-finish.mjs`,
+  `t-onboard-harness.mjs` — the D13 acceptance: the Flight Check happy path with per-frame no-score / no-powerup /
+  no-hull-loss sampling and step-1 budgets, every other path (Esc, Skip, pause, quit, ineligible saves including a
+  MEASURE session, sector tile, play flag, reduced motion, phone, external start, blocked storage), the briefing
+  summary and disclosure, the FINISH fix, the phone layout (the tap pill and the toasts never overprint Skip or the
+  step count at 390x844, 844x390 and 320x568), the step-3 toast following the lock, and the harness default /
+  `--flight-check` (runs play.mjs twice into `out/t-onboard-harness/`).
+- `probes/t-words-content.mjs [--root ../..] [--dict /usr/share/dict/words]` — WORDS content, no browser (node vm over
+  00-util / 20-constants / 25-lexicon / 30-content, plus a context without 25-lexicon for today's pools): list shapes,
+  inventions out of the wave pools (C3: `japan` is one, lead ruling Z4), per-wave pools and shares, >= 95 % dictionary
+  words, top-100 / bigram / letter coverage of a simulated stream, the cps estimate, the weak-bias formulas and the
+  anti-repeat ring for a one- or two-word weak pool (C16), seeded determinism, tuning, copy.
+- `probes/t-words-space.mjs` — Space types the gap of a locked two-word plate and releases otherwise, Backspace, a
+  letter at the gap, auto-repeat, pause, sector card, boss, the b_lib typist, touch `insertText`, a plate PIERCE or
+  RAPID left at its gap (S13), and MEASURE counting the gap as a speed interval but never as a key or bigram.
+- `probes/t-words-render.mjs [--dpr 2] [--reduced-motion]` — the gap dot (pixels only inside the gap cell; idle /
+  locked / typed), plate width, the warm cache up to `cfg.maxTextLen` (plain and typo-widened), the dots following
+  MEASURE's typo pair, a 14-plate frame budget. Screenshot `NN-warp-core-*.png`.
+- `probes/t-words-spawn.mjs` — in-page spawn mix per sector-wave, no inventions, the weak bias and THREAT INTEL line +
+  speech from a seeded profile through MEASURE's real API, the one-time two-word tip (and again after Reset save), the
+  seeded Daily stream, tuning and the endless no-op, live S7 phrases typed by the harness typist, help copy, and WORDS
+  staying inert during the real Flight Check.
+- `probes/t-arcade-counter.mjs` — D10 Counter-Signal (~2.5 min): table / window / par numbers, the Z6 window floor
+  (`surgeWindow` = max(table, 2.25 x the segment's time at the pilot's speed), 1b / 3), sector 1 never surging, the first
+  sector-2 surge at 6.0 s at a segment start (whole segment, slow widen), the pending start, the telegraph (charge bar,
+  meter, glow and outline draw counters, the glow alpha at or above its 2 Hz pulse trough at the sampled t; the bar's
+  position and zero HUD growth at 1440 x 900, 390 x 844 and 844 x 390), fail and counter (exact damage / bonus, bolts at the aim point, scramble), the per-phase cap, pause, Retry boss,
+  par, the card-note scopes (sector / Game Over / run), reduced motion, a DPR 2 budget context and `legacy-inboss`.
+- `probes/t-arcade-overdrive.mjs` — D11 Overdrive (~2 min, controlled in-page typist on `performance.now()`):
+  thresholds (2c: a fresh pilot's provisional 25 WPM threshold refreshes in Overdrive and the first Overdrive ends by
+  the slow rule, lead ruling Z2), activation at 100 WPM, the score kinds, beams / floaters / plume / arc, vents (miss,
+  leak, slow), holds (pause, empty field), the charge reset, the boss kill, the card note, setItem count, scripted
+  input, a real drill blocking it with a daily sortie as the control (15), the Flight Check blocking it, the first
+  Overdrive tip stacking beside an S1 tutorial tip, 13b at the 25 WPM floor, heap, reduced motion.
+- `probes/t-arcade-readability.mjs` (DPR 2) — D12: the kill explosion set and mapping, draw order (smoke < plates <
+  flash), a neighbour plate's text pixels after a kill, rail alpha, ring / hit-stop, a 6 s kill burst budget.
+- `probes/t-arcade-budget.mjs` (DPR 2, CRT on; run alone) — sector-10 boss + 4 minions + a charging surge +
+  Overdrive: fps, render ms, composite sets, shadowBlur, full-frame fills, layouts, heap.
+- `probes/t-arcade-balance.mjs [--reuse] [--only <profile>] [--parallel n]` (~25 min) — runs b10.mjs for 35/.90,
+  55/.93, 80/.97 (sectors 1-3), 55/.93 and 80/.97 (sector 10 jump) and 80/.97 (sectors 8-10), asserts the Counter-Signal
+  targets (every S2-3 fight surges, S1 never; the Z6 targets: no surge damage for 35/.90 in S1-3, the 55/.93 S10 min
+  hull, 80/.97 still meeting real surges in S8-10) and writes `out/t-arcade-balance/summary.json` (surges, surge
+  damage, windows, tally per sector).
+- `probes/t-pace-math.mjs` — D2 numbers (~15 s, no typing): `PACE` constants, target / step functions, the tuning
+  table on S5 W2, the three pilot sources with and without MEASURE's accessors (the 60-interval profile floor), a fresh
+  pilot's S1 W1 at 1.0 / quota 8, the 73 WPM ramp across a sector boundary, the `diff()` rows, the hull formula.
+- `probes/t-pace-spawner.mjs [--dpr 2]` — the 10-30 px roll-in, the 0.1 s empty-field spawn, a pinned paceMul 2.0
+  (alive cap, plate speeds, quota 36, stage bar), the 2-alive top-up just above `PACE.hungryMin2AtMul` and off just
+  below it, the stream at a pinned 1.5 under an 80 WPM typist, a fresh S1 W1 at 1.0 with MEASURE.
+- `probes/t-pace-stakes.mjs` — perfect wave by quota only; the Z5 wave caps (computed, >= the table, a pilot who
+  keeps the field clear is never timed out, an empty field lifts the cap); a timeout with plates alive: they leave at
+  once as escaping plates (no detonation, no damage, warping off to the right; a fade under reduced motion) and the
+  drain end calls `WAVE TIMED OUT · N ESCAPED` (no sting, no bonus, announced), the quota carry and its limits, the
+  sector-clock cut of a wave-3 drain, Retry clearing a carry.
+- `probes/t-pace-hull.mjs` — S1-3 refill, S4 220/500 -> S5 432/600 with the card / Level Complete copy, flawless
+  stays full, Retry refills, quit at Level Complete + Continue keeps the carried hull and shows the line once, legacy
+  fixtures, and the `PACE x2.0` results chip with its announcement (none at the table pace).
+- `probes/t-pace-cadet.mjs [--dpr 2]` — the second-death offer (focus, Tab order, note, announce), accept (stream /
+  damage / score, tags, the results row, records), the next sector standard, the boss path, the count across a
+  reload, no Cadet in daily / endless (real MODES runs), the offer hidden again when a mode run starts (8b, lead
+  ruling Z9), a phone tap, the stays-on note on a death under Cadet, and the phone records row keeping its CADET chip
+  in view (and every column, with 12- and 24-character pilot names).
+- `probes/t-pace-save.mjs` — `run.pace` keys / types / < 400 B, a garbage blob normalised, no extra storage writes
+  while typing, node --check + check-globals.
+- `probes/t-pace-perf.mjs [--dpr 2]` — S10 W3 and S1 W3 pinned at 2.5 with an 80 WPM typist, and S10 with an idle
+  pilot: fps, maxRenderMs, shadowBlur, full-frame fills, composite sets, max alive. Run it alone.
+- `probes/t-pace-balance.mjs --wpm W --accuracy A [--seed-profile auto|WPM] [--jump L --sectors N --retry N]
+  [--set knob=value,rollin=a-b] [--acquire-ms N]` / `--matrix [--parallel 2]` — the R26 balance targets (idle share
+  S1-3, deaths, damage, rank, time to the S1 boss, min hull, longest idle gap) with a play-clock-paced typist; prints
+  per sector idle / deaths / hull in / min hull / per-wave paceMul, quota, carry, timeouts and escaped plates; JSON
+  under `out/t-pace-balance/`. `--acquire-ms` is the Z7 latency (as b10); the latency matrix reports idle share only
+  and keeps the death and damage targets.
+- `probes/pace_lib.mjs` — helpers: the b10 typist on the play clock (optional acquisition latency), forced clears,
+  deaths, the in-place reload, canvas budget counters.
+- `probes/t-modes-rng.mjs`, `t-modes-daily.mjs`, `t-modes-endless.mjs [--dpr 2]`, `t-modes-drill.mjs`,
+  `t-modes-title.mjs` — the D9 acceptance (~4 min together): seed vectors, the 2026 sector spread, picks routed
+  through `game._rng` in a daily run and never in the campaign, identical wave openings on one date; the daily tile,
+  start, pause copy and restart confirm, three waves and no boss, card / rating / medal (incl. the SILVER cap on a
+  death and the accuracy rounded down), the save record (counted, practice, death, streak copy, midnight, 60-day prune
+  <= 8 KB), share line and clipboard copy (and, at 1024 x 600 / 844 x 390, the focused share line and Copy clear of
+  the sticky actions), quit keeping the campaign run, a campaign start inside a mode run banking the stored run,
+  post-victory sectors, the locked fresh deck with the reason on every tile; the endless start rate, stream tuning,
+  steps, delivered-rate calibration, pressure cap, bests, powerups, no damage / boss, 6 cps frame budget; the drill
+  clamp, weighting, clock and pause, leaks, no score / powerups, lines vs the profile, bigram line, bests; deck
+  placement, Tab order, four layouts, the menu footer reachable with a saved run on six laptop windows (T3c), the
+  untouched menu blob, card keys, reduced motion, no tutorial toast, campaign chrome restored after a paused drill. Every one checks the campaign fields stay byte-identical. `probes/modes_lib.mjs` holds the
+  fixtures (F5, F5P), `startMode`, `isolation`, `card` and a scripted static-plate typist (`typeWords`). Probe hooks:
+  `game.modesDebug()` = `{ setNow, advance, state, plan, finish }`.
 - `probes/review-runtime.mjs` — regression checks for the review-fix runtime track (~25 s): explosion sheet factor through a DPR 1 -> 2 flip and back (R1), `PALETTE.rgba` alpha quantisation (R12), dying plates under source-over (R13), the full 450 ms loading fade (R27), plate-cache re-warm after a mid-sector resize (R30), bounded spawn/leak telemetry logs and their reset on a new run (R31).
 
 ## Music loop points (`tools/measure-loops.sh`)

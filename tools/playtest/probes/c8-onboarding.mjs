@@ -56,18 +56,39 @@ await sleep(4300);
 const gone = await P.g(() => { const t = document.querySelector("#toastStack .toast"); return !t || !/LOCK ON/.test(t.textContent); });
 P.check("'LOCK ON' toast gone after ~4 s", gone, `gone=${gone}`);
 
-// First lock on a WORD target -> FINISH toast, tutorialSeen.lock true; kill -> finish true.
+// D13 regression (ONBOARD): a letter kill before any word lock leaves tutorialSeen.finish false. It used to mark FINISH
+// seen on any kill, so the tip never showed (wave 1 is ~80 % letters).
 await P.g(() => { window.game.invulnT = 1000; });
+const letterCh = await P.g(() => {
+  const g = window.game;
+  const used = new Set([...g.enemies, ...g.powerups].filter((e) => e.alive && !e.dying).map((e) => e.nextChar()));
+  const ch = "qxzjvkwybp".split("").find((c) => !used.has(c)) || "q";
+  g.enemies.push(new Enemy({ text: ch, x: 700, y: LANE_YS[2], speed: 0, lane: 2 }));
+  return ch;
+});
+await page.keyboard.press(letterCh);
+await sleep(200);
+const afterLetter = await P.g(() => ({ kills: window.game.levelStats.kills, finish: window.game.save.tutorialSeen.finish, log: window.__toastLog.slice(),
+  blob: (JSON.parse(localStorage.getItem("typesmup198x.save.v1")) || {}).tutorialSeen }));
+P.check("a letter kill before any word lock leaves tutorialSeen.finish false (no FINISH toast)", afterLetter.kills >= 1 && afterLetter.finish === false &&
+  !afterLetter.log.some((s) => /FINISH/.test(s)) && !(afterLetter.blob && afterLetter.blob.finish), JSON.stringify({ letter: letterCh, ...afterLetter }));
+
+// First lock on a WORD target -> FINISH toast (marks tutorialSeen.finish when displayed), tutorialSeen.lock true.
+// CONTRACT 8.z Z8: the probe places its own word plate (a still plate whose first letter nothing else on screen
+// starts with). Waiting for the stream's first word took up to 12 s in a mostly-letter wave 1, and a natural powerup
+// in that window spent the one-time powerup tip the SHIELD check below needs (flake).
+const wordFirst = await P.g(() => {
+  const g = window.game;
+  const used = new Set([...g.enemies, ...g.powerups].filter((e) => e.alive && !e.dying).map((e) => e.nextChar()));
+  const word = ["vortex", "quartz", "zephyr", "jungle", "kayak", "wombat", "yonder", "beacon"].find((w) => !used.has(w[0])) || "vortex";
+  g.enemies.push(new Enemy({ text: word, x: 700, y: LANE_YS[2], speed: 0, lane: 2 }));
+  return word[0];
+});
 let locked = false;
-for (let i = 0; i < 150 && !locked; i++) {
-  const k = await P.g(() => {
-    const g = window.game;
-    const words = g.enemies.filter((e) => e.alive && !e.dying && e.text.length >= 3 && g.isTargetable(e)).sort((a, b) => a.x - b.x);
-    return words.length ? words[0].nextChar() : null;
-  });
-  if (k && /^[a-z]$/.test(k)) await page.keyboard.press(k);
+for (let i = 0; i < 10 && !locked; i++) {
+  if (i === 0) await page.keyboard.press(wordFirst);
   await sleep(80);
-  locked = await P.g(() => !!window.game.lock);
+  locked = await P.g(() => !!window.game.lock && window.game.lock.ref && window.game.lock.ref.text.length >= 3);
 }
 await sleep(150);
 const afterLock = await P.g(() => ({ lock: !!window.game.lock, seenLock: window.game.save.tutorialSeen.lock, log: window.__toastLog.slice(), blob: (JSON.parse(localStorage.getItem("typesmup198x.save.v1")) || {}).tutorialSeen }));
@@ -92,14 +113,20 @@ for (let i = 0; i < 120; i++) {
   await sleep(55);
 }
 await sleep(150);
-const finish = await P.g(() => ({ kills: window.game.levelStats.kills, seenFinish: window.game.save.tutorialSeen.finish }));
-P.check("first kill -> tutorialSeen.finish === true", finish.kills > 0 && finish.seenFinish === true, JSON.stringify(finish));
+const finish = await P.g(() => ({ kills: window.game.levelStats.kills, seenFinish: window.game.save.tutorialSeen.finish, log: window.__toastLog.slice(),
+  blob: (JSON.parse(localStorage.getItem("typesmup198x.save.v1")) || {}).tutorialSeen }));
+P.check("FINISH display sets tutorialSeen.finish (memory and storage)", finish.seenFinish === true && !!(finish.blob && finish.blob.finish === true) &&
+  finish.log.some((s) => /FINISH/.test(s)), JSON.stringify({ kills: finish.kills, seenFinish: finish.seenFinish, blobFinish: finish.blob && finish.blob.finish }));
 
-// Powerup tip: spawn one in view.
+// Powerup tip: spawn one in view. The tip is one-time: a natural capsule that reached the screen first (a PIERCE drop in
+// the first seconds of wave 1) takes it, and then the probe's SHIELD must not repeat it.
+const puBefore = await P.g(() => window.__toastLog.filter((s) => /TO GRAB IT/.test(s)));
 await P.g(() => { const g = window.game; g.spawnPowerup({ type: "SHIELD", x: 900, y: 320, fromKill: true }); });
 await sleep(300);
 const pu = await P.g(() => window.__toastLog.slice());
-P.check("first powerup on screen -> 'TYPE SHIELD TO GRAB IT'", pu.some((s) => /TYPE SHIELD TO GRAB IT/.test(s)), JSON.stringify(pu.slice(-3)));
+const puTips = pu.filter((s) => /TO GRAB IT/.test(s));
+P.check("first powerup on screen -> its tip 'TYPE <LABEL> TO GRAB IT' once ('TYPE SHIELD TO GRAB IT' for the probe's SHIELD unless a natural capsule came first)",
+  puBefore.length ? (puTips.length === 1 && /^TYPE [A-Z]+ TO GRAB IT$/.test(puTips[0])) : puTips.some((s) => /TYPE SHIELD TO GRAB IT/.test(s)), JSON.stringify({ before: puBefore, last: pu.slice(-3) }));
 
 // Boss tip after the intro.
 await P.forceBoss();

@@ -39,6 +39,9 @@ const EXPLOSION_FRAMES = [
 const EXPLOSION_SETS = {
   small:  { frames: [2, 1, 0],                   flashFrames: [2],      scale: 0.9,  frameTime: 0.055 },
   medium: { frames: [9, 7, 6, 5, 4, 3, 8],       flashFrames: [9, 7],   scale: 1.0,  frameTime: 0.06 },
+  // ARCADE D12: word kills use the medium frames at .55 so the blast never hides a neighbouring plate; `medium` (1.0)
+  // stays for the boss finale bursts and the attract kills.
+  kill:   { frames: [9, 7, 6, 5, 4, 3, 8],       flashFrames: [9, 7],   scale: 0.55, frameTime: 0.06 },
   large:  { frames: [15, 14, 12, 11, 13, 19, 17], flashFrames: [15, 14], scale: 1.15, frameTime: 0.07 }
 };
 const BOSS_ARTS = [
@@ -275,6 +278,8 @@ const WORDS_THEMED = [
 
 const ALL_WORDS = [...new Set([...WORDS_EASY, ...WORDS_MED, ...WORDS_HARD, ...WORDS_THEMED].map((w) => w.toLowerCase()))]
   .filter((w) => /^[a-z]+$/.test(w));
+// WORDS (25-lexicon.js): the wave pools drop the non-dictionary inventions and gain real neon words.
+const WAVE_WORDS = (typeof lexiconThemedPool === "function") ? lexiconThemedPool(ALL_WORDS) : ALL_WORDS;
 
 // Single-letter enemies draw from a graded alphabet: home row first, the full a-z from sector 4.
 const LETTER_SETS = {
@@ -291,7 +296,7 @@ const LEVEL_POOL_MIN = 24;
 function buildLevelWordPool(min, max) {
   let lo = clamp(min, WORD_LEN_MIN, WORD_LEN_MAX);
   let hi = clamp(max, lo, WORD_LEN_MAX);
-  const fitting = () => ALL_WORDS.filter((w) => w.length >= lo && w.length <= hi);
+  const fitting = () => WAVE_WORDS.filter((w) => w.length >= lo && w.length <= hi);
   let pool = fitting();
   let growMax = true;
   while (pool.length < LEVEL_POOL_MIN && (lo > WORD_LEN_MIN || hi < WORD_LEN_MAX)) {
@@ -342,6 +347,7 @@ function attachLevelContent(levels) {
     const keys = letterSetKeysForLevel(cfg.level);
     cfg.waveLetterSets = keys.map((k) => LETTER_SETS[k]);
     cfg.letterSet = cfg.level <= 3 ? LETTER_SETS.basic : LETTER_SETS.full;   // the widest alphabet the sector uses
+    if (typeof lexiconAttachLevel === "function") lexiconAttachLevel(cfg);   // WORDS: waveCommon / wavePhrases / waveTextLen / maxTextLen
   }
   return levels;
 }

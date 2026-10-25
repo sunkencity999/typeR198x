@@ -18,10 +18,17 @@
 //                   every minion leaks); 'danger' (default) = a minion whose plate has crossed DANGER_X is shot
 //                   first, otherwise the boss; 'always' = any targetable minion first
 //   --expect        adds the pass/fail lines of that profile's B10 targets (see balance.md)
+//   --acquire-ms N  lead ruling Z7: a target-acquisition latency of N ms (play clock) before the first key of every new
+//                   target, N x 2 (--acquire-slow-ms) with probability .1 (--acquire-slow-p); off by default
+// PACE (D2 / D3): every wave also records the paceMul / quota PACE applied (waveTuning, read after PACE's waveWillStart
+// listener), whether it timed out and how many plates escaped (alive at the cap, lead ruling Z5); every sector the hull
+// its card showed (hullIn) and the gross throughput. The incomingCps band is judged per wave against targetCps x the
+// applied paceMul, [0.85, 1.35] (the 0.1 s empty-field rule and the 2-alive top-up from PACE.hungryMin2AtMul feed a
+// fast typist above the stream).
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { openProbe, sleep, waitFor } from "./b_lib.mjs";
+import { openProbe, sleep, waitFor, typistTarget, acquireOpts, acquireDelayMs } from "./b_lib.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const args = Object.fromEntries(process.argv.slice(2).map((a, i, arr) => a.startsWith("--") ? [a.slice(2), arr[i + 1]] : null).filter(Boolean));
@@ -32,7 +39,8 @@ const SECTORS = Number(args.sectors || (JUMP ? 1 : 3));
 const MINIONS = args.minions || "danger";
 const EXPECT = args.expect || null;
 const SECONDS = Number(args.seconds || 420);               // wall-clock cap per sector (a sector-10 clear takes ~4 min)
-const LABEL = args.label || `w${WPM}-a${String(ACC).replace(/^0/, "")}-${JUMP ? "j" + JUMP : "s1-" + SECTORS}-${MINIONS}`;
+const ACQ = acquireOpts({ acquireMs: args["acquire-ms"], acquireSlowMs: args["acquire-slow-ms"] ?? null, acquireSlowP: args["acquire-slow-p"] ?? 0.1 });
+const LABEL = args.label || `w${WPM}-a${String(ACC).replace(/^0/, "")}-${JUMP ? "j" + JUMP : "s1-" + SECTORS}-${MINIONS}${ACQ.ms ? `-acq${ACQ.ms}` : ""}`;
 const OUT_DIR = path.resolve(HERE, "../out/b10");
 fs.mkdirSync(OUT_DIR, { recursive: true });
 
@@ -44,15 +52,22 @@ async function installHooks() {
   await P.g(() => {
     const g = window.game;
     if (window.__b10) return;
-    const B = window.__b10 = { spawns: [], leaks: [], damage: [], surges: [], phases: [], boss: [], reset() { B.spawns = []; B.leaks = []; B.damage = []; B.surges = []; B.phases = []; B.boss = []; } };
+    const B = window.__b10 = { spawns: [], leaks: [], damage: [], surges: [], windows: [], phases: [], boss: [], pace: [], hullIn: null, lastCard: null,
+      reset() { B.spawns = []; B.leaks = []; B.damage = []; B.surges = []; B.windows = []; B.phases = []; B.boss = []; B.pace = []; B.hullIn = B.lastCard; } };
     const ctx = () => ({ t: g.playClock || 0, L: g.levelIndex + 1, wave: g.wave | 0, phase: g.inBoss ? "boss" + (((g.boss && g.boss.phase) | 0) + 1) : g.wavePhase });
     const wrap = (name, after) => {
       const orig = g[name];
       if (typeof orig !== "function") return;
       g[name] = function (...a) { const r = orig.apply(this, a); try { after.call(this, r, ...a); } catch (e) { console.warn("b10 hook", name, e); } return r; };
     };
-    // hungry = the spawn came from the hungry rule (hungryT was just reset and fewer than HUNGRY_MIN_ALIVE were alive)
-    wrap("spawnEnemy", function (en) { if (en) B.spawns.push({ ...ctx(), n: en.text.length, hungry: this.hungryT === 0 && (this.countAliveEnemies() - 1) < (typeof HUNGRY_MIN_ALIVE === "number" ? HUNGRY_MIN_ALIVE : 2) }); });
+    // hungry = the spawn came from the hungry rule (hungryT was just reset and fewer than the wave's hungryMinAlive were
+    // alive: PACE raises it to 2 from PACE.hungryMin2AtMul, waveTuning.hungryMinAlive)
+    wrap("spawnEnemy", function (en) {
+      if (!en) return;
+      const t = typeof this.waveTuningNow === "function" ? this.waveTuningNow() : null;
+      const minAlive = t ? t.hungryMinAlive : (typeof HUNGRY_MIN_ALIVE === "number" ? HUNGRY_MIN_ALIVE : 2);
+      B.spawns.push({ ...ctx(), n: en.text.length, hungry: this.hungryT === 0 && (this.countAliveEnemies() - 1) < minAlive });
+    });
     wrap("spawnBossMinion", function (en) { if (en) B.spawns.push({ ...ctx(), n: 1, minion: true }); });
     wrap("leakEnemy", function (_, en) { if (!this.bossClear) B.leaks.push({ ...ctx(), n: en.text.length, minion: en.kind === "bossMinion" }); });
     wrap("takeDamage", function (dmg, amount, source) { B.damage.push({ ...ctx(), dmg: dmg | 0, asked: amount, source: source || "leak", shielded: !dmg && amount > 0 }); });
@@ -64,6 +79,21 @@ async function installHooks() {
     wrap("onBossPhaseClear", function () { B.boss.push({ ...ctx(), ev: "phase", phase: this.boss ? this.boss.phase : null }); });
     wrap("onBossKill", function () { B.boss.push({ ...ctx(), ev: "kill" }); });
     wrap("onGameOver", function () { B.boss.push({ ...ctx(), ev: "death" }); });
+    // PACE: the tuning each wave really ran with (listeners after 42-pacing.js read what it wrote), timeouts, card hull
+    if (typeof onGameHook === "function") {
+      onGameHook("waveWillStart", function (e) { B.pace.push({ L: e.level, wave: e.wave, mul: e.tuning ? e.tuning.spawnMul : 1, quota: e.tuning ? e.tuning.quota : null, timedOut: false, escaped: 0 }); });
+      // Z5: the plates alive at the cap leave at once (waveWillEnd's alive); a drain timeout would detonate the rest
+      onGameHook("waveWillEnd", function (e) { const p = B.pace[B.pace.length - 1]; if (p && !e.byQuota) { p.timedOut = true; p.escaped = e.alive | 0; } });
+      onGameHook("waveDrained", function (e) { const p = B.pace[B.pace.length - 1]; if (p && !e.byQuota) p.escaped += e.detonated | 0; });
+      onGameHook("sectorCardWillShow", function () { B.lastCard = { hp: this.player.hp, maxHp: this.player.maxHp }; });
+      // Counter-Signal windows (lead ruling Z6): each surge's window, the table window and the pilot's time for the
+      // segment at their hand speed (pilotWpm("base"): run, else lifetime)
+      onGameHook("counterSignal", function (e) {
+        if (e.result !== "start") return;
+        const hand = typeof this.pilotWpm === "function" ? this.pilotWpm("base") : null;
+        B.windows.push({ ...ctx(), chars: e.chars, dur: e.dur, table: typeof surgeDuration === "function" ? surgeDuration(e.chars, e.level, !!e.slow) : null, hand, need: hand > 0 ? e.chars * 12 / hand : null });
+      });
+    }
   });
 }
 await installHooks();
@@ -117,7 +147,8 @@ function tick() {
 }
 
 const interval = 60000 / (Math.max(1, WPM) * 5);
-const report = { label: LABEL, wpm: WPM, accuracy: ACC, minions: MINIONS, jump: JUMP, sectors: [] };
+const report = { label: LABEL, wpm: WPM, accuracy: ACC, minions: MINIONS, jump: JUMP, acquire: ACQ.ms ? ACQ : null, sectors: [] };
+let lastTargetId = null;
 const r1 = (x) => (x === null || x === undefined ? null : Math.round(x * 10) / 10);
 const r2 = (x) => (x === null || x === undefined ? null : Math.round(x * 100) / 100);
 
@@ -126,7 +157,7 @@ for (let s = 0; s < SECTORS; s++) {
   const sectorStart = Date.now();
   const playClock0 = await P.g(() => window.game.playClock || 0);
   const rec = { sector: null, level: null, targetCps: null, secondsToBoss: null, wallSecondsToBoss: null, minHp: Infinity, maxHp: null, death: null, keys: 0, wrongKeys: 0,
-    idleMaxS: 0, idleByWave: [0, 0, 0], samples: 0 };
+    idleMaxS: 0, idleByWave: [0, 0, 0], samples: 0, acquisitions: 0, acquireMs: 0 };
   const idle = { since: null, wave: 0 };
   const dbgAcc = {};   // phase label -> { sum, n, max }
   let bossShot = false;
@@ -151,13 +182,37 @@ for (let s = 0; s < SECTORS; s++) {
     if (!st.inBoss && st.wavePhase === "spawn" && st.waveT >= 10) { a.sum += st.incomingCps; a.n++; }
     rec.samples++;
 
-    const k = st.levelIntro || st.introLocked ? null : await nextKey(MINIONS);
+    let k = null;
+    if (st.levelIntro || st.introLocked) k = null;
+    else if (ACQ.ms > 0) {
+      // Z7: a new target costs an acquisition delay on the play clock before its first key (not counted as idle: a
+      // target is on screen), then the target in front of the typist at that moment is typed
+      let t = await typistTarget(P, MINIONS);
+      if (t && idle.since !== null) {   // a target is up: the idle gap ends here, before the acquisition delay
+        const gap = st.playClock - idle.since;
+        rec.idleMaxS = Math.max(rec.idleMaxS, gap); rec.idleByWave[idle.wave] = Math.max(rec.idleByWave[idle.wave], gap); idle.since = null;
+      }
+      if (t && t.id !== lastTargetId) {
+        const d = acquireDelayMs(ACQ);
+        rec.acquisitions++; rec.acquireMs += d;
+        const due = st.playClock + d / 1000, wallLimit = Date.now() + d * 4 + 50;
+        while (Date.now() < wallLimit) {
+          const pc = await P.g(() => (window.game && window.game.playClock) || 0);
+          if (pc >= due || pc < st.playClock) break;
+          await sleep(Math.min(25, Math.max(5, ((due - pc) * 1000) / 2)));
+        }
+        t = await typistTarget(P, MINIONS);
+        st.playClock = await P.g(() => (window.game && window.game.playClock) || 0);
+      }
+      lastTargetId = t ? t.id : lastTargetId;
+      k = t ? t.k : null;
+    } else k = await nextKey(MINIONS);
     const inSpawn = !st.inBoss && st.wavePhase === "spawn" && !st.levelIntro;
-    if (k && /^[a-z]$/.test(k)) {
+    if (k && /^[a-z ]$/.test(k)) {
       if (idle.since !== null) { const gap = st.playClock - idle.since; rec.idleMaxS = Math.max(rec.idleMaxS, gap); rec.idleByWave[idle.wave] = Math.max(rec.idleByWave[idle.wave], gap); idle.since = null; }
       const wrong = Math.random() > ACC;
       const key = wrong ? "abcdefghijklmnopqrstuvwxyz".replace(k, "")[Math.floor(Math.random() * 25)] : k;
-      await P.page.keyboard.press(key);
+      await P.page.keyboard.press(key === " " ? "Space" : key);
       rec.keys++;
       if (wrong) rec.wrongKeys++;
       // next key when the PLAY clock has advanced one jittered interval (falls back to wall time if the clock stalls)
@@ -187,7 +242,7 @@ for (let s = 0; s < SECTORS; s++) {
     return {
       B: JSON.parse(JSON.stringify(window.__b10)), mode: g.mode, levelIndex: g.levelIndex,
       cfg: (({ level, targetCps, quota, cap, duration, speed, wordMin, wordMax, maxEnemies, surgeEvery, minionRate, minionMax, minionSpawnDx }) => ({ level, targetCps, quota, cap, duration, speed, wordMin, wordMax, maxEnemies, surgeEvery, minionRate, minionMax, minionSpawnDx }))(cfg),
-      results: r && { rank: r.rank, rankLevelAware: rankLevel, wpm: r.wpm, acc: r.acc, score: r.score, levelScore: r.levelScore, maxCombo: r.maxCombo, words: r.words, kills: r.kills, timeMs: r.timeMs, hpPts: Math.round(hpPts * 100) / 100 },
+      results: r && { rank: r.rank, rankLevelAware: rankLevel, wpm: r.wpm, throughput: r.throughput, acc: r.acc, score: r.score, levelScore: r.levelScore, maxCombo: r.maxCombo, words: r.words, kills: r.kills, timeMs: r.timeMs, hpPts: Math.round(hpPts * 100) / 100 },
       tally: g.lastTally && { total: g.lastTally.total, clear: g.lastTally.clear, time: Math.round(g.lastTally.time), flawless: g.lastTally.flawless, accuracy: g.lastTally.accuracy, phases: g.lastTally.phases, surges: g.lastTally.surges, perfectWaves: g.lastTally.perfectWaves, par: g.lastTally.par, elapsed: Math.round((g.lastTally.elapsed || 0) * 10) / 10, retryMul: g.lastTally.retryMul },
       levelStats: (({ damageTaken, waveDamage, bossDamage, surgesCancelled, perfectWaves, retries, bossTimeMs, chars, timeMs, correct, total, kills, words, maxCombo }) => ({ damageTaken, waveDamage, bossDamage, surgesCancelled, perfectWaves, retries, bossTimeMs, chars, timeMs, correct, total, kills, words, maxCombo }))(ls),
       hp: g.player.hp, maxHp: g.player.maxHp, score: g.stats.score, playClock: g.playClock || 0, deaths: window.TypeRDebug.stats().deathsBySector, deathInBoss: !!g.deathInBoss, wave: g.wave, wavePhase: g.wavePhase
@@ -208,6 +263,8 @@ for (let s = 0; s < SECTORS; s++) {
   rec.levelStats = ev.levelStats;
   rec.score = ev.score;
   rec.minHpPct = rec.maxHp ? Math.round((rec.minHp / rec.maxHp) * 1000) / 10 : null;
+  rec.hullIn = B.hullIn;                                             // PACE: the hull the sector card showed (carried from S5)
+  rec.throughput = ev.results ? ev.results.throughput : null;
   rec.death = ev.mode === "gameOver" ? { inBoss: ev.deathInBoss, wave: ev.wave + 1, phase: ev.wavePhase, bossPhase: (B.boss.filter((b) => b.ev === "phase").length + 1) } : null;
 
   // phase spans on the play clock: every setWavePhase call opens a span; boss spans come from the boss events
@@ -252,8 +309,11 @@ for (let s = 0; s < SECTORS; s++) {
     const next = spans.find((x) => x.phase === "spawn" && x.wave === w + 1);
     const leaks = B.leaks.filter((l) => !l.minion && l.wave === w && inSpan(l.t, { t0: sp.t0, t1: next ? next.t0 : waveSpan.t1 })).length;
     const a = dbgAcc[`w${w + 1}:spawn`];
+    const pw = [...B.pace].reverse().find((x) => x.L === rec.level && x.wave === w) || { mul: 1, quota: null, timedOut: false, escaped: 0 };
     return { wave: w + 1, spawnS: r1(sp.t1 - sp.t0), enemies: n, hungrySpawns: hungryN, chars, incomingCps: r2(cps), ratio: r2(cps / rec.targetCps), streamCps: r2(streamCps), streamRatio: r2(streamCps / rec.targetCps), charsPerEnemy: r2(chars / Math.max(1, n)),
-      leaks, idleMaxS: r2(rec.idleByWave[w]), dbgIncomingCps: a && a.n ? r2(a.sum / a.n) : null, dbgLeaksPerMinMax: a ? a.max : null };
+      leaks, idleMaxS: r2(rec.idleByWave[w]), dbgIncomingCps: a && a.n ? r2(a.sum / a.n) : null, dbgLeaksPerMinMax: a ? a.max : null,
+      mul: pw.mul, quota: pw.quota, timedOut: pw.timedOut, escaped: pw.escaped, paceRatio: r2(cps / rec.targetCps / Math.max(0.01, pw.mul)),
+      paceStreamRatio: r2(streamCps / rec.targetCps / Math.max(0.01, pw.mul)) };
   });
   rec.boss = bossUnlock ? {
     seconds: rec.bossDurationS, cleared: !!bossKill,
@@ -263,6 +323,7 @@ for (let s = 0; s < SECTORS; s++) {
     damage: B.damage.filter((d) => d.t >= bossUnlock.t).reduce((a, d) => a + d.dmg, 0),
     damageBySource: B.damage.filter((d) => d.t >= bossUnlock.t).reduce((a, d) => { a[d.source] = (a[d.source] || 0) + d.dmg; return a; }, {}),
     surgesFired: B.surges.filter((x) => x.fired).length, surgesCountered: B.surges.filter((x) => x.countered).length,
+    surgeWindows: B.windows.map((w) => ({ chars: w.chars, dur: r2(w.dur), table: r2(w.table), need: r2(w.need), hand: r1(w.hand) })),
     phases: bossPhases.map((bp) => {
       const leaks = B.leaks.filter((l) => l.t >= bp.t0 && l.t < bp.t1).length;
       const a = dbgAcc[`boss${bp.phase}`];
@@ -274,7 +335,9 @@ for (let s = 0; s < SECTORS; s++) {
   report.sectors.push(rec);
   await P.shot(`s${rec.level}-end`);
   console.log(JSON.stringify({ sector: rec.level, mode: rec.mode, playS: rec.playSeconds, clockRatio: rec.clockRatio, toBoss: rec.secondsToBoss, bossS: rec.bossDurationS, minHpPct: rec.minHpPct,
-    waveLpm: rec.waves.leaksPerMin, bossLpm: rec.boss && rec.boss.leaksPerMin, phaseLpm: rec.boss && rec.boss.phases.map((p) => p.leaksPerMin), cps: rec.perWave.map((w) => w && w.ratio), stream: rec.perWave.map((w) => w && w.streamRatio), hungry: rec.perWave.map((w) => w && `${w.hungrySpawns}/${w.enemies}`), idle: rec.perWave.map((w) => w && w.idleMaxS), surges: rec.boss && [rec.boss.surgesFired, rec.boss.surgesCountered],
+    waveLpm: rec.waves.leaksPerMin, bossLpm: rec.boss && rec.boss.leaksPerMin, phaseLpm: rec.boss && rec.boss.phases.map((p) => p.leaksPerMin), cps: rec.perWave.map((w) => w && w.ratio), stream: rec.perWave.map((w) => w && w.streamRatio),
+    mul: rec.perWave.map((w) => w && w.mul), quota: rec.perWave.map((w) => w && w.quota), paceRatio: rec.perWave.map((w) => w && w.paceRatio), paceStream: rec.perWave.map((w) => w && w.paceStreamRatio), timedOut: rec.perWave.map((w) => w && (w.timedOut ? `esc ${w.escaped}` : "-")),
+    hullIn: rec.hullIn && `${rec.hullIn.hp}/${rec.hullIn.maxHp}`, throughput: rec.throughput, hungry: rec.perWave.map((w) => w && `${w.hungrySpawns}/${w.enemies}`), idle: rec.perWave.map((w) => w && w.idleMaxS), surges: rec.boss && [rec.boss.surgesFired, rec.boss.surgesCountered],
     rank: rec.results && rec.results.rank, rankL: rec.results && rec.results.rankLevelAware, wpm: rec.results && rec.results.wpm, acc: rec.results && rec.results.acc, dmg: rec.levelStats.damageTaken, score: rec.score, death: rec.death }));
 
   if (rec.mode !== "levelComplete") break;   // gameOver / victory end the run
@@ -293,7 +356,10 @@ console.log("wrote", file);
 const S = report.sectors;
 const byLevel = (L) => S.find((r) => r.level === L);
 const deaths = S.filter((r) => r.death).map((r) => `S${r.level}`);
-const bandOk = (r) => r.perWave.filter(Boolean).every((w) => w.ratio >= 0.85 && w.ratio <= 1.15);
+// PACE: against targetCps x the applied paceMul. Every wave delivers at least 0.85 x that (all spawns); the stream alone
+// (spawns the hungry rule did not trigger) never exceeds 1.35 x. Hungry top-ups above it are demand-driven (a typist who
+// clears the field is fed at their own pace; sector 1 at paceMul 1.0 reads ~2x for 55-80 WPM) and are reported, not gated.
+const bandOk = (r) => r.perWave.filter(Boolean).every((w) => w.paceRatio >= 0.85 && w.paceStreamRatio <= 1.35);
 const bossLeakRule = (r) => !r.boss || r.boss.leaksPerMin <= Math.max(2, 1.5 * r.waves.leaksPerMin);
 const rankOf = (r) => r.results && (r.results.rankLevelAware || r.results.rank);
 P.note("play / wall clock ratio per sector (typist paced by the play clock; < .9 = the page ran in slow motion)", S.map((r) => `S${r.level}:${r.clockRatio}`).join(" "));
@@ -304,7 +370,8 @@ if (EXPECT === "p55") {
     P.check("55/.93 clears sectors 1-3 without dying", S.length === 3 && deaths.length === 0 && S.every((r) => r.mode === "levelComplete"), { deaths, modes: S.map((r) => r.mode) });
     P.check("55/.93 min HP > 25 % in every sector", S.every((r) => r.minHpPct > 25), S.map((r) => `S${r.level}:${r.minHpPct}%`));
   }
-  P.check("55/.93 every wave's incomingCps within +-15 % of targetCps", S.every(bandOk), S.map((r) => `S${r.level}:` + r.perWave.map((w) => w && w.ratio).join("/")));
+  P.check("55/.93 every wave delivers >= 0.85 x targetCps x applied paceMul (all spawns) and its stream alone <= 1.35 x", S.every(bandOk),
+    S.map((r) => `S${r.level}:` + r.perWave.map((w) => w && `${w.paceRatio}/${w.paceStreamRatio}@${w.mul}`).join(" ")));
   const surges = S.reduce((a, r) => { if (r.boss) { a.f += r.boss.surgesFired; a.c += r.boss.surgesCountered; } return a; }, { f: 0, c: 0 });
   if (surges.f + surges.c > 0) P.check("55/.93 counters >= 70 % of surges", surges.c / (surges.f + surges.c) >= 0.7, surges); else P.note("surge counter rate", "no surge started in this run");
 }

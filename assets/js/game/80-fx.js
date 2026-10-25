@@ -254,6 +254,8 @@ Object.assign(Game.prototype, {
   // 2 px danger line flickers along the top edge of the playfield. Never a wash.
   onTypoFx() {
     this.ensureFx();
+    const claimed = !!this._typoClaimed;   // MEASURE (32-typist.js) drew the typed / expected pair itself (D4)
+    this._typoClaimed = false;
     const m = this.fxMotion();
     let ref = this.lock && this.lock.ref && this.lock.ref.alive ? this.lock.ref : null;
     if (!ref) {
@@ -271,6 +273,7 @@ Object.assign(Game.prototype, {
       return;
     }
     if (ref.kind !== "boss") ref.typoT = Math.max(ref.typoT || 0, 0.12);
+    if (claimed) return;   // one glyph pair on screen: the rising expected glyph is skipped; typoEdge (no plate) is kept
     fxPush(this.typoGlyphs, { ch, ref, t: 0, life: fxNum(FXM.typoGlyphS, 0.4), rise: m.anim > 0 ? 10 : 0 }, FX_LIST_CAPS.typoGlyphs);
   },
 
@@ -372,7 +375,7 @@ Object.assign(Game.prototype, {
     const p = this.player;
     const pose = this._shipPose;
     const heat = clamp(p.heat || 0, 0, 1);
-    this.exhaustAcc += fxNum(FXM.exhaustRate, 90) * (1 + heat) * dt;
+    this.exhaustAcc += fxNum(FXM.exhaustRate, 90) * (1 + heat) * dt * (this.overdriveOn === true && typeof FX_HOT === "object" ? FX_HOT.exhaustMul : 1);   // D11
     if (this.exhaustAcc < 1) return;
     const noz = pose && pose.nozzles && pose.nozzles.length ? pose.nozzles : [{ x: p.x - 56, y: p.y }];
     const dx = pose ? pose.dx : 0;
@@ -455,16 +458,17 @@ Object.assign(Game.prototype, {
   fireLaserTo(tx, ty, color) {
     this.ensureFx();
     const tint = this.beamColor(color);
-    const baseWidth = 3 + this.levelIndex * 0.7;
+    const hot = this.overdriveOn === true && color !== "danger" && typeof FX_HOT === "object";   // ARCADE D11: white-hot in Overdrive
+    const baseWidth = (3 + this.levelIndex * 0.7) * (hot ? FX_HOT.beamWidthMul : 1);
     const ox = this.player.x + 22;
     const oy = this.player.y;
-    this.pushBullet(new Bullet({ x: ox, y: oy, tx, ty, width: baseWidth, color: tint }));
+    this.pushBullet(new Bullet({ x: ox, y: oy, tx, ty, width: baseWidth, color: tint, hot }));
     if (this.power.spread > 0) {
-      const w = Math.max(2, baseWidth * 0.65);
+      const w = Math.max(2, (3 + this.levelIndex * 0.7) * 0.65);   // side beams keep their width in Overdrive
       this.pushBullet(new Bullet({ x: ox, y: oy, tx: tx + rand(-20, 20), ty: ty + rand(-80, -20), width: w, color: "magenta", impact: false }));
       this.pushBullet(new Bullet({ x: ox, y: oy, tx: tx + rand(-20, 20), ty: ty + rand(20, 80), width: w, color: "magenta", impact: false }));
     }
-    this.addMuzzleFlash(ox, oy, tint);
+    this.addMuzzleFlash(ox, oy, hot ? "text" : tint);
   },
 
   // Beam tint: explicit hostile / bonus colours pass through; otherwise the active weapon decides.
@@ -583,9 +587,10 @@ Object.assign(Game.prototype, {
     return ex;
   },
 
+  // ARCADE D12: 4+ letter words blow up with the kill set (medium frames at .55); letters, short words and minions small.
   getExplosionTypeForEnemy(en) {
     if (!en) return "small";
     if (en.text.length <= 3 || en.kind === "bossMinion") return "small";
-    return "medium";
+    return "kill";
   },
 });

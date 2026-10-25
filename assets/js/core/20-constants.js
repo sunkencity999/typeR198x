@@ -18,12 +18,13 @@ const BOSS_INTRO_SKIP_S = 1.0;    // returning players may skip the boss intro f
 const BOSS_FINALE_S = 5.0;
 const BOSS_FINALE_SKIP_S = 2.0;
 const IFRAMES_S = 0.8;
-// Hungry spawner (B10): an EMPTY field for this long spawns now. CONTRACT 7 had "fewer than 2 alive for 1.5 s", which left an
-// 80 WPM typist idle for up to 2 s (the timer ran while the last plate was still being typed, then the new plate needed
-// 0.15-1.4 s to roll in) and, with a shorter timer, fed any typist faster than the stream 17-22 % above targetCps. With the
-// empty-field trigger the base stream paces every wave and the longest idle gap is 0.5 s + roll-in.
-const HUNGRY_SPAWN_S = 0.5;
+// Hungry spawner (B10, PACE D2): an EMPTY field for this long spawns now. CONTRACT 7 had "fewer than 2 alive for 1.5 s",
+// which left an 80 WPM typist idle for up to 2 s; B10's 0.5 s plus a 10-90 px roll-in still left a fast typist idle
+// 35-50 % of sectors 1-3. PACE (D2): 0.1 s plus a 10-30 px roll-in makes the next plate lockable ~0.3-0.6 s after the
+// last kill, and 42-pacing.js raises the alive threshold to 2 per wave from paceMul 1.35 (waveTuning.hungryMinAlive).
+const HUNGRY_SPAWN_S = 0.1;
 const HUNGRY_MIN_ALIVE = 1;
+const SPAWN_ROLLIN_PX = [10, 30];  // PACE: a new plate starts this far past the right edge (targetable 4 px later)
 const SPAWN_ACC_PRIME = 0.85;     // spawnAcc at wave start so the first enemy arrives quickly
 const GAME_SPEED_FACTOR = 1;      // the master table already carries the final numbers
 
@@ -45,7 +46,7 @@ const DAMAGE = {
   leakCap: 24,
   leak: (len) => DAMAGE.leakBase + Math.min(DAMAGE.leakCap, DAMAGE.leakPerChar * len),
   minion: 10,                                  // boss minion leak
-  surge: (level) => 8 + 2 * level,             // Signal Surge that was not countered (L3 14 ... L10 28)
+  surge: (level) => 8 + 2 * level,             // Counter-Signal surge that was not countered (surges from L2: L2 12 ... L10 28)
   shieldHitCost: 3,                            // seconds of shield removed per absorbed hit
   shieldCap: 15,                               // seconds, when stacking pickups / phase bonuses
   phaseClearShield: 3,                         // seconds granted at a boss phase boundary
@@ -92,15 +93,17 @@ function waveCharsPerEnemy(cfg, wave) {
     const win = waveLengthWindow(cfg, wave);
     avg = (win.min + win.max) / 2;
   }
+  const textLen = cfg.waveTextLen && cfg.waveTextLen[waveIndex(wave)];
+  if (textLen > 0) avg = textLen;   // WORDS: the mixed pools' real mean (common / themed / two-word)
   return lr + (1 - lr) * avg;
 }
 
 // Enemies per second so that the wave's stream carries targetCps x WAVE_SPAWN_MUL[w] characters per second
 // whatever its mix (B10: paced by cfg.spawnRate alone, wave 3's longer words made it 1.5-2x the target).
-function waveSpawnRate(cfg, wave, waveKills = 0) {
+function waveSpawnRate(cfg, wave, waveKills = 0, quota = 0) {
   const w = waveIndex(wave);
-  const quota = cfg.quota[w] || 1;
-  const ramp = lerp(WAVE_RAMP[0], WAVE_RAMP[1], clamp(waveKills / quota, 0, 1));
+  const q = quota > 0 ? quota : (cfg.quota[w] || 1);   // PACE / MODES: the ramp runs over the wave's effective quota
+  const ramp = lerp(WAVE_RAMP[0], WAVE_RAMP[1], clamp(waveKills / q, 0, 1));
   const nominalChars = cfg.letterRatio + (1 - cfg.letterRatio) * cfg.avgWordLen;
   const mix = nominalChars / Math.max(1, waveCharsPerEnemy(cfg, wave));
   return cfg.spawnRate * mix * WAVE_SPAWN_MUL[w] * ramp;
@@ -127,15 +130,36 @@ function pressureCap(cfg) {
 const FINAL_MESSAGE_SEGMENTS = 9;              // FINAL_MESSAGE (30-content.js) is appended to the L10 boss as phase 4
 const MINION_SPEED_MUL = 1.1;
 const MINION_SPAWN_DX = -40;                   // minions appear at boss.artRect.x + cfg.minionSpawnDx
-const SURGE_BASE_S = 1.5;
-const SURGE_PER_CHAR_S = 0.25;
+// Counter-Signal (ARCADE D10): surges from sector 2; the first of a fight arms min(firstAtS, surgeEvery) s after the intro
+// unlock, then every surgeEvery (LEVEL_TABLE); it starts at a segment start with the whole segment. Window =
+// baseS + chars x perChar(L) (perChar .30 s at S2 down to .12 s at S10, linear), x slowWiden when the pilot's live speed
+// is under slowWpm (or unknown); at most maxFiredPerPhase fired surges per phase. Lead ruling Z6: a window is never
+// shorter than fairMul x the time the pilot needs for the segment at their measured hand speed (run, else lifetime, else
+// fairWpm): surgeWindow(). fairMul 2.25, not the ruling's minimum 1.5 (balance re-pass, 35 / .90 pilot in S3 boss fights:
+// at 1.5 it lost 2 of ~31 surges to a miss or a minion inside the window; at 1.75 none without target-acquisition latency
+// but 3 of 24 with the Z7 300 ms latency, as at 2.0; at 2.25 0 of 24 with it). scrambleS: the fail scramble of the reset word; barCommitS: the DOM charge bar's write
+// cadence (a 200 ms linear CSS transition eases between writes).
+const COUNTER_SIGNAL = Object.freeze({ fromLevel: 2, firstAtS: 6, baseS: 0.6, perCharFromS: 0.30, perCharToS: 0.12,
+  slowWpm: 35, slowWiden: 1.2, maxFiredPerPhase: 2, fairMul: 2.25, fairWpm: 30, scrambleS: 0.3, barCommitS: 0.2 });
 
 function bossSegmentCount(level) {
   return 6 + 3 * (level - 1);
 }
 
-function surgeDuration(remainingChars) {
-  return SURGE_BASE_S + SURGE_PER_CHAR_S * Math.max(0, remainingChars | 0);
+function counterSignalPerChar(level) {            // linear S2 .30 -> S10 .12
+  const L = clamp(level | 0, 2, 10);
+  return COUNTER_SIGNAL.perCharFromS + (COUNTER_SIGNAL.perCharToS - COUNTER_SIGNAL.perCharFromS) * (L - 2) / 8;
+}
+
+function surgeDuration(chars, level = 2, slow = false) {
+  const d = COUNTER_SIGNAL.baseS + Math.max(0, chars | 0) * counterSignalPerChar(level);
+  return slow ? d * COUNTER_SIGNAL.slowWiden : d;
+}
+
+// Z6: the table window, or fairMul x the segment's typing time at handWpm (chars x 12 / WPM s) when that is longer.
+function surgeWindow(chars, level = 2, slow = false, handWpm = 0) {
+  const wpm = handWpm > 0 ? handWpm : COUNTER_SIGNAL.fairWpm;
+  return Math.max(surgeDuration(chars, level, slow), COUNTER_SIGNAL.fairMul * Math.max(0, chars | 0) * 12 / wpm);
 }
 
 // ----------------------------- Scoring -----------------------------
@@ -163,7 +187,9 @@ const SCORE = {
   segment: (len) => len * 30,
   phase: (level) => 300 * level,
   bossClear: (level) => 1500 + 350 * level,
-  parDivisor: 3,                               // boss par seconds = totalChars / parDivisor
+  // boss par: 90 % of the sector's nominal pace (ARCADE D10); the time bonus is a tie-breaker, not the top line.
+  // LEVELS is read at call time (it is built below).
+  par: (totalChars, level) => (totalChars || 0) / (0.9 * LEVELS[clamp(level | 0, 1, 10) - 1].targetCps),
   timeBonus: (parS, elapsedS, level) => Math.max(0, parS - elapsedS) * 25 * level,
   flawless: (level) => 500 * level,            // bossDamage === 0
   surgeCountered: (level) => 150 * level,
@@ -224,15 +250,14 @@ const RANK = {
   weights: { acc: 0.5, speed: 0.3, hp: 0.2 },
   accFloorPct: 80,
   accSpanPct: 18,
-  wpmFloor: 20,
+  wpmFloor: 20,                 // level-less calls only (b9 / content-tables pure assertions)
   wpmSpan: 40,
-  // Early sectors cap a typist's gross WPM near the incoming stream (targetCps x 12 = 14 / 20 / 28 WPM at L1-3),
-  // so the speed term there is measured against that nominal rate instead of the absolute 20..60 window (B10):
-  // s = 0 at speedFloorMul x nominal, s = 1 at (speedFloorMul + speedSpanMul) x nominal, never wider than the
-  // absolute window. From speedNormLevels + 1 on the absolute window applies unchanged.
-  speedNormLevels: 3,
+  // Speed is the pilot's hand speed (32-typist.js, D1). Every sector measures it against its nominal stream rate
+  // (targetCps x 12): s = 0 at speedFloorMul x nominal, s = 1 at (speedFloorMul + speedSpanMul) x nominal, never wider
+  // than the absolute 20..60 window. A typist at the sector's nominal WPM with >= 98 % accuracy and no damage reaches S.
+  speedNormLevels: 10,
   speedFloorMul: 0.5,
-  speedSpanMul: 1.2,
+  speedSpanMul: 0.72,
   thresholds: [["S", 0.90], ["A", 0.75], ["B", 0.55], ["C", 0.35]],   // below the last one is D
   order: ["S", "A", "B", "C", "D"],
   colors: { S: "amber", A: "cyan", B: "violet", C: "text", D: "danger" }
@@ -276,17 +301,18 @@ const BOSS_NAMES = [
 
 // Master table (CONTRACT section 7). Columns:
 // level | wave quotas W1/W2/W3 | cap s per wave | targetCps | speed px/s | letterRatio | wordMin | wordMax | maxEnemies | surgeEvery s | minionRate /s | minionMax
+// (surgeEvery: Counter-Signal cadence; first surge of a fight at min(COUNTER_SIGNAL.firstAtS, surgeEvery))
 const LEVEL_TABLE = [
   [1,  [8, 10, 12],  22, 1.2, 72,  0.70, 3, 5,  6,  null, 0.20, 1],
-  [2,  [10, 12, 14], 24, 1.7, 82,  0.60, 3, 6,  7,  null, 0.24, 1],
-  [3,  [12, 14, 16], 26, 2.3, 92,  0.50, 4, 7,  8,  16,   0.28, 2],
-  [4,  [14, 16, 18], 28, 3.0, 102, 0.42, 4, 8,  9,  15,   0.32, 2],
-  [5,  [15, 18, 21], 30, 3.7, 112, 0.36, 5, 9,  10, 14,   0.36, 2],
-  [6,  [16, 19, 22], 32, 4.3, 122, 0.30, 5, 9,  10, 13,   0.39, 3],
-  [7,  [17, 20, 23], 34, 4.9, 132, 0.26, 6, 10, 11, 12,   0.43, 3],
-  [8,  [18, 21, 24], 36, 5.5, 142, 0.22, 6, 11, 12, 11,   0.47, 3],
-  [9,  [19, 22, 25], 38, 6.0, 152, 0.18, 7, 12, 13, 10,   0.51, 4],
-  [10, [20, 24, 28], 40, 6.5, 162, 0.15, 7, 13, 14, 9,    0.55, 4]
+  [2,  [10, 12, 14], 24, 1.7, 82,  0.60, 3, 6,  7,  20,   0.24, 1],
+  [3,  [12, 14, 16], 26, 2.3, 92,  0.50, 4, 7,  8,  20,   0.28, 2],
+  [4,  [14, 16, 18], 28, 3.0, 102, 0.42, 4, 8,  9,  14,   0.32, 2],
+  [5,  [15, 18, 21], 30, 3.7, 112, 0.36, 5, 9,  10, 13,   0.36, 2],
+  [6,  [16, 19, 22], 32, 4.3, 122, 0.30, 5, 9,  10, 12,   0.39, 3],
+  [7,  [17, 20, 23], 34, 4.9, 132, 0.26, 6, 10, 11, 11,   0.43, 3],
+  [8,  [18, 21, 24], 36, 5.5, 142, 0.22, 6, 11, 12, 10,   0.47, 3],
+  [9,  [19, 22, 25], 38, 6.0, 152, 0.18, 7, 12, 13, 9,    0.51, 4],
+  [10, [20, 24, 28], 40, 6.5, 162, 0.15, 7, 13, 14, 8,    0.55, 4]
 ];
 
 // Enemies per second that deliver targetCps characters per second, given the letter/word mix.

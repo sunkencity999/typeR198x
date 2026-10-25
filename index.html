@@ -7,15 +7,15 @@
   <meta name="description" content="Neon arcade typing shoot-'em-up. Type the first letter to lock on, finish the word to fire, and clear ten sectors of word-bosses. Free in your browser." />
   <meta name="color-scheme" content="dark" />
   <meta name="theme-color" content="#0B1030" />
-  <meta name="asset-version" content="20261016a" />
+  <meta name="asset-version" content="20261024b" />
   <link rel="canonical" href="https://typer198x.com/" />
   <link rel="icon" href="./assets/ui/mark.svg" type="image/svg+xml" sizes="any" />
   <link rel="icon" type="image/png" sizes="32x32" href="./assets/icons/generated/macos/Icon-App-32.png" />
   <link rel="icon" type="image/png" sizes="16x16" href="./assets/icons/generated/macos/Icon-App-16.png" />
   <link rel="apple-touch-icon" sizes="180x180" href="./assets/ui/apple-touch-icon.png" />
   <link rel="preload" as="font" type="font/woff2" href="./assets/fonts/Orbitron-Variable.woff2" crossorigin />
-  <link rel="stylesheet" href="./assets/style/tokens.css?v=20261016a" />
-  <link rel="stylesheet" href="./style.css?v=20261016a" />
+  <link rel="stylesheet" href="./assets/style/tokens.css?v=20261024b" />
+  <link rel="stylesheet" href="./style.css?v=20261024b" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Type-R 198X" />
   <meta property="og:title" content="Type-R 198X — neon typing shoot-'em-up" />
@@ -90,6 +90,7 @@
             <i class="bossPhaseTick" aria-hidden="true"></i>
             <i class="bossPhaseTick" aria-hidden="true"></i>
           </div>
+          <div id="bossCharge" class="bossCharge" aria-hidden="true"><div id="bossChargeFill"></div></div>
         </div>
       </section>
 
@@ -114,6 +115,21 @@
               </section>
 
               <button id="btnStart" class="btn-arcade primary" type="submit">Start new run</button>
+
+              <section id="modeDeck" class="modeDeck hidden" aria-label="Daily sortie and practice">
+                <button id="btnDaily" class="modeTile modeTile--daily" type="button">
+                  <span class="modeTile__eyebrow">Daily sortie</span>
+                  <span id="dailyDate" class="modeTile__title mono">—</span>
+                  <span id="dailySector" class="modeTile__sub">—</span>
+                  <span id="dailyStatus" class="modeTile__status">Fly</span>
+                </button>
+                <div class="practicePanel" role="group" aria-labelledby="practiceTitle">
+                  <h3 id="practiceTitle" class="label">Practice</h3>
+                  <button id="btnDrill" class="modeTile modeTile--drill" type="button"><span class="modeTile__title">Drill · 60 s</span><span id="drillSub" class="modeTile__sub">Common words</span></button>
+                  <button id="btnEndless" class="modeTile modeTile--endless" type="button"><span class="modeTile__title">Endless drift</span><span id="endlessSub" class="modeTile__sub">Find your ceiling</span></button>
+                </div>
+                <p id="dailyMeta" class="modeDeck__meta small hidden"></p>
+              </section>
 
               <section id="sectorSelect" aria-labelledby="sectorTitle">
                 <h3 id="sectorTitle" class="label">Sector select</h3>
@@ -173,6 +189,8 @@
               <div class="stats neon-panel">
                 <div class="statRow"><span class="label">High score</span> <span id="statHigh" class="mono"></span></div>
                 <div class="statRow"><span class="label">Sectors cleared</span> <span id="statUnlocked" class="mono"></span></div>
+                <div class="statRow hidden" data-typist="bestWpm"><span class="label">Best WPM</span> <span id="statWpm" class="mono">--</span></div>
+                <p id="statGoal" class="statGoal small hidden"></p>
               </div>
             </div>
           </form>
@@ -196,7 +214,7 @@
             <div class="metaTile"><span class="label">Sector</span><span id="pauseSector" class="mono">—</span></div>
             <div class="metaTile"><span class="label">Wave</span><span id="pauseWave" class="mono">—</span></div>
             <div class="metaTile"><span class="label">Score</span><span id="pauseScore" class="mono">—</span></div>
-            <div class="metaTile"><span class="label">Accuracy</span><span id="pauseAcc" class="mono">—</span></div>
+            <div class="metaTile"><span class="label">Run accuracy</span><span id="pauseAcc" class="mono">—</span></div>
           </div>
           <div class="pauseActions">
             <button id="btnResume" class="btn-arcade primary" type="button">Resume</button>
@@ -260,14 +278,16 @@
               <span class="newHigh hidden">New high score</span>
               <span class="newWpm hidden">Best WPM</span>
             </div>
+            <p class="rankWhy hidden" data-typist="why"></p>
             <div class="statGrid">
               <div class="statTile"><span class="statTile__label">WPM</span><span class="statTile__value" data-stat="wpm">—</span></div>
-              <div class="statTile"><span class="statTile__label">Acc</span><span class="statTile__value" data-stat="acc">—</span></div>
+              <div class="statTile"><span class="statTile__label">Acc</span><span class="statTile__value" data-stat="acc">—</span><span class="statTile__caption hidden" data-typist="accCaption"></span></div>
               <div class="statTile"><span class="statTile__label">Combo</span><span class="statTile__value" data-stat="maxCombo">—</span></div>
               <div class="statTile"><span class="statTile__label">Words</span><span class="statTile__value" data-stat="words">—</span></div>
               <div class="statTile"><span class="statTile__label">Time</span><span class="statTile__value" data-stat="time">—</span></div>
               <div class="statTile"><span class="statTile__label">Bonus</span><span class="statTile__value" data-stat="bonus">—</span></div>
             </div>
+            <div class="weakSignal hidden" data-typist="weak"><span class="weakSignal__label">Weak signal</span><ul class="weakSignal__chips" aria-label="Weak signal"></ul></div>
             <ul class="bonusList"></ul>
           </div>
           <div id="sectorPrefetch" class="loadingBar loadingBar--slim hidden" role="progressbar" aria-label="Warping to the next sector" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="loadingBarFill"></div></div>
@@ -291,22 +311,26 @@
               <span class="newHigh hidden">New high score</span>
               <span class="newWpm hidden">Best WPM</span>
             </div>
+            <p class="rankWhy hidden" data-typist="why"></p>
             <div class="statGrid">
               <div class="statTile"><span class="statTile__label">WPM</span><span class="statTile__value" data-stat="wpm">—</span></div>
-              <div class="statTile"><span class="statTile__label">Acc</span><span class="statTile__value" data-stat="acc">—</span></div>
+              <div class="statTile"><span class="statTile__label">Acc</span><span class="statTile__value" data-stat="acc">—</span><span class="statTile__caption hidden" data-typist="accCaption"></span></div>
               <div class="statTile"><span class="statTile__label">Combo</span><span class="statTile__value" data-stat="maxCombo">—</span></div>
               <div class="statTile"><span class="statTile__label">Words</span><span class="statTile__value" data-stat="words">—</span></div>
               <div class="statTile"><span class="statTile__label">Time</span><span class="statTile__value" data-stat="time">—</span></div>
               <div class="statTile"><span class="statTile__label">Score</span><span class="statTile__value" data-stat="score">—</span></div>
             </div>
+            <div class="weakSignal hidden" data-typist="weak"><span class="weakSignal__label">Weak signal</span><ul class="weakSignal__chips" aria-label="Weak signal"></ul></div>
             <ul class="bonusList"></ul>
           </div>
+          <p id="retryNote" class="small"></p>
+          <p id="cadetNote" class="small hidden"></p>
           <div class="screenActions">
             <button id="btnTryAgain" class="btn-arcade primary" type="button">Retry sector</button>
             <button id="btnRetryBoss" class="btn-arcade hidden" type="button">Retry boss</button>
+            <button id="btnCadetPace" class="btn-arcade hidden" type="button" aria-describedby="cadetNote">Fly at Cadet pace</button>
             <button id="btnBackToMenu2" class="btn-arcade" type="button">Sector select</button>
           </div>
-          <p id="retryNote" class="small"></p>
         </div>
       </section>
 
@@ -330,14 +354,16 @@
               <span class="newHigh hidden">New high score</span>
               <span class="newWpm hidden">Best WPM</span>
             </div>
+            <p class="rankWhy hidden" data-typist="why"></p>
             <div class="statGrid">
               <div class="statTile"><span class="statTile__label">WPM</span><span class="statTile__value" data-stat="wpm">—</span></div>
-              <div class="statTile"><span class="statTile__label">Acc</span><span class="statTile__value" data-stat="acc">—</span></div>
+              <div class="statTile"><span class="statTile__label">Acc</span><span class="statTile__value" data-stat="acc">—</span><span class="statTile__caption hidden" data-typist="accCaption"></span></div>
               <div class="statTile"><span class="statTile__label">Combo</span><span class="statTile__value" data-stat="maxCombo">—</span></div>
               <div class="statTile"><span class="statTile__label">Words</span><span class="statTile__value" data-stat="words">—</span></div>
               <div class="statTile"><span class="statTile__label">Time</span><span class="statTile__value" data-stat="time">—</span></div>
               <div class="statTile"><span class="statTile__label">Score</span><span class="statTile__value" data-stat="score">—</span></div>
             </div>
+            <div class="weakSignal hidden" data-typist="weak"><span class="weakSignal__label">Weak signal</span><ul class="weakSignal__chips" aria-label="Weak signal"></ul></div>
             <ul class="bonusList"></ul>
           </div>
           <p id="victoryText" class="small"></p>
@@ -347,6 +373,37 @@
             <button id="btnEndingSkip" class="btn-arcade" type="button">Skip</button>
             <button id="btnNewRun" class="btn-arcade primary hidden" type="button">Play again</button>
             <button id="btnBackToMenu3" class="btn-arcade" type="button">Sector select</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="screenModeResults" class="screen screen--modes neon-panel" role="dialog" aria-modal="false" aria-labelledby="modeResultsTitle">
+        <div class="screenInner">
+          <p id="modeResultsEyebrow" class="screenEyebrow">Daily sortie</p>
+          <h2 id="modeResultsTitle" class="screenTitle">Sortie complete</h2>
+          <p id="modeResultsText" class="resultsSub small"></p>
+          <div id="resultsMode" class="resultsCard" data-mode="">
+            <div class="resultsHead">
+              <span class="rankBadge rankBadge--lg medalBadge" data-medal=""></span>
+              <div><p class="resultsTitle"></p><p class="resultsSub small"></p></div>
+            </div>
+            <div class="statGrid">
+              <div class="statTile"><span class="statTile__label"></span><span class="statTile__value" data-stat="m0">—</span></div>
+              <div class="statTile"><span class="statTile__label"></span><span class="statTile__value" data-stat="m1">—</span></div>
+              <div class="statTile"><span class="statTile__label"></span><span class="statTile__value" data-stat="m2">—</span></div>
+              <div class="statTile"><span class="statTile__label"></span><span class="statTile__value" data-stat="m3">—</span></div>
+              <div class="statTile"><span class="statTile__label"></span><span class="statTile__value" data-stat="m4">—</span></div>
+              <div class="statTile"><span class="statTile__label"></span><span class="statTile__value" data-stat="m5">—</span></div>
+            </div>
+            <ul class="modeLines"></ul>
+            <div class="shareRow hidden">
+              <input id="modeShareText" class="shareText mono" type="text" readonly aria-label="Share line" />
+              <button id="btnModeCopy" class="btn-arcade" type="button">Copy</button>
+            </div>
+          </div>
+          <div class="screenActions">
+            <button id="btnModeAgain" class="btn-arcade primary" type="button">Fly again</button>
+            <button id="btnModeMenu" class="btn-arcade" type="button">Menu</button>
           </div>
         </div>
       </section>
@@ -366,9 +423,9 @@
     </div>
 
     <footer class="footer small">
-      <a href="./privacy-policy.html" target="_blank" rel="noopener">Privacy Policy</a>
+      <a href="./privacy-policy.html?v=20261024b" target="_blank" rel="noopener">Privacy Policy</a>
       <span aria-hidden="true">·</span>
-      <a href="./support.html" target="_blank" rel="noopener">Support</a>
+      <a href="./support.html?v=20261024b" target="_blank" rel="noopener">Support</a>
     </footer>
 
     <div id="loadingOverlay" role="status" aria-live="polite" aria-busy="true">
@@ -391,20 +448,28 @@
     </div>
 
     <!-- Modals -->
-    <div id="storyModal" class="modalOverlay is-dismissed" role="dialog" aria-modal="true" aria-labelledby="storyTitle">
+    <div id="storyModal" class="modalOverlay is-dismissed" role="dialog" aria-modal="true" aria-labelledby="storyTitle" aria-describedby="storySummary">
       <div class="modalInner">
         <p class="modalEyebrow">Mission briefing</p>
         <h2 id="storyTitle" class="neon-text">WordStorm Protocol</h2>
-        <div class="modalScroll">
-          <div class="modalBody">
-            <p>In 198X, the world’s neon skyways are protected by the TypeGrid—an arcade-era defense network that keeps the city’s air-lanes stable by continuously “spelling” the right commands into reality.</p>
-            <p>Then the WordStorm hits. Letters break loose. Words mutate into swarms. Boss-ships the size of buildings roll in like floating billboards, monorails, and glitching arcade cabinets—each broadcasting corrupted phrases that rewrite the sky into chaos.</p>
-            <p>You are a rookie pilot plugged into the last working TypeGrid interceptor: the Keystream. Your weapon isn’t ammo—it’s accuracy. Every correct keystroke fires a laser. Every completed word shatters enemy code. Every boss is a living headline you have to type back into submission.</p>
-            <p>Clear 10 sectors, reclaim the High Score, and punch through the final signal: the Electromancer Empress, source of the WordStorm, who’s trying to overwrite the world with a single unstoppable message.</p>
-            <p><strong>Type fast. Type clean. Save the city—one letter at a time.</strong></p>
+        <ol id="storySummary" class="storySummary">
+          <li>Type the first letter to lock.</li>
+          <li>Finish the word to fire.</li>
+          <li>Space lets go.</li>
+        </ol>
+        <details id="storyMore" class="storyMore">
+          <summary>Read the full briefing</summary>
+          <div class="modalScroll">
+            <div class="modalBody">
+              <p>In 198X, the world’s neon skyways are protected by the TypeGrid—an arcade-era defense network that keeps the city’s air-lanes stable by continuously “spelling” the right commands into reality.</p>
+              <p>Then the WordStorm hits. Letters break loose. Words mutate into swarms. Boss-ships the size of buildings roll in like floating billboards, monorails, and glitching arcade cabinets—each broadcasting corrupted phrases that rewrite the sky into chaos.</p>
+              <p>You are a rookie pilot plugged into the last working TypeGrid interceptor: the Keystream. Your weapon isn’t ammo—it’s accuracy. Every correct keystroke fires a laser. Every completed word shatters enemy code. Every boss is a living headline you have to type back into submission.</p>
+              <p>Clear 10 sectors, reclaim the High Score, and punch through the final signal: the Electromancer Empress, source of the WordStorm, who’s trying to overwrite the world with a single unstoppable message.</p>
+              <p><strong>Type fast. Type clean. Save the city—one letter at a time.</strong></p>
+            </div>
+            <span class="modalScrollHint" aria-hidden="true">scroll</span>
           </div>
-          <span class="modalScrollHint" aria-hidden="true">scroll</span>
-        </div>
+        </details>
         <div class="modalActions">
           <button id="btnStoryBack" class="btn-arcade" type="button">Back</button>
           <button id="btnStoryLaunch" class="btn-arcade primary" type="button">Launch the Keystream</button>
@@ -443,19 +508,24 @@
               <summary>Controls</summary>
               <ul>
                 <li>Type the first letter of a target to lock on, then keep typing to finish it. Enemies win over powerups when they share a first letter.</li>
-                <li><kbd>Space</kbd> or <kbd>Backspace</kbd> releases your lock. Three misses on a locked target also drop it. Wrong keys never cost points, but a hard miss breaks your combo.</li>
+                <li><kbd>Backspace</kbd> releases your lock, and so does <kbd>Space</kbd>, except on a two-word target (from Sector 4): when the next character of your locked target is the gap, shown as a dim dot, <kbd>Space</kbd> types it. Three misses on a locked target also drop it. Wrong keys never cost points, but a hard miss breaks your combo.</li>
                 <li><kbd>Enter</kbd> advances screens. <kbd>Esc</kbd> pauses or backs out. <kbd>Alt</kbd>+<kbd>Enter</kbd> (<kbd>Cmd</kbd>+<kbd>Enter</kbd> on a Mac) or <kbd>F11</kbd> toggles fullscreen. <kbd>M</kbd> mutes on the title and pause screens. <kbd>?</kbd> or <kbd>F1</kbd> opens this manual.</li>
                 <li>Keys are never counted during the sector card or a boss intro; once the next sector is already unlocked, any key skips the sector card. Once you have beaten a boss before, any key skips its intro after one second; after a boss falls, any key, <kbd>Space</kbd>, <kbd>Enter</kbd> or a tap skips the finale after two seconds.</li>
                 <li>Keep typing through hit-stop and slow motion; input is never dropped while the playfield is live.</li>
+                <li>New pilots fly a short flight check before Sector 1: three drills, nothing can hit you. <kbd>Esc</kbd> or Skip goes straight to the sector.</li>
               </ul>
             </details>
             <details class="helpSection" open>
               <summary>Scoring</summary>
               <ul>
-                <li>Letters pay 50 pts, words 60 + 12 per letter, and a word typed without a miss pays ×1.2. Minions pay 40, pickups 100, boss letters 10, a boss segment 30 per letter and a boss phase 300 × sector. Kills made by SPREAD, PIERCE or RAPID pay half.</li>
+                <li>Letters pay 50 pts, words 60 + 12 per character (the gap in a two-word target counts), and a word typed without a miss pays ×1.2. Minions pay 40, pickups 100, boss letters 10, a boss segment 30 per letter and a boss phase 300 × sector. Kills made by SPREAD, PIERCE or RAPID pay half.</li>
                 <li>Combo tiers: ×2 at 10, ×3 at 25, ×4 at 50, ×5 at 100. MULTI adds two tiers (cap ×7). A hard miss or real hull damage resets the combo.</li>
-                <li>Sector clear pays 1,500 + 350 × sector, plus bonuses for time under par, accuracy (90 / 95 / 98%), perfect waves, a flawless boss and countered surges. Retrying a sector scales the clear, time, accuracy, flawless-boss and perfect-wave bonuses down 25% per retry (countered-surge and phase bonuses are not reduced).</li>
-                <li>Your rank (S, A, B, C, D) weighs accuracy 50%, speed 30% and hull 20%.</li>
+                <li>Overdrive: type 5% faster than your usual hand speed (never below 25 WPM) without a miss and a white arc fills around your ship; full after 2 s, your beams run white-hot and every kill, boss letter and boss segment pays +25% (pickups and bonuses excluded). A hard miss, a leak, a surge hit or a second below 90% of that pace vents it. Drills never charge it.</li>
+                <li>Sector clear pays 1,500 + 350 × sector, plus bonuses for time under par, accuracy (90 / 95 / 98%), perfect waves, a flawless boss and every counter-signal you counter. Retrying a sector scales the clear, time, accuracy, flawless-boss and perfect-wave bonuses down 25% per retry (counter-signal and phase bonuses are not reduced). A perfect wave pays only when its quota is met without damage.</li>
+                <li>A wave’s time limit always leaves room for its whole stream, so a wave you keep clear never times out. If time runs out with targets still flying, they warp away without hurting you (<em>WAVE TIMED OUT · N ESCAPED</em>), the wave pays no perfect-wave bonus, and after wave 1 or 2 they join the next wave’s quota.</li>
+                <li>Your rank (S, A, B, C, D) weighs accuracy 50%, speed 30% and hull 20%; the line under it names the one that held you back (on Game Over, what ended the run).</li>
+                <li>WPM is your hand speed: the time between correct keys inside a word or boss segment. The first key of each target and pauses over 1.5 s are left out; wrong keys count against you. Best WPM counts a cleared sector with at least 60 timed keys. Records → Flight log keeps your speed, misses and slowest keys on this device only.</li>
+                <li>Weak signal, under the tiles of each results card: the key you missed most, your slowest letter pair with its average time, and Steady, how even your rhythm was (higher is steadier).</li>
               </ul>
             </details>
             <details class="helpSection" open>
@@ -475,7 +545,7 @@
               <ul>
                 <li>Each sector ends with a boss made of word segments in three phases (four for the finale). Type the highlighted segment; the lock is automatic.</li>
                 <li>Minions are typable. Their letters count for combo and score, not for wave quotas. A minion that reaches you costs 10 hull.</li>
-                <li>Signal Surge (from Sector 3): the boss charges a visible attack. Finish the current segment before the charge completes to counter it for a bonus; otherwise it hits for 8 + 2 × sector.</li>
+                <li>Counter-Signal (from Sector 2): when the boss charges a <em>SIGNAL SURGE</em> at the start of a word, it glows red, a red bar fills under its hull meter and the word’s frame pulses. Finish the whole word before the bar fills to counter it for a bonus and bounce the bolt back; miss the window and it hits for 8 + 2 × sector and the word starts over. The bar always gives you more than twice the time the word takes at your measured hand speed, and at most two surges can hit you per phase.</li>
                 <li>Clearing a phase grants 3 s of shield and a boss checkpoint. Once the finale starts, any key or a tap skips the rest after two seconds.</li>
               </ul>
             </details>
@@ -486,12 +556,18 @@
                 <li><strong>Resume</strong> continues a saved run. <strong>Replay</strong> restarts the sector you died in from its checkpoint. <strong>Retry boss</strong> restarts the boss from the phase you reached.</li>
                 <li>Sector select replays any unlocked sector. Only runs started from Sector 1 can set the high score; replays record a sector best instead.</li>
                 <li>Reset save on the title screen erases everything after a confirmation.</li>
+                <li>The stream follows you: at each wave the game compares your hand speed (this run’s, else your Flight log’s) with the sector’s pace and sends up to 2.5 × as many enemies, a little faster. It never drops below the standard pace on its own.</li>
+                <li>Sectors 1–3 refill your hull on a clear. From Sector 4 on, a clear repairs half of the missing hull and the rest carries into the next sector. Retry and Continue after a death restore a full hull.</li>
+                <li>Two deaths in the same sector add <strong>Fly at Cadet pace</strong> to Game Over: 75% stream and damage, 80% score, until that sector is cleared. Cards and records show a CADET tag.</li>
+                <li><strong>Daily sortie</strong>: one sector a day, picked by the date from your top three unlocked; three waves, no boss. Your first finished or failed attempt counts; later ones are practice. Its rating is speed × accuracy²; the medal compares it with the median of your rated sorties from the previous seven days (gold from 110%, silver from 95%), or goes by accuracy until there are three of those (97% gold, 93% silver; the card shows accuracy rounded down). A sortie that ends in death earns silver at most.</li>
+                <li><strong>Drill</strong>: 60 seconds at 1.1 × your speed, no hull, no score; 60% of its letters and words aim at your weak keys and slowest letter pair (common words until your Flight log has found them). <strong>Endless drift</strong>: the stream starts at 70% of your speed and rises every 20 seconds until the first target gets through; your ceiling is the stream speed at that moment.</li>
+                <li>Daily sortie, drill and endless drift never change your saved run, high score, records, sector bests, Best WPM or unlocks; they do add to your Flight log.</li>
               </ul>
             </details>
             <details class="helpSection" open>
               <summary>Playing on touch</summary>
               <ul>
-                <li>Tap the playfield to open the on-screen keyboard; letters fire as you type. A Bluetooth or USB keyboard gives the best experience.</li>
+                <li>Tap the playfield to open the on-screen keyboard; letters fire as you type, and the space bar types the gap in a two-word target. A Bluetooth or USB keyboard gives the best experience.</li>
                 <li>Rotate to landscape for the full playfield. The Fullscreen button hides browser chrome where the browser allows it.</li>
                 <li>Non-Latin keyboard layouts and IME composition are not recognised. Switch to a Latin (QWERTY-style) layout or direct input.</li>
               </ul>
@@ -517,17 +593,26 @@
       <div class="modalInner">
         <p class="modalEyebrow">Hall of pilots</p>
         <h2 id="recordsTitle" class="neon-text">Records</h2>
+        <div class="recordsTabs hidden" role="tablist" aria-label="Records views">
+          <button id="tabHall" class="recordsTab" type="button" role="tab" aria-selected="true" aria-controls="panelHall">Hall of pilots</button>
+          <button id="tabLog" class="recordsTab" type="button" role="tab" aria-selected="false" aria-controls="panelLog" tabindex="-1">Flight log</button>
+        </div>
         <div class="modalScroll">
           <div class="modalBody">
-            <table id="highScoreTable" class="hsTable">
-              <thead>
-                <tr><th scope="col">#</th><th scope="col">Pilot</th><th scope="col">Score</th><th scope="col">Sector</th><th scope="col">WPM</th><th scope="col">Run</th></tr>
-              </thead>
-              <tbody>
-                <tr class="hsRow hsEmpty"><td colspan="6">No runs recorded yet. Score in a run to enter the hall.</td></tr>
-              </tbody>
-            </table>
+            <div id="panelHall">
+              <table id="highScoreTable" class="hsTable">
+                <thead>
+                  <tr><th scope="col">#</th><th scope="col">Pilot</th><th scope="col">Score</th><th scope="col">Sector</th><th scope="col">WPM</th><th scope="col">Run</th></tr>
+                </thead>
+                <tbody>
+                  <tr class="hsRow hsEmpty"><td colspan="6">No runs recorded yet. Score in a run to enter the hall.</td></tr>
+                </tbody>
+              </table>
+              <p id="hsLegacyNote" class="hsLegacyNote small hidden">Dimmed WPM used the old measure, from before hand speed.</p>
+            </div>
+            <div id="panelLog" class="flightLog" hidden></div>
           </div>
+          <span class="modalScrollHint" aria-hidden="true">scroll</span>
         </div>
         <div class="modalActions">
           <button id="btnRecordsClose" class="btn-arcade" type="button">Close</button>
@@ -579,30 +664,36 @@
     });
   })();
   </script>
-  <script src="./assets/opt/manifest.js?v=20261016a"></script>
-  <script src="./assets/audio/sfx.js?v=20261016a"></script>
-  <script src="./assets/js/core/00-util.js?v=20261016a"></script>
-  <script src="./assets/js/core/10-tokens.js?v=20261016a"></script>
-  <script src="./assets/js/core/20-constants.js?v=20261016a"></script>
-  <script src="./assets/js/core/30-content.js?v=20261016a"></script>
-  <script src="./assets/js/core/40-save.js?v=20261016a"></script>
-  <script src="./assets/js/core/50-assets.js?v=20261016a"></script>
-  <script src="./assets/js/core/60-entities.js?v=20261016a"></script>
-  <script src="./assets/js/core/70-canvas.js?v=20261016a"></script>
-  <script src="./game.js?v=20261016a"></script>
-  <script src="./assets/js/game/05-boot.js?v=20261016a"></script>
-  <script src="./assets/js/game/10-ui.js?v=20261016a"></script>
-  <script src="./assets/js/game/15-screens.js?v=20261016a"></script>
-  <script src="./assets/js/game/20-run.js?v=20261016a"></script>
-  <script src="./assets/js/game/30-input.js?v=20261016a"></script>
-  <script src="./assets/js/game/40-combat.js?v=20261016a"></script>
-  <script src="./assets/js/game/45-feedback.js?v=20261016a"></script>
-  <script src="./assets/js/game/50-boss.js?v=20261016a"></script>
-  <script src="./assets/js/game/60-hud.js?v=20261016a"></script>
-  <script src="./assets/js/game/70-render.js?v=20261016a"></script>
-  <script src="./assets/js/game/75-fx-draw.js?v=20261016a"></script>
-  <script src="./assets/js/game/80-fx.js?v=20261016a"></script>
-  <script src="./assets/js/game/85-attract.js?v=20261016a"></script>
-  <script src="./assets/js/99-boot.js?v=20261016a"></script>
+  <script src="./assets/opt/manifest.js?v=20261024b"></script>
+  <script src="./assets/audio/sfx.js?v=20261024b"></script>
+  <script src="./assets/js/core/00-util.js?v=20261024b"></script>
+  <script src="./assets/js/core/10-tokens.js?v=20261024b"></script>
+  <script src="./assets/js/core/20-constants.js?v=20261024b"></script>
+  <script src="./assets/js/core/25-lexicon.js?v=20261024b"></script>
+  <script src="./assets/js/core/30-content.js?v=20261024b"></script>
+  <script src="./assets/js/core/40-save.js?v=20261024b"></script>
+  <script src="./assets/js/core/50-assets.js?v=20261024b"></script>
+  <script src="./assets/js/core/60-entities.js?v=20261024b"></script>
+  <script src="./assets/js/core/70-canvas.js?v=20261024b"></script>
+  <script src="./game.js?v=20261024b"></script>
+  <script src="./assets/js/game/05-boot.js?v=20261024b"></script>
+  <script src="./assets/js/game/10-ui.js?v=20261024b"></script>
+  <script src="./assets/js/game/15-screens.js?v=20261024b"></script>
+  <script src="./assets/js/game/17-onboarding.js?v=20261024b"></script>
+  <script src="./assets/js/game/20-run.js?v=20261024b"></script>
+  <script src="./assets/js/game/30-input.js?v=20261024b"></script>
+  <script src="./assets/js/game/32-typist.js?v=20261024b"></script>
+  <script src="./assets/js/game/40-combat.js?v=20261024b"></script>
+  <script src="./assets/js/game/42-pacing.js?v=20261024b"></script>
+  <script src="./assets/js/game/45-feedback.js?v=20261024b"></script>
+  <script src="./assets/js/game/50-boss.js?v=20261024b"></script>
+  <script src="./assets/js/game/52-modes.js?v=20261024b"></script>
+  <script src="./assets/js/game/60-hud.js?v=20261024b"></script>
+  <script src="./assets/js/game/70-render.js?v=20261024b"></script>
+  <script src="./assets/js/game/75-fx-draw.js?v=20261024b"></script>
+  <script src="./assets/js/game/80-fx.js?v=20261024b"></script>
+  <script src="./assets/js/game/82-overdrive.js?v=20261024b"></script>
+  <script src="./assets/js/game/85-attract.js?v=20261024b"></script>
+  <script src="./assets/js/99-boot.js?v=20261024b"></script>
 </body>
 </html>

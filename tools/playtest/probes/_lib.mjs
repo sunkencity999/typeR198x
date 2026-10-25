@@ -36,6 +36,16 @@ export function startServer(root) {
 
 export const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
+// ONBOARD (D13) harness flag contract: window.TypeRHarness.flightCheck = "skip" (no Flight Check: the default for every
+// probe, so a fresh-save Start lands on the sector card as before) | "play" (force it once per page session) | null
+// (the game's real eligibility rule). Init script: it runs before the game scripts on every navigation.
+export const FLIGHT_CHECK_FLAG = (m) => { window.TypeRHarness = Object.assign(window.TypeRHarness || {}, { flightCheck: m }); };
+
+// Add the flag to a context a probe built itself (openProbe does this for its own context). flightCheck "auto" = null.
+export async function harnessFlags(context, { flightCheck = "skip" } = {}) {
+  await context.addInitScript(FLIGHT_CHECK_FLAG, flightCheck === "auto" ? null : flightCheck);
+}
+
 // Legacy-shaped fixtures (no schema / run.checkpoint / run.id), as the lead's A1 harness defines them.
 export const FIXTURES = {
   fresh: null,
@@ -82,6 +92,7 @@ export async function openProbe(name, opts = {}) {
     reducedMotion: opts.reducedMotion ? "reduce" : "no-preference",
     ...(opts.isMobile ? { isMobile: true, hasTouch: true } : {})
   });
+  await harnessFlags(context, { flightCheck: opts.flightCheck || "skip" });
   const page = await context.newPage();
   let cdpSession = null;
   let perfEnabled = false;
@@ -225,10 +236,10 @@ export async function openProbe(name, opts = {}) {
         if (until && until(st)) break;
         if (st.mode !== "playing") { await sleep(80); continue; }
         const k = await P.nextKey();
-        if (k && /^[a-z]$/.test(k)) {
+        if (k && /^[a-z ]$/.test(k)) {
           const wrong = Math.random() > accuracy;
           const key = wrong ? "abcdefghijklmnopqrstuvwxyz".replace(k, "")[Math.floor(Math.random() * 25)] : k;
-          await page.keyboard.press(key);
+          await page.keyboard.press(key === " " ? "Space" : key);
         }
         await sleep(50 + Math.random() * 30);
       }
@@ -236,6 +247,10 @@ export async function openProbe(name, opts = {}) {
     async forceBoss() {
       await page.evaluate(() => { const g = window.game; g.levelT = LEVELS[g.levelIndex].duration + 0.01; });
       await page.waitForFunction(() => window.game.inBoss, null, { timeout: 15000 }).catch(() => {});
+    },
+    // ONBOARD: the live Flight Check state (null when none is running).
+    async flightCheck() {
+      return page.evaluate(() => (window.game && typeof window.game.flightCheckState === "function") ? window.game.flightCheckState() : null);
     },
     async saveBlob() {
       return page.evaluate((k) => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } }, LS_KEY);

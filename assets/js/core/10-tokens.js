@@ -171,7 +171,7 @@ const SHAKE_PAD = 20;
 const FX_MOTION = Object.freeze({
   traumaDecay: 1.4, traumaPx: 14, shakeMaxPx: 18, shakeRotRad: 0.02, shakeHz: Object.freeze([23, 37]),
   hitStopScale: 0.15, hitStopCap: 0.18, hitStopCapReduced: 0.06,
-  hitStop: Object.freeze({ word: 0.045, letter: 0.03, pickup: 0.03, segment: 0.09, bossDeath: 0.16 }),
+  hitStop: Object.freeze({ word: 0.055, letter: 0.03, pickup: 0.03, segment: 0.09, bossDeath: 0.16 }),
   finaleSlowMo: Object.freeze({ scale: 0.35, hold: 0.6, ease: 0.4 }),
   recoilPerKey: 0.35, recoilPerKill: 0.8, recoilDecay: 6, recoilPx: 10,
   heatPerKey: 0.25, heatDecay: 1.2,
@@ -179,7 +179,7 @@ const FX_MOTION = Object.freeze({
   typoGlyphS: 0.4, typoEdgeS: 0.1, typoFlashDecay: 3, damageFlashDecay: 1.8, whiteFlashDecay: 2, introPulseDecay: 1.2,
   vignetteMax: 0.35, introPulseMax: 0.25, whiteFlashMax: 0.12, whiteFlashMaxReduced: 0.08,
   lowHp: Object.freeze({ base: 0.10, amp: 0.08, hz: 1.2, reduced: 0.12 }),
-  ringLife: 0.28, ring: Object.freeze({ impact: 12, kill: 20, letter: 12, segment: 60, bossDeath: 180, bossDeathLife: 0.6 }),
+  ringLife: 0.28, ring: Object.freeze({ impact: 12, kill: 26, letter: 12, segment: 60, bossDeath: 180, bossDeathLife: 0.6 }),
   bulletLife: 0.15, bulletHeadS: 0.035, bulletTailS: 0.07, muzzleLife: 0.06, boltLife: 0.12,
   debris: Object.freeze({ gravity: 520, life: 0.7 }),
   plume: Object.freeze({ base: 26, heat: 30, flicker: 6, flickerHz: 23, recoil: 0.6, staticLen: 36 }),

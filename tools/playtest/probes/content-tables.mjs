@@ -35,24 +35,26 @@ const AZ = /^[a-z]+$/;
 
 // ---- timing constants ----
 const timing = { LEVEL_INTRO_S: 1.6, LEVEL_INTRO_MAX_S: 2.5, WAVE_BANNER_S: 1.2, DRAIN_MAX_S: 6, BOSS_APPROACH_S: 3.0, BOSS_INTRO_S: 2.4,
-  BOSS_FINALE_S: 5.0, BOSS_FINALE_SKIP_S: 2.0, IFRAMES_S: 0.8, HUNGRY_SPAWN_S: 0.5, HUNGRY_MIN_ALIVE: 1, GAME_SPEED_FACTOR: 1, PLATE_H: 40, DANGER_X: 0.35 };
+  BOSS_FINALE_S: 5.0, BOSS_FINALE_SKIP_S: 2.0, IFRAMES_S: 0.8, HUNGRY_SPAWN_S: 0.1, HUNGRY_MIN_ALIVE: 1, GAME_SPEED_FACTOR: 1, PLATE_H: 40, DANGER_X: 0.35 };   // PACE (D2): hungry 0.5 -> 0.1 s
 for (const [k, v] of Object.entries(timing)) check(`const ${k} === ${v}`, G(k) === v, G(k));
+check("SPAWN_ROLLIN_PX === [10, 30] (PACE D2: roll-in was 10-90 px)", eq(G("SPAWN_ROLLIN_PX"), [10, 30]), G("SPAWN_ROLLIN_PX"));
 check("LANE_YS", eq(G("LANE_YS"), [184, 252, 320, 388, 456, 524]), G("LANE_YS"));
 check("phone lane profile", eq(G("LANE_PROFILE_PHONE.laneYs"), [200, 300, 400, 500]) && G("LANE_PROFILE_PHONE.maxEnemiesDelta") === -2 && G("LANE_PROFILE_PHONE.cssScaleBelow") === 0.55);
 check("wave modifiers", eq(G("WAVE_SPAWN_MUL"), [0.9, 1.0, 1.1]) && eq(G("WAVE_SPEED_MUL"), [0.92, 1.0, 1.10]) && eq(G("WAVE_LETTER_MUL"), [1.15, 1.0, 0.75]) && eq(G("WAVE_MAX_ENEMIES_DELTA"), [-1, 0, 1]));
 
 // ---- LEVELS master table (CONTRACT section 7) ----
 const TABLE = [
+  // surgeEvery (column 11): ARCADE D10 Counter-Signal cadence, from sector 2
   [1, [8, 10, 12], 22, 1.2, 72, 0.70, 3, 5, 6, 6, null, 0.20, 1],
-  [2, [10, 12, 14], 24, 1.7, 82, 0.60, 3, 6, 7, 9, null, 0.24, 1],
-  [3, [12, 14, 16], 26, 2.3, 92, 0.50, 4, 7, 8, 12, 16, 0.28, 2],
-  [4, [14, 16, 18], 28, 3.0, 102, 0.42, 4, 8, 9, 15, 15, 0.32, 2],
-  [5, [15, 18, 21], 30, 3.7, 112, 0.36, 5, 9, 10, 18, 14, 0.36, 2],
-  [6, [16, 19, 22], 32, 4.3, 122, 0.30, 5, 9, 10, 21, 13, 0.39, 3],
-  [7, [17, 20, 23], 34, 4.9, 132, 0.26, 6, 10, 11, 24, 12, 0.43, 3],
-  [8, [18, 21, 24], 36, 5.5, 142, 0.22, 6, 11, 12, 27, 11, 0.47, 3],
-  [9, [19, 22, 25], 38, 6.0, 152, 0.18, 7, 12, 13, 30, 10, 0.51, 4],
-  [10, [20, 24, 28], 40, 6.5, 162, 0.15, 7, 13, 14, 42, 9, 0.55, 4]
+  [2, [10, 12, 14], 24, 1.7, 82, 0.60, 3, 6, 7, 9, 20, 0.24, 1],
+  [3, [12, 14, 16], 26, 2.3, 92, 0.50, 4, 7, 8, 12, 20, 0.28, 2],
+  [4, [14, 16, 18], 28, 3.0, 102, 0.42, 4, 8, 9, 15, 14, 0.32, 2],
+  [5, [15, 18, 21], 30, 3.7, 112, 0.36, 5, 9, 10, 18, 13, 0.36, 2],
+  [6, [16, 19, 22], 32, 4.3, 122, 0.30, 5, 9, 10, 21, 12, 0.39, 3],
+  [7, [17, 20, 23], 34, 4.9, 132, 0.26, 6, 10, 11, 24, 11, 0.43, 3],
+  [8, [18, 21, 24], 36, 5.5, 142, 0.22, 6, 11, 12, 27, 10, 0.47, 3],
+  [9, [19, 22, 25], 38, 6.0, 152, 0.18, 7, 12, 13, 30, 9, 0.51, 4],
+  [10, [20, 24, 28], 40, 6.5, 162, 0.15, 7, 13, 14, 42, 8, 0.55, 4]
 ];
 const LEVELS = G("LEVELS");
 check("LEVELS.length === 10", LEVELS.length === 10, LEVELS.length);
@@ -154,7 +156,7 @@ for (let L = 1; L <= 10; L++) {
   }
 }
 check("bossSegmentCount(10) === 33", G("bossSegmentCount(10)") === 33);
-check("surgeDuration(6) === 3", G("surgeDuration(6)") === 3);
+check("surgeDuration(6, 2) === 2.4 (D10 window 0.6 + 6 x .30)", Math.abs(G("surgeDuration(6, 2)") - 2.4) < 1e-9, G("surgeDuration(6, 2)"));
 
 // ---- F020 themes ----
 check("LEVEL_THEMES", eq(G("LEVEL_THEMES.map(t => t.art)"), ["first", "sixth", "third", "fourth", "fifth", "third", "second", "fourth", "fifth", "tenth"]));

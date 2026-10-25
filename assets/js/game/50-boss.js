@@ -1,8 +1,13 @@
-// Type-R 198X — boss fight v2 (SYS-06/SYS-07): phases, targetable minions, the Signal Surge, the 2.4 s intro, the
-// 5 s skippable finale and the clear tally. Boss drawing lives in 70-render.js; drawBossHazardMeter(ctx, rect) here is
-// the hook the renderer calls at layer L10 when present. Methods are mixed into Game.prototype; load order is defined in index.html.
+// Type-R 198X — boss fight v2 (SYS-06/SYS-07): phases, targetable minions, the Counter-Signal (ARCADE D10), the 2.4 s
+// intro, the 5 s skippable finale and the clear tally. Boss drawing lives in 70-render.js; drawBossHazardMeter(ctx, rect)
+// here is the hook the renderer calls at layer L10 when present. Methods are mixed into Game.prototype; load order is
+// defined in index.html. Counter-Signal hooks: listens to modeChange (surge riser), checkpoint / checkpointRestored
+// (lvSurgesFired) and results (COUNTER-SIGNALS card note); emits counterSignal, bossSegmentReset and bossKill.
 // Dissolve length (70-render.js owns BOSS_DISSOLVE_S; 1.2 s per CONTRACT section 11).
 const BOSS_DISSOLVE_S_FOR = () => (typeof BOSS_DISSOLVE_S === "number" ? BOSS_DISSOLVE_S : 1.2);
+const CS_GLYPHS = "abcdefghijklmnopqrstuvwxyz";
+const CS_SLAB_TEXT = { done: "", rem: "", remColor: null };     // reused: counterSignalSlabText()'s return value
+const CS_EVT = { result: "", level: 0, phase: 0, segmentIndex: 0, chars: 0, dur: 0, t: 0, slow: false };   // reused hook payload
 
 Object.assign(Game.prototype, {
   // Untrimmed art size for Boss.artRect (pre-D6). The loader's manifest first, else the constructor's <img>.
@@ -41,6 +46,11 @@ Object.assign(Game.prototype, {
       boss.phase = boss.phaseFor(boss.segmentIndex);
     }
     this.boss = boss;
+    // Counter-Signal state (D10): a restored fight (Continue / Retry boss) starts fresh too (first surge at min(6, every)).
+    boss.surgePending = false; boss.surgeCount = 0; boss.firedInPhase = 0; boss.scrambleT = 0; boss.scrambleSeed = 0;
+    boss._scrStep = -1; boss._scrSrc = null; boss._scrText = "";
+    this.csBar("reset");
+    this._csBarAcc = 0;
     this.minionAcc = 0;
     this.lastMinionLane = -1;
 
@@ -79,6 +89,9 @@ Object.assign(Game.prototype, {
     this.boss = null;
     this.bossIntro = null;
     this.setClass(this.hudEls().bossMeter, "isCharging", false);
+    this.csBar("off");
+    this._csGlow = null;
+    if (this.sfx && typeof this.sfx.surgeStop === "function") this.sfx.surgeStop();
     if (typeof this.sfx.bossPulse === "function") this.sfx.bossPulse(false);
   },
 
@@ -145,12 +158,16 @@ Object.assign(Game.prototype, {
       }
     }
 
+    // Counter-Signal (D10). World dt: hit-stop slows the window as it slows the plates; pause freezes it (no update).
+    if (boss.scrambleT > 0) boss.scrambleT = Math.max(0, boss.scrambleT - dt);
     if (boss.surge) {
       boss.surge.t += dt;
+      this.csTickBar(dt);
       if (boss.surge.t >= boss.surge.dur) this.fireSurge();
-    } else if (cfg.surgeEvery) {
+    } else if (this.counterSignalArmed(cfg)) {
       boss.surgeTimer += dt;
-      if (boss.surgeTimer >= cfg.surgeEvery) this.startSurge();
+      if (!boss.surgePending && boss.surgeTimer >= this.counterSignalDue(cfg)) boss.surgePending = true;
+      if (boss.surgePending && (boss.progress | 0) === 0) this.startSurge();   // at a segment start, with the whole segment
     }
   },
 
@@ -165,7 +182,7 @@ Object.assign(Game.prototype, {
         this.onCorrectKey(lock.ref);
       } else {
         this.lockMisses = (this.lockMisses | 0) + 1;
-        this.onHardMiss(lock.ref);
+        this.onHardMiss(lock.ref, ch);
         if (this.lockMisses >= 3) this.releaseLock("lost");
       }
       return;
@@ -183,6 +200,7 @@ Object.assign(Game.prototype, {
       this.noteCorrectKey();
       this.countCorrect();
       minion.progress++;
+      this.emitKeyCorrect("minion", minion, ch, minion.progress - 1, minion.text.length, -1);
       minion.flash = 0.18;
       this.fireLaserTo(minion.x, minion.y, "cyan");
       this.sfx.zap(1);
@@ -200,7 +218,7 @@ Object.assign(Game.prototype, {
       this.onCorrectKey(pu);
       return;
     }
-    this.onHardMiss(null);
+    this.onHardMiss(null, ch);
   },
 
   // Where the lasers go: the art's content centre (artRect until D6 supplies contentRect).
@@ -225,10 +243,11 @@ Object.assign(Game.prototype, {
     this.addSparks(aim.x, aim.y + rand(-40, 40), 10);
     const mult = this.scoringMult();
     const slab = boss.slabRect;
+    this.emitKeyCorrect("boss", boss, boss.nextChar, boss.progress | 0, segLen, boss.segmentIndex);
     const r = boss.advance();
-    this.addScore(SCORE.bossChar * mult);
+    this.addScore(SCORE.bossChar * mult, { kind: "bossChar" });
     if (r.segmentDone) {
-      this.addScore(SCORE.segment(segLen) * mult, { x: slab.x + slab.w / 2, y: slab.y - 14 });
+      this.addScore(SCORE.segment(segLen) * mult, { kind: "segment", x: slab.x + slab.w / 2, y: slab.y - 14 });
       this.sfx.segmentDown();
       boss.flash = Math.max(boss.flash, 0.5);
       if (typeof this.addShockwave === "function") this.addShockwave(aim.x, aim.y, 120, "magenta");
@@ -238,6 +257,8 @@ Object.assign(Game.prototype, {
       if (this.run && this.run.boss) { this.run.boss.segmentIndex = boss.segmentIndex; this.run.boss.progress = 0; }
     }
     if (r.phaseDone) this.onBossPhaseClear();
+    // A pending surge starts on the keystroke that opens the next segment, never a frame later (D10).
+    if (r.segmentDone && !boss.done && boss.surgePending && !boss.surge && this.counterSignalArmed(cfg)) this.startSurge();
     if (typeof this.sfx.bossPulse === "function" && !boss.done) this.sfx.bossPulse(true, 1 - boss.hpFrac());
     this.refreshBossUI();
     if (boss.done) this.onBossKill();
@@ -259,7 +280,7 @@ Object.assign(Game.prototype, {
     const letters = letterSetForWave(cfg, 2);
     const taken = this.liveFirstChars();
     const pool = [...letters].filter((c) => !taken.has(c) && c !== boss.nextChar);
-    const text = pool.length ? choice(pool) : letters[randi(0, letters.length - 1)];
+    const text = pool.length ? this.randPick(pool) : this.randPick(letters);
     const ys = this.laneYs();
     const lanes = MINION_LANES.filter((l) => l < ys.length);
     const x = boss.artRect.x + (Number.isFinite(cfg.minionSpawnDx) ? cfg.minionSpawnDx : MINION_SPAWN_DX);
@@ -268,7 +289,7 @@ Object.assign(Game.prototype, {
     let cands = lanes.filter((l) => !busy.has(l) && l !== this.lastMinionLane);
     if (!cands.length) cands = lanes.filter((l) => !busy.has(l));
     if (!cands.length) cands = lanes;
-    const lane = choice(cands);
+    const lane = this.randPick(cands);
     const en = new Enemy({ text, x, y: ys[lane], speed: cfg.speed * MINION_SPEED_MUL, kind: "bossMinion", lane });
     this.enemies.push(en);
     this.lastMinionLane = lane;
@@ -286,31 +307,92 @@ Object.assign(Game.prototype, {
     return n;
   },
 
-  // ------------------------- Signal Surge -------------------------
-  // startSurge(): { t, dur: 1.5 + .25 * remainingChars, armed }. Finishing the segment first counters it; otherwise it fires.
+  // ------------------------- Counter-Signal (ARCADE D10) -------------------------
+  // From sector 2 a boss arms a surge min(COUNTER_SIGNAL.firstAtS, surgeEvery) s after the intro unlock, then every
+  // surgeEvery s; it starts at a segment start and covers the whole segment: window surgeWindow(chars, L, slow, hand
+  // speed), the table's surgeDuration or COUNTER_SIGNAL.fairMul (2.25) x the pilot's time for the segment, whichever
+  // is longer (Z6).
+  // Finishing the word counters it (bonus, the bolt reflects into the boss); otherwise it fires from the boss's aim
+  // point (DAMAGE.surge, the word starts over with a scramble). At most maxFiredPerPhase fired surges per phase.
+  // Telegraph: red glow on the art (drawCounterSignalGlow), the slab outline pulse (70-render.js drawBossSlab), the DOM
+  // charge bar under the hull meter (#bossCharge, csBar) and the surgeCharge riser.
+  counterSignalArmed(cfg) {                       // may a surge arm / start now?
+    const b = this.boss;
+    return !!(b && !b.done && b.segment && cfg && cfg.surgeEvery && cfg.level >= COUNTER_SIGNAL.fromLevel
+      && (b.firedInPhase | 0) < COUNTER_SIGNAL.maxFiredPerPhase && !this.bossClear);
+  },
+
+  counterSignalDue(cfg) {
+    return (this.boss.surgeCount | 0) === 0 ? Math.min(COUNTER_SIGNAL.firstAtS, cfg.surgeEvery) : cfg.surgeEvery;
+  },
+
+  // Widen 20 % below 35 WPM; an unknown speed counts as slow.
+  counterSignalSlow() {
+    const w = typeof this.pilotWpm === "function" ? this.pilotWpm("window") : null;
+    return !(w > 0) || w < COUNTER_SIGNAL.slowWpm;
+  },
+
+  // Z6: the charge window for a segment of `chars` at sector L, from the pilot's measured hand speed (run, else
+  // lifetime, else COUNTER_SIGNAL.fairWpm).
+  counterSignalWindow(chars, L, slow) {
+    const w = typeof this.pilotWpm === "function" ? this.pilotWpm("base") : null;
+    return surgeWindow(chars, L, slow, w > 0 ? w : 0);
+  },
+
   startSurge() {
     const boss = this.boss;
-    if (!boss || boss.surge) return null;
-    const dur = surgeDuration(boss.remainingChars);
-    boss.surge = { t: 0, dur, armed: true };
-    boss.surgeTimer = 0;
-    this.sfx.surgeCharge(dur);
-    this.refreshBossUI();
+    if (!boss || boss.surge || boss.done || !boss.segment) return null;
+    const cfg = LEVELS[this.levelIndex], L = cfg.level;
+    const chars = boss.segment.length - (boss.progress | 0);          // === segment length at a segment start
+    const slow = this.counterSignalSlow();
+    const dur = this.counterSignalWindow(chars, L, slow);
+    boss.surge = { t: 0, dur, armed: true, chars, seg: boss.segmentIndex, slow };   // one object per surge (rare)
+    boss.surgeTimer = 0; boss.surgePending = false; boss.surgeCount = (boss.surgeCount | 0) + 1;
+    this._csBarAcc = 0;
+    this.sfx.surgeCharge(dur);                                         // the existing riser (CONTRACT R43)
+    this.csBar("charge");
+    this.refreshBossUI();                                              // #bossMeter.isCharging
+    this.counterSignalTip();                                           // first surge on this save only
+    if (typeof this.announce === "function") this.announce("Surge incoming. Finish the word.");
+    this.csEmit("start", boss.surge);
     return boss.surge;
+  },
+
+  // First surge on this save: one tip toast (persisted by the next autosave; a lost flag only repeats it once).
+  counterSignalTip() {
+    const save = this.save;
+    if (!save) return false;
+    const ts = save.tutorialSeen;
+    if (ts && ts.surge) return false;
+    if (typeof this.showToast === "function") this.showToast("SURGE INCOMING — FINISH THE RED-FRAMED WORD BEFORE THE BAR FILLS", { kind: "tip", key: "tut", ms: 3500 });
+    if (ts && typeof ts === "object") ts.surge = true; else save.tutorialSeen = { surge: true };
+    return true;
   },
 
   cancelSurge(countered = true) {
     const boss = this.boss;
     if (!boss || !boss.surge) return false;
+    const s = boss.surge;
     boss.surge = null;
     boss.surgeTimer = 0;
     if (countered) {
       const L = LEVELS[this.levelIndex].level;
       this.levelStats.surgesCancelled = (this.levelStats.surgesCancelled | 0) + 1;
+      this.stats.csCountered = (this.stats.csCountered | 0) + 1;
       this.sfx.surgeCancel();
       const slab = boss.slabRect;
       this.addScore(SCORE.surgeCountered(L), { kind: "bonus", x: slab.x + slab.w / 2, y: slab.y + slab.h + 24 });
       this.showBanner({ kind: "callout", title: "COUNTERED", color: "cyan" });
+      const aim = this.bossAimPoint();
+      if (typeof this.addBolt === "function") this.addBolt(this.player.x + 20, this.player.y, aim.x, aim.y, "cyan", 0.2);   // the bolt reflects
+      if (typeof this.addShockwave === "function") this.addShockwave(aim.x, aim.y, 90, "cyan");
+      boss.flash = Math.max(boss.flash || 0, 0.6);
+      this.csBar("countered");
+      if (typeof this.announce === "function") this.announce("Countered.");
+      this.csEmit("countered", s);
+    } else {
+      this.csBar("off");
+      if (this.sfx && typeof this.sfx.surgeStop === "function") this.sfx.surgeStop();
     }
     this.refreshBossUI();
     return true;
@@ -319,18 +401,133 @@ Object.assign(Game.prototype, {
   fireSurge() {
     const boss = this.boss;
     if (!boss || !boss.surge) return 0;
-    const L = LEVELS[this.levelIndex].level;
-    boss.surge = null;
-    boss.surgeTimer = 0;
-    boss.surgeFlash = 1;
-    const cell = this.bossHazardRect();
-    const sx = cell ? cell.x : boss.x, sy = cell ? cell.y + cell.h / 2 : boss.y;
-    if (typeof this.addBolt === "function") this.addBolt(sx, sy, this.player.x + 20, this.player.y, "danger", 0.2);
-    else this.bullets.push(new Bullet({ x: sx, y: sy, tx: this.player.x + 20, ty: this.player.y, life: 0.2, width: 4, color: "magenta" }));
+    const s = boss.surge, L = LEVELS[this.levelIndex].level;
+    boss.surge = null; boss.surgeTimer = 0; boss.surgePending = false; boss.surgeFlash = 1;
+    boss.firedInPhase = (boss.firedInPhase | 0) + 1;
+    this.levelStats.surgesFired = (this.levelStats.surgesFired | 0) + 1;
+    this.stats.csFired = (this.stats.csFired | 0) + 1;
+    const aim = this.bossAimPoint();                                   // the bolt leaves the boss, not the slab cell
+    if (typeof this.addBolt === "function") this.addBolt(aim.x, aim.y, this.player.x + 20, this.player.y, "danger", 0.2);
+    else this.bullets.push(new Bullet({ x: aim.x, y: aim.y, tx: this.player.x + 20, ty: this.player.y, life: 0.2, width: 4, color: "danger" }));
+    // the segment starts over, with a visible scramble (typing stays live: glyph 0 is never scrambled)
+    if (!boss.done) { boss.progress = 0; if (this.run && this.run.boss) this.run.boss.progress = 0; }
+    boss.scrambleT = COUNTER_SIGNAL.scrambleS; boss.scrambleSeed = (Math.random() * 1e6) | 0; boss._scrStep = -1;
+    if (typeof this.hook === "function") this.hook("bossSegmentReset", { boss, segmentIndex: boss.segmentIndex, reason: "surge" });
+    this.csBar("fired");
+    this.csEmit("fired", s);                                           // 82-overdrive.js vents on this
     this.sfx.surgeFire();
-    const dmg = this.takeDamage(DAMAGE.surge(L), "surge");
-    this.refreshBossUI();
-    return dmg;
+    if (typeof this.announce === "function") this.announce("Surge hit. The word starts over.");
+    this.refreshBossUI();                                              // the boss meter refills by the reset letters
+    return this.takeDamage(DAMAGE.surge(L), "surge");                  // last: may end the run (onGameOver)
+  },
+
+  // counterSignal payload (reused CS_EVT); a probe-injected { t, dur, armed } surge works (every field has a fallback).
+  csEmit(result, s) {
+    const boss = this.boss;
+    const e = CS_EVT;
+    e.result = result;
+    e.level = LEVELS[this.levelIndex].level;
+    e.phase = boss ? boss.phase | 0 : 0;
+    e.segmentIndex = boss ? boss.segmentIndex | 0 : 0;
+    e.chars = s && Number.isFinite(s.chars) ? s.chars : (boss ? boss.remainingChars : 0);
+    e.dur = s && Number.isFinite(s.dur) ? s.dur : 0;
+    e.t = s && Number.isFinite(s.t) ? s.t : 0;
+    e.slow = !!(s && s.slow);
+    if (typeof this.hook === "function") this.hook("counterSignal", e);
+    return e;
+  },
+
+  // Charge bar under the hull meter (#bossCharge, DOM): transform / opacity only. The fill is written at 5 Hz, each
+  // write aimed 200 ms ahead and eased by a 200 ms linear transition (.isLive); a new surge snaps it to 0 first and
+  // turns the transition on with its first tick, so the bar never runs backwards.
+  csEls() {
+    if (!this._csEls) {
+      const bar = document.getElementById("bossCharge");
+      this._csEls = { bar, fill: bar ? bar.firstElementChild : null };
+    }
+    return this._csEls;
+  },
+
+  csBar(state) {                         // "reset" | "charge" | "countered" | "fired" | "off"
+    const { bar, fill } = this.csEls();
+    if (!bar || !fill) return;
+    if (state === "reset" || state === "charge") {
+      this.setClass(bar, "isLive", false);
+      this.setClass(bar, "isCharging", state === "charge");
+      this.setTransformScaleX(fill, 0);
+      return;
+    }
+    this.setClass(bar, "isLive", false);
+    this.setClass(bar, "isCharging", false);
+    if (state === "countered" || state === "fired") this.pulseClass(bar, state === "fired" ? "isFired" : "isCountered", 240);
+  },
+
+  csTickBar(dt) {
+    this._csBarAcc = (this._csBarAcc || 0) + dt;
+    if (this._csBarAcc < COUNTER_SIGNAL.barCommitS) return;
+    this._csBarAcc = 0;
+    const s = this.boss.surge, { bar, fill } = this.csEls();
+    if (!fill || !Number.isFinite(s.dur)) return;
+    this.setClass(bar, "isLive", true);
+    this.setTransformScaleX(fill, clamp((s.t + COUNTER_SIGNAL.barCommitS) / Math.max(0.01, s.dur), 0, 1));
+  },
+
+  // Boss art glow while a surge charges: one bake per fight / renderScale / spriteEpoch / sprite (a 1/8 danger silhouette
+  // upscaled = a blurred halo at half device resolution); no shadowBlur, no getImageData. Freed in endBossFight.
+  getCounterSignalGlow(level, sp) {
+    const rs = this.renderScale || 1, c = this._csGlow;
+    if (c && c.level === level && c.rs === rs && c.epoch === this.spriteEpoch && sp && c.img === sp.img && c.w === sp.w && c.h === sp.h) return c;
+    if (!sp || !sp.img || !(sp.w > 0) || !(sp.h > 0)) return null;
+    const pad = 0.06, k = rs * 0.5;
+    const W = Math.max(1, Math.round(sp.w * (1 + 2 * pad) * k)), H = Math.max(1, Math.round(sp.h * (1 + 2 * pad) * k));
+    const tiny = document.createElement("canvas");
+    tiny.width = Math.max(1, Math.round(W / 8)); tiny.height = Math.max(1, Math.round(H / 8));
+    const tg = tiny.getContext("2d");
+    const ix = tiny.width * pad / (1 + 2 * pad), iy = tiny.height * pad / (1 + 2 * pad);
+    tg.drawImage(sp.img, ix, iy, tiny.width - 2 * ix, tiny.height - 2 * iy);
+    tg.globalCompositeOperation = "source-in";
+    tg.fillStyle = PALETTE.rgba("danger", 1);
+    tg.fillRect(0, 0, tiny.width, tiny.height);
+    const glow = document.createElement("canvas");
+    glow.width = W; glow.height = H;
+    const gg = glow.getContext("2d");
+    gg.imageSmoothingEnabled = true;
+    gg.imageSmoothingQuality = "high";
+    gg.drawImage(tiny, 0, 0, W, H);
+    return (this._csGlow = { level, rs, epoch: this.spriteEpoch, img: sp.img, w: sp.w, h: sp.h, canvas: glow, pad });
+  },
+
+  // Inside drawBossArt's save(), composite already "lighter". Alpha .25 + .35 k (k = charge), pulsing 2 Hz with full
+  // motion and >= .6 in the last .5 s; steady under reduced motion.
+  drawCounterSignalGlow(ctx, boss, p) {
+    const s = boss.surge;
+    const g = s && p && this.getCounterSignalGlow(boss.artLevel, p.sp);
+    if (!g) return;
+    const k = clamp(s.t / Math.max(0.01, s.dur), 0, 1), rm = !!this.reduceMotion;
+    let a = 0.25 + 0.35 * k;
+    if (!rm) { a *= 0.85 + 0.15 * Math.sin(Math.PI * 4 * s.t); if (s.dur - s.t < 0.5) a = Math.max(a, 0.6); }
+    const r = p.artRect, dx = r.w * g.pad, dy = r.h * g.pad;
+    ctx.globalAlpha = p.alpha * a;
+    ctx.drawImage(g.canvas, r.x - dx, r.y - dy, r.w + 2 * dx, r.h + 2 * dy);
+    this._csGlowDraws = (this._csGlowDraws | 0) + 1;
+    this._csGlowAlpha = a;
+  },
+
+  // Slab text during the fail scramble: the reset word in danger red, glyph i resolving at scrambleS x i / len (glyph 0
+  // at once); reduced motion: the static red word. Reused return object; <= 9 strings per fail (30 Hz steps).
+  counterSignalSlabText(boss, done, rem) {
+    const out = CS_SLAB_TEXT;
+    out.done = done; out.rem = rem; out.remColor = null;
+    const st = boss.scrambleT || 0;
+    if (st <= 0 || !rem) return out;
+    out.remColor = "danger";
+    if (this.reduceMotion) return out;
+    const dur = COUNTER_SIGNAL.scrambleS, el = dur - st, step = Math.floor(el * 30);
+    if (boss._scrStep === step && boss._scrSrc === rem) { out.rem = boss._scrText; return out; }
+    let txt = "";
+    for (let i = 0; i < rem.length; i++) txt += el >= dur * i / rem.length ? rem[i] : CS_GLYPHS[(boss.scrambleSeed + i * 7 + step * 13) % 26];
+    boss._scrStep = step; boss._scrSrc = rem; boss._scrText = txt; out.rem = txt;
+    return out;
   },
 
   // Hazard cell: the console slab's right cell (88 x 68 inside the 16 px padding); also the surge bolt's anchor.
@@ -385,9 +582,9 @@ Object.assign(Game.prototype, {
       ctx.font = feedbackFont(16, 700);
       ctx.fillStyle = feedbackColor("text", 0.92);
       ctx.fillText(`${Math.max(0, left).toFixed(1)}s`, cx, r.y + 50);
-    } else if (cfg && cfg.surgeEvery) {
-      // idle: dim label + the charge arc toward the next surge
-      const k = clamp((boss.surgeTimer || 0) / cfg.surgeEvery, 0, 1);
+    } else if (cfg && cfg.surgeEvery && this.counterSignalArmed(cfg)) {
+      // idle: dim label + the charge arc toward the next surge (full danger arc while armed and waiting for a segment start)
+      const k = boss.surgePending ? 1 : clamp((boss.surgeTimer || 0) / this.counterSignalDue(cfg), 0, 1);
       ctx.globalAlpha = 1;
       ctx.font = feedbackFont(10, 700);
       ctx.fillStyle = feedbackColor("text", 0.25);
@@ -398,8 +595,8 @@ Object.assign(Game.prototype, {
       ctx.arc(cx, r.y + 40, 16, 0, Math.PI * 2);
       ctx.stroke();
       if (k > 0) {
-        ctx.globalAlpha = 0.45 + 0.25 * k;   // review R12: ladder colour + globalAlpha (no per-frame colour string)
-        ctx.strokeStyle = feedbackColor("magenta", 1);
+        ctx.globalAlpha = boss.surgePending ? 0.7 : 0.45 + 0.25 * k;   // review R12: ladder colour + globalAlpha (no per-frame colour string)
+        ctx.strokeStyle = feedbackColor(boss.surgePending ? "danger" : "magenta", 1);
         ctx.beginPath();
         ctx.arc(cx, r.y + 40, 16, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * k);
         ctx.stroke();
@@ -411,11 +608,12 @@ Object.assign(Game.prototype, {
       ctx.fillText("NO SURGE", cx, r.y + 8);
     }
     if (boss.surgeFlash > 0) {
+      const aim = this.bossAimPoint();   // D10: the afterglow runs from the boss, where the bolt left
       ctx.globalAlpha = clamp(boss.surgeFlash, 0, 1);
       ctx.strokeStyle = danger;
       ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.moveTo(r.x, r.y + 40);
+      ctx.moveTo(aim.x, aim.y);
       ctx.lineTo(this.player.x + 20, this.player.y);
       ctx.stroke();
     }
@@ -431,6 +629,13 @@ Object.assign(Game.prototype, {
     const L = cfg.level;
     this.killMinionsAll();
     this.cancelSurge(false);
+    // D10 cap per phase. The cadence (R41: first surge min(6 s, surgeEvery) after the intro unlock, then every surgeEvery)
+    // runs on across phases, and a pending surge opens the next phase's first segment; only a phase that hit the cap
+    // restarts the clock, so a struggling pilot gets a full surgeEvery before the next one. (Resetting the clock at
+    // every phase clear left S2-3 fights, three segments per phase, with no surge at all for most pilots.)
+    const capped = (boss.firedInPhase | 0) >= COUNTER_SIGNAL.maxFiredPerPhase;
+    boss.firedInPhase = 0;
+    if (capped) { boss.surgeTimer = 0; boss.surgePending = false; }
     this.player.shield = Math.min(DAMAGE.shieldCap, (this.player.shield || 0) + DAMAGE.phaseClearShield);
     const slab = boss.slabRect;
     this.addScore(SCORE.phase(L), { kind: "bonus", x: slab.x + slab.w / 2, y: slab.y + slab.h + 24 });
@@ -460,6 +665,7 @@ Object.assign(Game.prototype, {
     const target = (this.levelIndex >= LEVELS.length - 1) ? "victory" : "level";
     const totalChars = boss.totalChars;
     const phasesCleared = Math.max(0, boss.phaseStarts.length - 1);
+    if (typeof this.hook === "function") this.hook("bossKill", { level: L, totalChars, elapsedS: (this.levelStats.bossTimeMs || 0) / 1000 });   // 82-overdrive ends Overdrive
     this.endBossFight();
     this.setWavePhase("finale");
     const info = {
@@ -623,7 +829,7 @@ Object.assign(Game.prototype, {
     const retries = ls.retries | 0;
     const retryMul = SCORE.retryMul(retries);
     const clear = SCORE.bossClear(L);
-    const par = (info.totalChars || 0) / SCORE.parDivisor;
+    const par = SCORE.par(info.totalChars || 0, L);   // D10: 90 % of the sector's nominal pace
     const elapsed = Number.isFinite(info.elapsed) ? info.elapsed : 0;
     const time = SCORE.timeBonus(par, elapsed, L);
     const flawless = (ls.bossDamage | 0) === 0 ? SCORE.flawless(L) : 0;
@@ -633,8 +839,41 @@ Object.assign(Game.prototype, {
     const surges = SCORE.surgeCountered(L) * (ls.surgesCancelled | 0);
     // The money actually banked (each wave at the multiplier of its moment). Retries only grow inside a sector, so the
     // product at the current multiplier never exceeds that sum; it wins only for a run record saved before the sum existed.
-    const perfectWaves = Math.max(ls.perfectWaveBonus | 0, Math.round(SCORE.perfectWave(L) * retryMul) * (ls.perfectWaves | 0));
-    const total = Math.round(retryMul * (clear + time + flawless + accuracy));
-    return { clear, time, flawless, phases, surges, accuracy, perfectWaves, retryMul, retries, accPct, par, elapsed, total };
+    const scoreMul = (typeof this.diff === "function" && this.diff().score) || 1;   // PACE: Cadet x0.8
+    const perfectWaves = Math.max(ls.perfectWaveBonus | 0, Math.round(Math.round(SCORE.perfectWave(L) * retryMul) * scoreMul) * (ls.perfectWaves | 0));
+    const total = Math.round(retryMul * scoreMul * (clear + time + flawless + accuracy));
+    return { clear, time, flawless, phases, surges, accuracy, perfectWaves, retryMul, scoreMul, retries, accPct, par, elapsed, total };
   },
 });
+
+// ----------------------------- Counter-Signal listeners (ARCADE D10) -----------------------------
+if (typeof onGameHook === "function") {
+  // The riser stops under the pause screen (and any other screen) and restarts for what is left on resume.
+  onGameHook("modeChange", function (e) {
+    const s = this.boss && this.boss.surge;
+    if (!s || !this.sfx) return;
+    if (e.to !== "playing") { if (typeof this.sfx.surgeStop === "function") this.sfx.surgeStop(); }
+    else if (e.from === "paused" && Number.isFinite(s.dur)) this.sfx.surgeCharge(Math.max(0.2, s.dur - (s.t || 0)));
+  });
+  // Boss checkpoints carry the sector's fired count so Retry boss restores it (surgesCancelled rides the scaffold extra).
+  onGameHook("checkpoint", function (e) {
+    if (e && e.kind === "boss" && e.cp) e.cp.lvSurgesFired = (this.levelStats && this.levelStats.surgesFired) | 0;
+  });
+  onGameHook("checkpointRestored", function (e) {
+    const cp = e && e.cp;
+    if (cp && cp.kind === "boss" && this.levelStats) this.levelStats.surgesFired = cp.lvSurgesFired | 0;
+  });
+  // Card note COUNTER-SIGNALS won/total: sector cards this sector; Game Over / run cards (run reports) the whole run.
+  onGameHook("results", function (e) {
+    const r = e && e.results;
+    if (!r) return;
+    const run = e.scope !== "level";
+    const st = this.stats || {}, ls = this.levelStats || {};
+    const won = (run ? st.csCountered : ls.surgesCancelled) | 0;
+    const lost = (run ? st.csFired : ls.surgesFired) | 0;
+    r.counterSignals = { countered: won, fired: lost };
+    if (won + lost > 0 && Array.isArray(r.notes)) {
+      r.notes.push({ id: "counterSignals", text: `COUNTER-SIGNALS ${won}/${won + lost}`, aria: `Counter-signals: ${won} of ${won + lost} countered.` });
+    }
+  });
+}

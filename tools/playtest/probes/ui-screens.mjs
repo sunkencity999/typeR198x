@@ -110,7 +110,7 @@ async function showScreen(page, mode) {
         card.querySelector(".bonusList").innerHTML =
           row("Clear", "+2,450") + row("Time", "+900") + row("Accuracy", "+400") + row("Flawless boss", "+500") + row("Retry penalty", "x0.75", "bonusRow--penalty") +
           `<li class="bonusCaption">Banked during the sector</li>` +
-          row("Perfect waves", "+250", "bonusRow--banked") + row("Boss phases", "+600", "bonusRow--banked") + row("Surges countered", "+0", "bonusRow--banked");
+          row("Perfect waves", "+250", "bonusRow--banked") + row("Boss phases", "+600", "bonusRow--banked") + row("Counter-signal bonus", "+0", "bonusRow--banked");
         card.querySelector(".newBest").classList.remove("hidden");
       }
     });
@@ -238,7 +238,8 @@ try {
     // Modals
     await page.evaluate(() => { document.body.dataset.mode = "menu"; document.getElementById("screenMenu").classList.add("is-active"); });
     await showModal(page, "storyModal"); await shot(page, dir, "70-story");
-    const storyFit = await page.evaluate(() => { const b = document.querySelector("#storyModal .modalBody"); return { scroll: b.scrollHeight, client: b.clientHeight }; });
+    // ONBOARD: the five paragraphs sit behind the "Read the full briefing" disclosure; measure them opened.
+    const storyFit = await page.evaluate(() => { const d = document.getElementById("storyMore"); if (d) d.open = true; const b = document.querySelector("#storyModal .modalBody"); return { scroll: b.scrollHeight, client: b.clientHeight }; });
     if (vp.name === "1440x900") check("1440x900 story body shows last paragraph without scrolling", storyFit.scroll <= storyFit.client + 1, JSON.stringify(storyFit));
     await showModal(page, "helpModal"); await shot(page, dir, "71-help");
     await showModal(page, "confirmModal");
@@ -294,7 +295,8 @@ try {
       startPrimary: q("#btnStart").classList.contains("primary"),
       shipFieldset: q(".shipGrid").tagName + (q(".shipGrid legend") ? "+LEGEND" : ""),
       helpSections: document.querySelectorAll("#helpModal .helpSection").length,
-      helpCopy: ["10", "25", "50", "100", "Space", "HEAL"].every((s) => help.includes(s)) && !help.includes("15 pts") && !help.includes("x2 at 15"),
+      // release review CT-B3: one name for the measured speed in the help (WPM is hand speed; never "typing speed").
+      helpCopy: ["10", "25", "50", "100", "Space", "HEAL"].every((s) => help.includes(s)) && !help.includes("15 pts") && !help.includes("x2 at 15") && !/typing speed/i.test(help),
       oldHelp: q(".help"), kbHint: q("#keyboardHint"), tipsRow: [...document.querySelectorAll(".statRow .label")].some((l) => /tips/i.test(l.textContent)),
       crtShade: getComputedStyle(q("#crtShade")).mixBlendMode, crtLines: getComputedStyle(q("#crtLines")).mixBlendMode, crtFilter: getComputedStyle(q("#crtOverlay")).filter,
       crtNoiseBg: getComputedStyle(q("#crtNoise")).backgroundImage,
@@ -389,7 +391,7 @@ try {
   check("-webkit-backdrop-filter precedes every backdrop-filter", prefixedOk, `${decls.length} declarations`);
   check("source: <div id=\"loadingOverlay\" ... with no class attr", /<div id="loadingOverlay"(?![^>]*\sclass=)/.test(html), "regex");
   check("source: no bg/fg preloads, one font preload", (html.match(/rel="preload"/g) || []).length === 1 && /as="font"/.test(html), String((html.match(/rel="preload"/g) || []).length));
-  check("source: 25 external script tags unchanged order", (html.match(/<script src=/g) || []).length === 25 && html.indexOf("sfx.js?v=") < html.indexOf("00-util.js?v=") && html.indexOf("80-fx.js") < html.indexOf("99-boot.js"), String((html.match(/<script src=/g) || []).length));
+  check("source: 31 external script tags unchanged order", (html.match(/<script src=/g) || []).length === 31 && html.indexOf("sfx.js?v=") < html.indexOf("00-util.js?v=") && html.indexOf("80-fx.js") < html.indexOf("99-boot.js"), String((html.match(/<script src=/g) || []).length));
   await context.close();
 } catch (e) {
   results.errors.push(String(e && e.stack || e));

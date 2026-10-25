@@ -39,7 +39,10 @@ const DIM_BAND_ALPHA = 0.45;
 const IMPACT_FRAME_S = 0.09;        // white / danger plate before the .2 s fade
 const DYING_FADE_S = 0.2;
 const DYING_PLATES_CAP = 24;
+const ESCAPE_PLATE_S = 0.6;         // PACE Z5: a timed-out wave's plates warp back out to the right (fade only, reduced motion)
+const ESCAPE_PLATE_DX = 520;
 const RAIL_FROM = 0.40;
+const RAIL_STROKE_ALPHA = 0.20;     // ARCADE D12 (was .12): rail hairline alpha, times the rail fade (>= .35 while plates live)
 const VISTA_DRIFT_PX = 20;          // tenth-sector foreground drift amplitude
 const BOSS_BOX_LEFT = 688;          // art box x 688..w-16, y hudSafeTop+8+float..h-24 (VIS-07)
 const BOSS_BOX_RIGHT_PAD = 16;
@@ -363,17 +366,25 @@ Object.assign(Game.prototype, {
     };
     const geo = this.plateGeometry();
     ctx.font = geo.font;
-    const maxLen = clamp((cfg.wordMax || 8) + 3, 4, 14);
+    // One cap for MEASURE (+1 typo glyph) and WORDS (two-word plates up to 15 chars, cfg.maxTextLen).
+    const maxLen = clamp(Math.max((cfg.wordMax || 8) + 3, (cfg.maxTextLen | 0) + 1), 4, 17);
+    const mw = ctx.measureText("m").width;   // MEASURE: drawEnemy widens a plate carrying a typo by one (monospace) glyph
     for (let len = 1; len <= maxLen; len++) {
       const tw = ctx.measureText("m".repeat(len)).width;
       const w = len === 1 ? geo.h : Math.ceil(tw + PLATE_PAD);
-      for (const state of ["idle", "locked", "danger", "dangerBase"]) add(len === 1 ? "chip" : "pill", Math.max(geo.h, bucket(w)), geo.h, state);
+      for (const state of ["idle", "locked", "danger", "dangerBase"]) {
+        add(len === 1 ? "chip" : "pill", Math.max(geo.h, bucket(w)), geo.h, state);
+        if (len > 1) add("pill", Math.max(geo.h, bucket(w + mw)), geo.h, state);   // same arithmetic as the typo draw path
+      }
     }
     ctx.font = FONT.target(18, 600);
     for (const label of ["spread", "pierce", "rapid", "shield", "multi", "heal"]) {
       const w = Math.ceil(ctx.measureText(label).width + CAPSULE_PAD);
       add("capsule", bucket(w), CAPSULE_H, "power");
       add("capsule", bucket(w), CAPSULE_H, "locked");
+      const wt = Math.ceil(ctx.measureText(label).width + CAPSULE_PAD) + ctx.measureText("m").width;   // MEASURE: drawPowerup's typo widening
+      add("capsule", bucket(wt), CAPSULE_H, "power");
+      add("capsule", bucket(wt), CAPSULE_H, "locked");
     }
     add("chip", bucket(geo.minionH), geo.minionH, "minion");
     add("chip", bucket(geo.minionH), geo.minionH, "locked");
@@ -697,8 +708,9 @@ Object.assign(Game.prototype, {
     const k = alive ? Math.max(a, 0.35) : a;
     ctx.save();
     ctx.lineWidth = 1;
-    ctx.strokeStyle = PALETTE.rgba("accent", 0.12);
+    ctx.strokeStyle = PALETTE.rgba("accent", RAIL_STROKE_ALPHA);
     ctx.globalAlpha = k;
+    this.debug.railStrokeAlpha = RAIL_STROKE_ALPHA * k;
     ctx.setLineDash([8, 12]);
     ctx.lineDashOffset = this.reduceMotion ? 0 : -((this.starT * 40) % 20);
     ctx.beginPath();
@@ -807,7 +819,13 @@ Object.assign(Game.prototype, {
     const h = minion ? geo.minionH : geo.h;
     this.measurePlateText(ctx, en, en.text, font, h);
     const state = this.enemyState(en);
-    const w = en.plateW;
+    // MEASURE (D4): a locked hard miss shows the typed glyph struck through inside the plate for TYPIST_PAIR_MS (the drawn
+    // plate widens by that glyph; en.plateW, targeting and leaks are untouched); leadPulseAt bumps the lead glyph once.
+    const now = nowMs();
+    const typoCh = (typeof TYPIST_PAIR_MS === "number" && en.typoCh && now - (en.typoAt || 0) < TYPIST_PAIR_MS) ? en.typoCh : null;
+    const pulseK = (typeof TYPIST_PULSE_MS === "number" && en.leadPulseAt) ? clamp(1 - (now - en.leadPulseAt) / TYPIST_PULSE_MS, 0, 1) : 0;
+    let w = en.plateW;
+    if (typoCh) { ctx.font = font; w += ctx.measureText(typoCh).width; }
     const rm = !!this.reduceMotion;
     const shape = en.text.length === 1 ? "chip" : "pill";
 
@@ -844,7 +862,11 @@ Object.assign(Game.prototype, {
       remColor: locked ? PALETTE.rgba("lime", 0.92) : PALETTE.rgba("text", 0.92),
       leadColor: locked ? null : PALETTE.rgba("lime", 1),
       caret: locked,
-      caretAlpha: this.caretAlpha()
+      caretAlpha: this.caretAlpha(),
+      typo: typoCh,
+      leadUnderline: !locked && typeof TYPIST_PAIR_MS === "number",   // D4 colour-blind cue, on once MEASURE has landed
+      leadUnderlinePx: (rm && pulseK > 0) ? 4 : 2,
+      leadPulse: (!locked && !rm) ? pulseK : 0
     });
     ctx.restore();
     this.lastPlateDrawn = en;
@@ -857,7 +879,11 @@ Object.assign(Game.prototype, {
     const h = CAPSULE_H;
     this.measurePlateText(ctx, p, p.label, font, h);
     p.labelW = p.textW;
-    const w = p.plateW;
+    const now = nowMs();
+    const typoCh = (typeof TYPIST_PAIR_MS === "number" && p.typoCh && now - (p.typoAt || 0) < TYPIST_PAIR_MS) ? p.typoCh : null;
+    const pulseK = (typeof TYPIST_PULSE_MS === "number" && p.leadPulseAt) ? clamp(1 - (now - p.leadPulseAt) / TYPIST_PULSE_MS, 0, 1) : 0;
+    let w = p.plateW;
+    if (typoCh) { ctx.font = font; w += ctx.measureText(typoCh).width; }   // the plate grows symmetrically; the label centre stays
     const rm = !!this.reduceMotion;
     const accentName = (typeof POWER_ACCENT === "object" && POWER_ACCENT[p.type]) || "violet";
     const accent = PALETTE.has(accentName) ? accentName : "violet";
@@ -901,7 +927,7 @@ Object.assign(Game.prototype, {
     ctx.restore();
 
     // label, centred in the cell right of the divider
-    const lx = p.x - w / 2 + CAPSULE_DIVIDER_X + 4 + p.textW / 2;
+    const lx = p.x - p.plateW / 2 + CAPSULE_DIVIDER_X + 4 + p.textW / 2;
     const done = p.label.slice(0, p.progress);
     const remaining = p.label.slice(p.progress);
     this.drawSplitText(ctx, done, remaining, lx, p.y, {
@@ -910,7 +936,11 @@ Object.assign(Game.prototype, {
       remColor: p.locked ? PALETTE.rgba("lime", 0.92) : PALETTE.rgba("text", 0.92),
       leadColor: p.locked ? null : PALETTE.rgba("lime", 1),
       caret: !!p.locked,
-      caretAlpha: this.caretAlpha()
+      caretAlpha: this.caretAlpha(),
+      typo: typoCh,
+      leadUnderline: !p.locked && typeof TYPIST_PAIR_MS === "number",
+      leadUnderlinePx: (rm && pulseK > 0) ? 4 : 2,
+      leadPulse: (!p.locked && !rm) ? pulseK : 0
     });
     ctx.restore();
   },
@@ -931,7 +961,9 @@ Object.assign(Game.prototype, {
   // ------------------------- Dying plates (lifecycle ceremony, L12) -------------------------
   // Records a plate's last frame so it can leave with a ceremony after the entity is compacted away:
   // kill: white impact plate 1.25 -> 1 over 90 ms, then a .2 s fade; slam (contact leak): danger plate 90 ms with
-  // the text struck through, then the fade; detonate: fade only; collect (capsule): scale 1 -> 1.3 + fade over .18 s.
+  // the text struck through, then the fade; detonate: fade only; collect (capsule): scale 1 -> 1.3 + fade over .18 s;
+  // escape (PACE Z5, a timed-out wave): plate and word warp back out to the right and fade over .6 s (fade in place
+  // under reduced motion).
   notePlateDeath(en, mode = "kill", at = null) {
     if (!en) return null;
     const list = this.dyingPlates || (this.dyingPlates = []);
@@ -952,7 +984,7 @@ Object.assign(Game.prototype, {
       progress: en.progress | 0,
       font: capsule ? FONT.target(18, 600) : (en.kind === "bossMinion" ? this.plateGeometry().minionFont : this.plateGeometry().font),
       t: 0,
-      life: mode === "collect" ? 0.18 : (mode === "detonate" ? DYING_FADE_S : IMPACT_FRAME_S + DYING_FADE_S)
+      life: mode === "collect" ? 0.18 : mode === "detonate" ? DYING_FADE_S : mode === "escape" ? ESCAPE_PLATE_S : IMPACT_FRAME_S + DYING_FADE_S
     };
     list.push(rec);
     return rec;
@@ -979,6 +1011,19 @@ Object.assign(Game.prototype, {
         ctx.globalAlpha *= alpha;
         if (scale !== 1) { ctx.translate(d.x, d.y); ctx.scale(scale, scale); ctx.translate(-d.x, -d.y); }
         this.drawGlyphPlate(ctx, d.x, d.y, d.w, d.h, { state: d.kind === "bossMinion" ? "minion" : "idle", shape: d.shape });
+      } else if (d.mode === "escape") {
+        const k = clamp(d.t / d.life, 0, 1);
+        const dx = rm ? 0 : ESCAPE_PLATE_DX * k * k;
+        scale = rm ? 1 : 1 + 0.3 * k;                       // horizontal stretch, the warp-in streak in reverse
+        ctx.globalAlpha *= 1 - k;
+        d.drawX = d.x + dx;
+        if (scale !== 1) { ctx.translate(d.drawX, d.y); ctx.scale(scale, 1); ctx.translate(-d.drawX, -d.y); }
+        this.drawGlyphPlate(ctx, d.drawX, d.y, d.w, d.h, { state: "idle", shape: d.shape });
+        ctx.font = d.font;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = PALETTE.rgba("text", 0.7);
+        ctx.fillText(d.text, d.drawX, d.y);
       } else if (d.t < IMPACT_FRAME_S) {
         // impact frame: a solid plate (white for a kill, danger for a contact slam), 1.25 -> 1 over 90 ms
         const k = clamp(d.t / IMPACT_FRAME_S, 0, 1);
@@ -1144,7 +1189,8 @@ Object.assign(Game.prototype, {
   },
 
   // L6: boss art under the plates so minions never vanish behind it. Nothing else is drawn inside the art box but
-  // the hit flash (additive copy at alpha flash * .5). Publishes boss.x/y (content centre) and boss.contentRect.
+  // the hit flash (additive copy at alpha flash * .5) and, while a surge charges, the Counter-Signal glow (ARCADE D10,
+  // same additive composite set). Publishes boss.x/y (content centre) and boss.contentRect.
   drawBossArt(ctx, boss) {
     const p = this.bossPlacement(boss);
     boss.contentRect = p.contentRect;
@@ -1155,10 +1201,11 @@ Object.assign(Game.prototype, {
     ctx.save();
     if (p.alpha < 1) ctx.globalAlpha *= p.alpha;
     ctx.drawImage(p.sp.img, r.x, r.y, r.w, r.h);
-    if (boss.flash > 0) {
-      ctx.globalCompositeOperation = "lighter";
-      ctx.globalAlpha = p.alpha * clamp(boss.flash * 0.5, 0, 0.5);
-      ctx.drawImage(p.sp.img, r.x, r.y, r.w, r.h);
+    const glow = !!boss.surge && typeof this.drawCounterSignalGlow === "function";
+    if (boss.flash > 0 || glow) {
+      ctx.globalCompositeOperation = "lighter";                          // one composite set for glow + hit flash
+      if (glow) this.drawCounterSignalGlow(ctx, boss, p);
+      if (boss.flash > 0) { ctx.globalAlpha = p.alpha * clamp(boss.flash * 0.5, 0, 0.5); ctx.drawImage(p.sp.img, r.x, r.y, r.w, r.h); }
     }
     ctx.restore();
   },
@@ -1190,6 +1237,18 @@ Object.assign(Game.prototype, {
       ctx.stroke();
       ctx.globalAlpha = ga;
     }
+    // ARCADE D10: the word's frame (the slab outline) pulses danger red at 2 Hz while a surge charges (.85 steady
+    // under reduced motion).
+    if (boss.surge) {
+      const ga = ctx.globalAlpha;
+      ctx.globalAlpha = ga * (rm ? 0.85 : 0.55 + 0.40 * (0.5 + 0.5 * Math.sin(Math.PI * 4 * (boss.surge.t || 0))));
+      ctx.strokeStyle = PALETTE.rgba("danger", 1);
+      ctx.lineWidth = 3;
+      roundRect(ctx, s.x - 1.5, s.y - 1.5, s.w + 3, s.h + 3, SLAB.r + 1.5);
+      ctx.stroke();
+      ctx.globalAlpha = ga;
+      this._csBorderDraws = (this._csBorderDraws | 0) + 1;
+    }
 
     // left cell: name (Orbitron 13, tracked .2em, fit 184) + SEG k/N + PHASE p/n
     const lx = s.x + SLAB.pad;
@@ -1211,15 +1270,19 @@ Object.assign(Game.prototype, {
     const seg = boss.segment || "";
     const done = seg.slice(0, boss.progress);
     const rem = seg.slice(boss.progress);
+    const cs = typeof this.counterSignalSlabText === "function" ? this.counterSignalSlabText(boss, done, rem) : null;   // ARCADE scramble
+    const typoCh = (typeof TYPIST_PAIR_MS === "number" && boss.typoCh && nowMs() - (boss.typoAt || 0) < TYPIST_PAIR_MS) ? boss.typoCh : null;
     ctx.font = FONT.target(40, 700);
-    fitText(ctx, seg, SLAB.centreW - 24, 26, 2, (px) => FONT.target(px, 700));
+    const tw = typoCh ? ctx.measureText(typoCh).width : 0;
+    fitText(ctx, seg, SLAB.centreW - 24 - tw, 26, 2, (px) => FONT.target(px, 700));
     const segFont = ctx.font;
-    this.drawSplitText(ctx, done, rem, ccx, s.y + 38, {
+    this.drawSplitText(ctx, done, cs ? cs.rem : rem, ccx, s.y + 38, {
       font: segFont,
       doneColor: PALETTE.rgba("text", 0.45),
-      remColor: PALETTE.rgba("lime", 0.92),
+      remColor: PALETTE.rgba(cs && cs.remColor ? cs.remColor : "lime", 0.92),
       caret: true,
-      caretAlpha: this.caretAlpha()
+      caretAlpha: this.caretAlpha(),
+      typo: typoCh   // MEASURE (D4): the pair sits in the slab's centre cell
     });
     const next = boss.nextSegment;
     ctx.textAlign = "center";
@@ -1301,6 +1364,7 @@ Object.assign(Game.prototype, {
     const boss = (this.inBoss && this.boss) ? this.boss : null;
     if (boss) this.drawBossArt(ctx, boss);                     // L6
     else if (this.bossClear && this.bossDissolve) this.drawBossDissolve(ctx);
+    if (typeof this.drawExplosionSmoke === "function") this.drawExplosionSmoke(ctx);   // L6b (D12): smoke under beams and plates
     this.drawBullets(ctx);                                     // L7
     for (const p of this.powerups) this.drawPowerup(ctx, p);   // L8
     this.drawEnemies(ctx);                                     // L9 (far to near, locked last)
@@ -1308,7 +1372,7 @@ Object.assign(Game.prototype, {
     if (boss) this.drawBossSlab(ctx, boss);                    // L10
     if (boss && typeof this.drawBossHazardMeter === "function") this.drawBossHazardMeter(ctx, this.bossHazardRect()); // L10 surge cell
     this.drawShip(ctx);                                        // L11
-    this.drawExplosionSprites(ctx);                            // L12 (smoke frames, dying plates, then the additive batch opens)
+    this.drawExplosionSprites(ctx);                            // L12 (dying plates, then the additive batch opens with the flash frames; smoke is L6b)
     this.drawParticles(ctx);
     // dying plates are drawn by drawExplosionSprites before its additive batch (review R13); rings / bolts / debris /
     // muzzles by drawBullets (L7) and drawParticles (L12) in 75-fx-draw.js
@@ -1319,6 +1383,9 @@ Object.assign(Game.prototype, {
     // L15: banners / callouts / letterbox / sector card, unshaken (45-feedback.js)
     if (typeof this.drawBanner === "function") this.drawBanner(ctx);
     if (typeof this.redrawActiveTarget === "function") this.redrawActiveTarget(ctx); // L16 (D1): locked plate over a centre banner; uses this.shakeNow / this.bannerRect
+    const ro = this._evtOverlay || (this._evtOverlay = { ctx: null });
+    ro.ctx = ctx;
+    this.hook("renderOverlay", ro);   // MEASURE: the unlocked-miss glyph popping off the gun (unshaken; listeners apply shakeNow)
 
     this.drawVignette(ctx);                                    // L17
   },

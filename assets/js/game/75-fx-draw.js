@@ -17,6 +17,9 @@ const BULLET_COLORS = (() => {
   return out;
 })();
 const BEAM_WHITE = PALETTE.rgba("text", 0.60);
+// ARCADE D11 Overdrive effects: hot beams 1.6x wide with a white core and a 2 px white pass (the weapon tint stays in
+// the halo), plume x2 long / x1.2 tall, exhaust x2.
+const FX_HOT = Object.freeze({ beamWidthMul: 1.6, whitePassW: 2, plumeMul: 2, plumeHMul: 1.2, exhaustMul: 2 });
 const PARTICLE_ALPHA_STEPS = 8;
 const PARTICLE_COLORS = (() => {
   const out = {};
@@ -218,8 +221,10 @@ Object.assign(Game.prototype, {
     const recoil = clamp(p.recoil || 0, 0, 1);
     const base = typeof pl.base === "number" ? pl.base : 26;
     const live = base + (typeof pl.heat === "number" ? pl.heat : 30) * heat + (typeof pl.flicker === "number" ? pl.flicker : 6) * Math.sin(t * (typeof pl.flickerHz === "number" ? pl.flickerHz : 23));
-    const len = (m.anim > 0 ? live : (typeof pl.staticLen === "number" ? pl.staticLen : 36)) * (1 + (typeof pl.recoil === "number" ? pl.recoil : 0.6) * recoil);
-    const hh = 7 + 3 * heat;
+    let len = (m.anim > 0 ? live : (typeof pl.staticLen === "number" ? pl.staticLen : 36)) * (1 + (typeof pl.recoil === "number" ? pl.recoil : 0.6) * recoil);
+    let hh = 7 + 3 * heat;
+    if (this.overdriveOn === true) { len *= FX_HOT.plumeMul; hh *= FX_HOT.plumeHMul; }   // ARCADE D11: plume x2
+    this.debug.plumeLen = len;
     const sprites = this.getPlumeSprites();
 
     ctx.save();
@@ -241,6 +246,7 @@ Object.assign(Game.prototype, {
     ctx.globalAlpha = 1;
 
     if ((p.shield || 0) > 0 || (p.shieldFlash || 0) > 0) this.drawShield(ctx, pose);
+    if (typeof this.drawOverdriveArc === "function") this.drawOverdriveArc(ctx, pose);   // ARCADE D11 (inside the additive batch)
   },
 
   // Flat-top hexagon r 66 (dashed 8/6, 30 deg/s, violet .55 over a .06 fill), a timer arc sweeping shield/cap,
@@ -322,8 +328,8 @@ Object.assign(Game.prototype, {
         const col = BULLET_COLORS[b.color] || BULLET_COLORS.cyan;
         ctx.globalAlpha = a;
         if (pass === 0) { ctx.strokeStyle = col.wide; ctx.lineWidth = b.width * 3; }
-        else if (pass === 1) { ctx.strokeStyle = col.core; ctx.lineWidth = b.width; }
-        else { ctx.strokeStyle = BEAM_WHITE; ctx.lineWidth = 1; }
+        else if (pass === 1) { ctx.strokeStyle = b.hot ? BULLET_COLORS.text.core : col.core; ctx.lineWidth = b.width; }   // D11: white-hot core
+        else { ctx.strokeStyle = BEAM_WHITE; ctx.lineWidth = b.hot ? FX_HOT.whitePassW : 1; }
         ctx.beginPath();
         ctx.moveTo(lerp(b.x, b.tx, tail), lerp(b.y, b.ty, tail));
         ctx.lineTo(lerp(b.x, b.tx, head), lerp(b.y, b.ty, head));
@@ -438,14 +444,17 @@ Object.assign(Game.prototype, {
     this._fxAdditive = false;
   },
 
+  // L6b (ARCADE D12, render() calls it after the boss art): smoke frames, source-over, under the beams and the plates
+  // so a kill's smoke never covers a neighbouring plate's text.
+  drawExplosionSmoke(ctx) {
+    for (const ex of this.explosions) if (!ex.done && !ex.isFlash()) ex.drawFrame(ctx);
+  },
+
+  // L12: dying plates (source-over) and the flash frames (additive, on top). The smoke frames moved to L6b (D12).
   drawExplosionSprites(ctx) {
     const list = this.explosions;
     let flashes = 0;
-    for (const ex of list) {
-      if (ex.done) continue;
-      if (ex.isFlash()) { flashes++; continue; }
-      ex.drawFrame(ctx);
-    }
+    for (const ex of list) if (!ex.done && ex.isFlash()) flashes++;
     if (typeof this.drawDyingPlates === "function") this.drawDyingPlates(ctx);   // source-over, before the batch (review R13)
     if (!this.needsAdditiveBatch(flashes)) return;
     this.openAdditive(ctx);
@@ -740,9 +749,10 @@ Object.assign(Game.prototype, {
       ctx.globalAlpha = u < 0.7 ? 1 : (1 - u) / 0.3;
       ctx.lineWidth = 3;
       ctx.strokeStyle = PALETTE.rgba("bg0", 0.85);
-      ctx.strokeText(g.ch, ref.x, y);
+      const gl = typeof lexiconGlyphFor === "function" ? lexiconGlyphFor(g.ch) : g.ch;   // WORDS: the gap shows as "·"
+      ctx.strokeText(gl, ref.x, y);
       ctx.fillStyle = PALETTE.rgba("danger", 1);
-      ctx.fillText(g.ch, ref.x, y);
+      ctx.fillText(gl, ref.x, y);
     }
     ctx.globalAlpha = 1;
     ctx.textAlign = "start";

@@ -6,6 +6,9 @@
 #   * <meta name="asset-version" content="...">            (when present)
 #   * every ?v=<token> on <link>/<script>/<img> tags        in index.html, info.html, support.html,
 #                                                          privacy-policy.html, privacy.html (when present)
+#   * every ?v=<token> on <a href> links and the privacy.html meta-refresh url in those pages: the host serves *.html
+#     with max-age=15552000 and ignores the query, so the in-site links carry the shell token to reach a browser that
+#     cached an older page (release 20261024a, findings CT-02 / R2). Links without a ?v= are left alone.
 #   * const ASSET_VERSION = "...";                         in game.js
 # and leaves the withAssetVersion literal line (`return `${path}${sep}v=${ASSET_VERSION}`;`) untouched,
 # because native/sync-web.sh patches that exact line by sed.
@@ -121,7 +124,11 @@ function rewriteHtml(file) {
     }
     return tag;
   };
-  out = out.replace(/<(?:link|script|img)\b[^>]*>/gi, bump); // img: the ship cards carry the ART token (review R39)
+  out = out.replace(/<(?:link|script|img|a)\b[^>]*>/gi, bump); // img: the ship cards carry the ART token (review R39); a: in-site page links
+  out = out.replace(/(<meta\b[^>]*\bhttp-equiv=["']refresh["'][^>]*\bcontent=["'][^"']*\burl=[^"'?]*\?(?:[^"']*&)?v=)([^"'&]*)/gi, (m, a, old) => {
+    if (old !== TOKEN) replaced++;
+    return `${a}${TOKEN}`;
+  });
   let metaHit = false;
   out = out.replace(metaRe, (_, a, old, c) => { metaHit = true; if (old !== TOKEN) replaced++; return `${a}${TOKEN}${c}`; });
   if (!metaHit) out = out.replace(metaReAlt, (_, a, old, c) => { metaHit = true; if (old !== TOKEN) replaced++; return `${a}${TOKEN}${c}`; });

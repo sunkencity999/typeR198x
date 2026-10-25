@@ -4,6 +4,7 @@
 // `playing` after clicking Start, so the audio owner can see why `unlock()` stalls (A9 acceptance:
 // unlock awaits only the laser/bigexplosion buffers, never music).
 import { chromium } from "playwright";
+import { harnessFlags } from "./_lib.mjs";
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
@@ -30,6 +31,7 @@ const port = server.address().port;
 
 const browser = await chromium.launch({ channel: "chrome", headless: true, args: ["--autoplay-policy=no-user-gesture-required", "--mute-audio"] });
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, userAgent: UA });
+await harnessFlags(ctx);   // ONBOARD: a fresh-save Start skips the Flight Check (harness default)
 await ctx.addInitScript(() => {
   // Trace every HTMLMediaElement.play()/pause() so a stalled unlock() can be attributed.
   window.__mediaLog = [];

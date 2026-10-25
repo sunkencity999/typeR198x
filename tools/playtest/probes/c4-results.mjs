@@ -1,10 +1,49 @@
 // C4 acceptance probe: results cards on Level Complete / Game Over / Victory, retry copy, ending progress, reduced motion.
 // Usage: cd tools/playtest && node probes/c4-results.mjs
-import { openProbe, sleep } from "./_lib.mjs";
+import { openProbe, sleep, harnessFlags } from "./_lib.mjs";
 import { chromium } from "playwright";
 
 const P = await openProbe("c4");
 const { page } = P;
+
+// J1 (release 20261024a): the results actions stay inside the screen's visible rect on a 720 px window, a 1536 x 730
+// browser window (1920 x 1080 at 125 %) and a phone in portrait; the cards grew with the rank line, ACC caption and
+// WEAK SIGNAL strip, and the .screen scroller opens at scrollTop 0.
+const FOLD_SIZES = [{ width: 1280, height: 720 }, { width: 1536, height: 730 }, { width: 390, height: 844 }];
+async function foldCheck(label, screenId, btnIds, noteIds = []) {
+  const res = [];
+  for (const vp of FOLD_SIZES) {
+    await page.setViewportSize(vp);
+    await sleep(450);
+    res.push(await P.g(({ screenId, btnIds, noteIds }) => {
+      const scr = document.getElementById(screenId), sr = scr.getBoundingClientRect();
+      const top = Math.max(sr.top, 0), bottom = Math.min(sr.bottom, innerHeight);
+      const btns = btnIds.map((id) => {
+        const b = document.getElementById(id).getBoundingClientRect();
+        return { id, top: Math.round(b.top), bottom: Math.round(b.bottom), inView: b.height > 0 && b.top >= top - 0.5 && b.bottom <= bottom + 0.5 };
+      });
+      // release review J2: a note (the checkpoint cost of Retry / Retry boss) is readable at the end of the scroll, not
+      // under the sticky actions: three points across it hit the note itself.
+      const st0 = scr.scrollTop;
+      scr.scrollTop = scr.scrollHeight;
+      const notes = noteIds.map((id) => {
+        const el = document.getElementById(id);
+        if (!el || el.classList.contains("hidden") || !el.textContent.trim()) return { id, shown: false, ok: true };
+        const b = el.getBoundingClientRect();
+        const hits = [0.2, 0.5, 0.8].map((fx) => document.elementFromPoint(b.left + b.width * fx, b.top + b.height / 2)).map((e) => (e === el ? "self" : e ? (e.id || e.className || e.tagName) : "none"));
+        return { id, shown: true, hits, ok: hits.every((h) => h === "self") };
+      });
+      scr.scrollTop = st0;
+      return { vp: `${innerWidth}x${innerHeight}`, scrollTop: scr.scrollTop, overflow: scr.scrollHeight - scr.clientHeight, top: Math.round(top), bottom: Math.round(bottom), btns, notes };
+    }, { screenId, btnIds, noteIds }));
+    await P.shot(`fold-${label.replace(/\s+/g, "-")}-${vp.width}x${vp.height}`);
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await sleep(300);
+  P.check(`${label}: the actions lie inside the screen's visible rect at 1280x720, 1536x730 and 390x844 (J1)`, res.every((r) => r.btns.every((b) => b.inView)), JSON.stringify(res));
+  if (noteIds.length) P.check(`${label}: ${noteIds.join(" / ")} shown and readable (not under the sticky actions) at the end of the scroll at 1280x720, 1536x730 and 390x844 (review J2)`,
+    res.every((r) => r.notes.every((n) => n.ok)) && res.some((r) => r.notes.some((n) => n.shown)), JSON.stringify(res.map((r) => ({ vp: r.vp, notes: r.notes }))));
+}
 
 await P.goto(null);
 await P.startRun("C4");
@@ -50,6 +89,7 @@ P.check("sub 'Next: Sector 2 — VECTOR OGRE · Max HP 300'", lc.sub === "Next: 
 P.check("values counted up (early sample below the final)", early !== lc.bonus, `early=${early} final=${lc.bonus}`);
 P.check("first clear shows SECTOR BEST badge", lc.newBest === true, JSON.stringify({ newBest: lc.newBest, cardTitle: lc.cardTitle, cardSub: lc.cardSub }));
 await P.shot("level-complete");
+await foldCheck("level complete", "screenLevelComplete", ["btnNextLevel", "btnBackToMenu1"]);
 
 // Game over on sector 2: retry copy and the checkpoint restore.
 await page.click("#btnNextLevel");
@@ -73,10 +113,26 @@ P.check("game over: 'Retry sector 2' and the checkpoint note with its score", go
 P.check("game over sub 'Sector 2 · wave k/3' or boss", /^Sector 2 · (wave [123]\/3|boss .+)$/.test(go.sub), go.sub);
 P.check("game over card: score tile = stats.score, rank letter, no bonus rows", go.scoreTile === Number(go.score).toLocaleString() && /^[SABCD]$/.test(go.rank) && go.bonusRows === 0, JSON.stringify({ scoreTile: go.scoreTile, score: go.score, rank: go.rank, title: go.title }));
 await P.shot("game-over");
+await foldCheck("game over", "screenGameOver", ["btnTryAgain", "btnBackToMenu2"], ["retryNote", "cadetNote"]);
+// J4 (release review): the card overflows at 844 x 390; scroll it to the end before Retry, so the next Game Over
+// below must open at the top again.
+await page.setViewportSize({ width: 844, height: 390 });
+await sleep(400);
+const j4a = await P.g(() => { const s = document.getElementById("screenGameOver"); s.scrollTop = s.scrollHeight; return { scrollTop: Math.round(s.scrollTop), overflow: s.scrollHeight - s.clientHeight }; });
 await page.click("#btnTryAgain");
 await page.waitForFunction(() => window.game.mode === "playing", null, { timeout: 10000 });
 const afterRetry = await P.g(() => ({ score: window.game.stats.score, cp: window.game.run.checkpoint.score, level: window.game.levelIndex }));
 P.check("Retry sector -> stats.score === run.checkpoint.score", afterRetry.score === go.cpScore && afterRetry.score === afterRetry.cp && afterRetry.level === 1, JSON.stringify(afterRetry));
+await P.g(() => window.game.onGameOver());
+await page.waitForFunction(() => window.game.mode === "gameOver", null, { timeout: 10000 }).catch(() => {});
+await sleep(300);
+const j4b = await P.g(() => { const s = document.getElementById("screenGameOver"), t = document.getElementById("gameOverTitle"); return { mode: window.game.mode, scrollTop: s.scrollTop, titleTop: Math.round(t.getBoundingClientRect().top) }; });
+P.check("844x390: a Game Over card scrolled to its end before Retry opens at scrollTop 0 on the next death, its title on screen (review J4)",
+  j4a.overflow > 20 && j4a.scrollTop > 20 && j4b.mode === "gameOver" && j4b.scrollTop === 0 && j4b.titleTop >= 0, JSON.stringify({ j4a, j4b }));
+await page.setViewportSize({ width: 1440, height: 900 });
+await sleep(300);
+await page.click("#btnTryAgain");
+await page.waitForFunction(() => window.game.mode === "playing", null, { timeout: 10000 });
 
 // Victory: dialogue first, progress text, Escape -> run results with Play again focused.
 await P.g(() => {
@@ -114,12 +170,14 @@ P.check("Escape -> #resultsRun visible, #btnNewRun visible and focused", v1.mode
 P.check("run card: LEGEND STATUS GRANTED, 'All ten sectors · NAME', rank + score", v1.title === "LEGEND STATUS GRANTED" && /^All ten sectors · /.test(v1.sub) && /^[SABCD]$/.test(v1.rank) && v1.scoreTile === Number(v1.score).toLocaleString(), JSON.stringify({ title: v1.title, sub: v1.sub, rank: v1.rank, scoreTile: v1.scoreTile }));
 P.check("credits shown, Next retired, window collapsed", v1.credits && v1.nextHidden && v1.collapsed, JSON.stringify({ credits: v1.credits, nextHidden: v1.nextHidden, collapsed: v1.collapsed }));
 await P.shot("victory-results");
+await foldCheck("victory", "screenVictory", ["btnNewRun", "btnBackToMenu3"]);
 P.check("no page errors through victory", P.errors.pageErrors.length === 0, JSON.stringify(P.errors.pageErrors));
 
 // Reduced motion: tile values are final on the first frame after the screen activates.
 {
   const browser = await chromium.launch({ channel: "chrome", headless: true, args: ["--autoplay-policy=no-user-gesture-required", "--mute-audio"] });
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1, reducedMotion: "reduce" });
+  await harnessFlags(ctx);   // ONBOARD: a fresh-save Start skips the Flight Check (harness default)
   const pg = await ctx.newPage();
   const errs = [];
   pg.on("pageerror", (e) => errs.push(String(e)));

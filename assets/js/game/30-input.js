@@ -85,6 +85,8 @@ Object.assign(Game.prototype, {
     if (e.key === "Escape") {
       e.preventDefault();
       if (e.repeat) return;
+      const ke = this.hook("keyEscape", { mode: this.mode, claimed: false });   // ONBOARD: skip the check; MODES: leave its card
+      if (ke.claimed) return;
       switch (this.mode) {
         case "playing":
         case "paused": this.togglePause(); break;
@@ -102,7 +104,7 @@ Object.assign(Game.prototype, {
     // 5b. review R26: for MODE_SETTLE_MS after Level Complete / Game Over / Victory appear, a trusted Enter or Space is
     //     consumed even on the focused primary (the second Enter of a finale skip must not start the next sector).
     if (e.isTrusted && (e.key === "Enter" || e.key === "NumpadEnter" || e.key === " ") &&
-        (this.mode === "levelComplete" || this.mode === "gameOver" || this.mode === "victory") &&
+        (this.mode === "levelComplete" || this.mode === "gameOver" || this.mode === "victory" || this.mode === "modeResults") &&
         nowMs() - (this._modeAt || 0) < MODE_SETTLE_MS) {
       e.preventDefault();
       return;
@@ -151,6 +153,10 @@ Object.assign(Game.prototype, {
     if (this.isReleaseKey(e)) {
       e.preventDefault();
       if (this.bossClear) { this.skipFinale("space"); return; }
+      if (e.key === " ") {
+        const sk = this.hook("spaceKey", { source: "key", key: " ", event: e, handled: false });   // WORDS: types the gap
+        if (sk.handled) return;
+      }
       if (this.lock && !this.inBoss) this.releaseLock("manual");
       return;
     }
@@ -272,6 +278,7 @@ Object.assign(Game.prototype, {
     if (!lock) return;
     const ref = lock.ref;
     this.lock = null;
+    this.hook("lockRelease", { reason, ref });   // ARCADE: the Overdrive fallback chain resets
     this.lockMisses = 0;
     if (ref) {
       ref.locked = false;
@@ -290,6 +297,7 @@ Object.assign(Game.prototype, {
   // ------------------------- Typing -------------------------
   // Order (CONTRACT §10): finale skip -> intro lockouts -> boss branch -> lock branch.
   handleTyped(ch) {
+    this.typedThisPage = true;   // the next-sector prefetch waits for it (05-boot.js tickBoot, CONTRACT 8.z Z11)
     if (this.bossClear) { this.skipFinale("key"); return; }
     if (this.mode !== "playing") return;
     if (this.inputLockedOut()) {
@@ -325,7 +333,7 @@ Object.assign(Game.prototype, {
         this.onCorrectKey(ref);
       } else {
         this.lockMisses = (this.lockMisses | 0) + 1;
-        this.onHardMiss(ref);
+        this.onHardMiss(ref, ch);
         if (this.lockMisses >= 3) this.releaseLock("lost");
       }
       return;
@@ -338,7 +346,7 @@ Object.assign(Game.prototype, {
       this.onCorrectKey(cand.ref);
       return;
     }
-    if (this.hasVisibleTargets()) this.onHardMiss(null);
+    if (this.hasVisibleTargets()) this.onHardMiss(null, ch);
     else this.onDryFire();
   },
 
@@ -353,6 +361,7 @@ Object.assign(Game.prototype, {
     this.sfx.zap(clamp(ref.progress / Math.max(1, len), 0, 1));
 
     const ch = ref.kind === "powerup" ? ref.label[ref.progress - 1] : ref.text[ref.progress - 1];
+    this.emitKeyCorrect(ref.kind === "powerup" ? "powerup" : "enemy", ref, ch, ref.progress - 1, len, -1);
     if (typeof this.onKeyFx === "function") this.onKeyFx(ref, ch); // camera track: recoil, heat, flinch, glyph eject
     if (ref.kind !== "powerup") {
       if (this.power.pierce > 0) this.applyPierce(ref, ch);
@@ -382,9 +391,25 @@ Object.assign(Game.prototype, {
     this.bumpMultiplier();
   },
 
+  // keyCorrect (scaffold): one reused payload for every counted correct key (enemy, powerup, minion, boss character).
+  emitKeyCorrect(kind, ref, ch, index, len, seg) {
+    const e = this._evtKey || (this._evtKey = { kind: "", ref: null, ch: "", index: 0, len: 0, seg: -1, first: false, last: false, t: 0 });
+    e.kind = kind; e.ref = ref; e.ch = ch; e.index = index; e.len = len; e.seg = seg;
+    e.first = index === 0; e.last = index >= len - 1; e.t = nowMs();
+    this.hook("keyCorrect", e);
+    return e;
+  },
+
   // Hard miss: wrong key while locked, or nothing matches while targets are visible. Counted, combo breaks,
   // never a score penalty (F033).
-  onHardMiss(ref) {
+  onHardMiss(ref, typed = null) {
+    // keyMiss (scaffold): MEASURE fills `expected` for an unlocked miss (nearest plate) and claims the typo cue it draws.
+    const km = this._evtMiss || (this._evtMiss = { ref: null, typed: null, expected: null, locked: false, boss: false, t: 0, claimed: false });
+    const inBoss = !!(this.inBoss && this.boss);
+    km.ref = ref || null; km.typed = typed; km.expected = ref ? ref.nextChar() : (inBoss ? this.boss.nextChar : null);
+    km.locked = !!ref; km.boss = inBoss; km.t = nowMs(); km.claimed = false;
+    this.hook("keyMiss", km);
+    if (km.claimed) this._typoClaimed = true;   // 80-fx.js onTypoFx then skips its rising glyph
     this.stats.total++;
     this.stats.misses++;
     this.levelStats.total++;
@@ -420,7 +445,8 @@ Object.assign(Game.prototype, {
 
   onMultTier(newMult, oldMult) {
     this.sfx.comboTier(newMult);
-    this.showBanner({ kind: "callout", title: `x${newMult} MULTIPLIER`, color: this.tierColor(newMult) });
+    const ct = this.hook("comboTierWillShow", { newMult, oldMult, cancel: false });   // MODES: no callout in a drill
+    if (!ct.cancel) this.showBanner({ kind: "callout", title: `x${newMult} MULTIPLIER`, color: this.tierColor(newMult) });
   },
 
   onComboBreak(lost) {
@@ -442,13 +468,23 @@ Object.assign(Game.prototype, {
   // Callers pass the multiplied amount for kills/pickups/boss chars and the flat amount for bonuses.
   addScore(amount, opts = {}) {
     if (this.mode === "gameOver") return 0;   // a kill resolving in the death tick must not outrun the committed score
-    const n = Math.round(Math.max(0, amount) * (this.diff().score || 1));
+    // scoreWillAdd (scaffold): ONBOARD / MODES cancel, ARCADE multiplies `mul` (Overdrive). Reused payload, except that a
+    // listener paying a nested addScore gets a fresh one, so the outer call still reads its own mul / cancel.
+    const nested = (this._scoreDepth | 0) > 0;
+    const se = nested ? { amount: 0, opts: null, kind: "", mul: 1, cancel: false }
+      : (this._evtScore || (this._evtScore = { amount: 0, opts: null, kind: "", mul: 1, cancel: false }));
+    se.amount = amount; se.opts = opts; se.kind = (opts && opts.kind) || ""; se.mul = 1; se.cancel = false;
+    this._scoreDepth = (this._scoreDepth | 0) + 1;
+    try { this.hook("scoreWillAdd", se); } finally { this._scoreDepth--; }
+    se.opts = null;
+    if (se.cancel) return 0;
+    const n = Math.round(Math.max(0, amount) * (this.diff().score || 1) * (se.mul > 0 ? se.mul : 1));
     if (n <= 0) return 0;
     this.stats.score += n;
     this.levelStats.levelScore = (this.levelStats.levelScore | 0) + n;
     if (Number.isFinite(opts.x) && Number.isFinite(opts.y)) {
       const text = opts.label ? `${opts.label} +${formatInt(n)}` : `+${formatInt(n)}`;
-      const color = opts.kind === "bonus" ? "amber" : this.tierColor(this.stats.mult | 0);
+      const color = opts.kind === "bonus" ? "amber" : (typeof this.scoreFloaterColor === "function" ? this.scoreFloaterColor() : this.tierColor(this.stats.mult | 0));
       this.addFloater(opts.x, opts.y, text, color, opts.kind === "bonus" ? 20 : 16);
     }
     return n;

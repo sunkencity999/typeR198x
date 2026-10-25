@@ -86,8 +86,45 @@ P.check("@supports fallback for missing backdrop-filter exists", /@supports not 
 
 // Secondary pages link back and the footer points at the privacy policy.
 const foot = await g(() => Array.from(document.querySelectorAll(".footer a")).map((a) => a.getAttribute("href")));
-P.check("footer links: privacy-policy + support", foot.includes("./privacy-policy.html") && foot.includes("./support.html"), JSON.stringify(foot));
+const AV = head.assetVersion;
+P.check("footer links: privacy-policy + support, each carrying ?v=<asset-version> (release 20261024a, CT-02: the host caches *.html 180 days)",
+  foot.includes(`./privacy-policy.html?v=${AV}`) && foot.includes(`./support.html?v=${AV}`), JSON.stringify({ foot, AV }));
 const pp = await status("./privacy-policy.html");
 P.check("privacy-policy.html returns 200", pp.status === 200, JSON.stringify(pp));
+// Every in-site page link (and the privacy.html meta refresh) in the five pages carries the shell token (R2 / CT-02;
+// tools/bump-version.sh keeps them in step).
+const pageLinks = {};
+for (const f of ["index.html", "info.html", "support.html", "privacy-policy.html", "privacy.html"]) {
+  const src = fs.readFileSync(path.join(ROOT, f), "utf8");
+  pageLinks[f] = [...src.matchAll(/(?:<a\b[^>]*\bhref|\burl)=["']?(\.\/[a-z-]+\.html[^"' >]*)/gi)].map((m) => m[1]);
+}
+const untokened = Object.entries(pageLinks).flatMap(([f, ls]) => ls.filter((u) => !u.endsWith(`?v=${AV}`)).map((u) => `${f}: ${u}`));
+P.check("in-site page links in the five pages end in ?v=<asset-version> (back links, Play now, privacy.html refresh)",
+  Object.values(pageLinks).flat().length >= 12 && untokened.length === 0, JSON.stringify({ untokened, counts: Object.fromEntries(Object.entries(pageLinks).map(([f, l]) => [f, l.length])) }));
+
+// RET-1: the shell revalidates the long-lived documents for a returning browser (a save exists), and a first visit
+// fetches none of them. Z11: not before the first keystroke (it would count in the boot budget): at idle after the
+// first keydown / input, or 30 s after load for a visit that never types.
+const docFetches = async ({ fallback = false } = {}) => {
+  const seen = [];
+  const on = (r) => { if (r.resourceType() === "fetch" && /\.html(\?|$)/.test(r.url())) seen.push(new URL(r.url()).pathname); };
+  page.on("request", on);
+  await page.reload({ waitUntil: "load" });
+  await page.waitForTimeout(fallback ? 26000 : 4000);   // the guard used to fetch 2 s after load, then at idle
+  const before = seen.slice().sort();
+  if (!fallback) await page.keyboard.press("Shift");   // the first keystroke: a modifier, which the menu ignores
+  await page.waitForTimeout(fallback ? 8000 : 4000);    // keystroke -> idle (at most 3 s); fallback at 30 s -> idle
+  page.off("request", on);
+  return { before, after: seen.sort() };
+};
+const PAGES = JSON.stringify(["/index.html", "/info.html", "/privacy-policy.html", "/support.html"]);
+const fresh = await docFetches();
+await P.goto("legacy-midwave");
+const returning = await docFetches();
+P.check("returning browser (save present): /index.html, privacy-policy.html, support.html, info.html revalidated once, none in the 4 s after load before the first keystroke and all four after it (Z11); a fresh save fetches none (RET-1)",
+  fresh.after.length === 0 && returning.before.length === 0 && JSON.stringify(returning.after) === PAGES, JSON.stringify({ fresh, returning }));
+const idle = await docFetches({ fallback: true });
+P.check("returning browser that never types: none in the 26 s after load, all four by 34 s (the 30 s fallback, then idle; Z11)",
+  idle.before.length === 0 && JSON.stringify(idle.after) === PAGES, JSON.stringify(idle));
 
 await P.finish();

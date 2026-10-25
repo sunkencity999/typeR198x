@@ -147,6 +147,7 @@ Object.assign(Game.prototype, {
     let eyebrow = opts.eyebrow != null ? String(opts.eyebrow) : "";
     let title = String(opts.title ?? "");
     let sub = opts.sub != null ? String(opts.sub) : "";
+    let cardLines = null;
     if (kind === "sector") {
       const cfg = (typeof LEVELS !== "undefined" && LEVELS[this.levelIndex]) || null;
       const theme = this.currentTheme;
@@ -155,6 +156,15 @@ Object.assign(Game.prototype, {
         title = `SECTOR ${String(cfg.level).padStart(2, "0")}`;
         sub = `BOSS: ${cfg.bossName}`;
       }
+      // sectorCardWillShow (scaffold): PACE (hull, Cadet) and WORDS (THREAT INTEL) push { key, text, color, say, order };
+      // MODES may rewrite eyebrow / title / sub. Lines sort by order (stable), max 3; their say joins the announcement.
+      const card = this.hook("sectorCardWillShow", { level: cfg ? cfg.level : 0, lines: [], eyebrow, title, sub });
+      eyebrow = String(card.eyebrow ?? eyebrow);
+      title = String(card.title ?? title);
+      sub = String(card.sub ?? sub);
+      const lines = Array.isArray(card.lines) ? card.lines.filter((l) => l && l.text) : [];
+      cardLines = lines.length ? lines.slice().sort((a, b) => (a.order | 0) - (b.order | 0)).slice(0, 3) : null;
+      this._sectorCardSay = cardLines ? cardLines.map((l) => l.say).filter(Boolean).join(" ") : "";
     }
     if (kind === "wave" && !eyebrow && title) { eyebrow = title; title = ""; }
     const b = {
@@ -174,6 +184,7 @@ Object.assign(Game.prototype, {
       typeTitleCps: Number.isFinite(opts.typeTitleCps) ? opts.typeTitleCps : (preset.typeTitleCps || 0),
       count: opts.count && Number.isFinite(opts.count.to) ? { from: opts.count.from || 0, dur: opts.count.dur || 1.2, to: opts.count.to } : null,
       rect: null,
+      lines: cardLines,
       titleScale: 1,
       eyebrowAlpha: 0,
       slammed: false,
@@ -393,6 +404,28 @@ Object.assign(Game.prototype, {
         ctx.strokeText(subText, x0, subY);
         ctx.fillStyle = feedbackColor(preset.subColor || "cyan", 0.92);
         ctx.fillText(subText, x0, subY);
+      }
+    }
+
+    // Sector-card lines (PACE / WORDS): 24 px pills under the band, fading in with the sub, each text measured once.
+    if (b.lines && b.lines.length) {
+      const la = clamp((t - BANNER_SUB_AT) / 0.2, 0, 1) * fade;
+      if (la > 0) {
+        ctx.font = feedbackFont(16, 700);
+        for (let i = 0; i < b.lines.length; i++) {
+          const ln = b.lines[i];
+          const ly = rect.y + rect.h + 22 + i * 28;
+          if (!Number.isFinite(ln._w)) ln._w = ctx.measureText(ln.text).width;
+          ctx.globalAlpha = la;
+          ctx.fillStyle = feedbackColor("bg0", 0.92);
+          roundRect(ctx, x0 - ln._w / 2 - 12, ly - 12, ln._w + 24, 24, 12);
+          ctx.fill();
+          ctx.strokeStyle = feedbackColor(ln.color || "text", 0.45);
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          ctx.fillStyle = feedbackColor(ln.color || "text", 0.92);
+          ctx.fillText(ln.text, x0, ly);
+        }
       }
     }
 

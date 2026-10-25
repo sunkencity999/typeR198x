@@ -14,22 +14,27 @@ await waitFor(P, () => !window.game.levelIntro, 6000);
 let polledMax = 0;
 const typedKeys = { n: 0 };
 const tStart = Date.now();
-const typed = await typeFor(P, 40, { wpm: 60, accuracy: 0.995, onTick: async (st) => { polledMax = Math.max(polledMax, st.combo || 0); } });
+// PACE (D2) shortens sector 1 (S1 boss at ~30-45 s): stop typing at the approach so the window stays inside the waves.
+const typed = await typeFor(P, 40, { wpm: 60, accuracy: 0.995, onTick: async (st) => { polledMax = Math.max(polledMax, st.combo || 0); }, until: (st) => st.inBoss || st.wavePhase === "approach" });
 const typedS = (Date.now() - tStart) / 1000;
-const hudWpm = await P.g(() => ({ hud: document.getElementById("hudWpm").textContent, live: window.game.liveWpm(), stats: { chars: window.game.stats.chars, timeMs: window.game.stats.timeMs, correct: window.game.stats.correct, total: window.game.stats.total, maxCombo: window.game.stats.maxCombo } }));
-// The HUD commits text at 5 Hz while liveWpm() is a sliding 10 s window, so allow the one-commit drift.
-P.check("#hudWpm non-zero after 5 s of typing and within 2 of liveWpm (5 Hz text commit)", Number(hudWpm.hud) > 0 && Math.abs(hudWpm.live - Number(hudWpm.hud)) <= 2, hudWpm);
+const hudWpm = await P.g(() => { const s = window.game.typistSpeed("live"); return { hud: document.getElementById("hudWpm").textContent, live: s.wpm == null ? null : Math.round(s.wpm), n: s.n, stats: { chars: window.game.stats.chars, timeMs: window.game.stats.timeMs, correct: window.game.stats.correct, total: window.game.stats.total, maxCombo: window.game.stats.maxCombo } }; });
+// MEASURE (D1): the HUD shows live hand speed (typistSpeed("live"), last 30 intervals); it commits at 5 Hz, so allow the one-commit drift.
+P.check("#hudWpm non-zero after 5 s of typing and within 2 of the live hand speed (5 Hz text commit)", Number(hudWpm.hud) > 0 && hudWpm.live != null && Math.abs(hudWpm.live - Number(hudWpm.hud)) <= 2, hudWpm);
 P.check("run.stats.maxCombo >= the polled max combo", hudWpm.stats.maxCombo >= polledMax, { maxCombo: hudWpm.stats.maxCombo, polledMax });
 const results = await P.g(() => window.game.buildResults("level"));
 const typistCps = typed / typedS;
 const expectedWpm = typistCps * 12;
 P.check("buildResults('level') has numeric fields and a rank in S/A/B/C/D", ["score", "levelScore", "wpm", "acc", "maxCombo", "words", "kills", "timeMs"].every(k => Number.isFinite(results[k])) && "SABCD".includes(results.rank) && Array.isArray(results.bonusLines), results);
-P.check("results.wpm within +-15 % of the typist's cps x 12 (gross, over the typed window)", Math.abs(results.wpm - expectedWpm) / expectedWpm <= 0.15 || Math.abs(results.wpm - expectedWpm) <= 4, { wpm: results.wpm, expectedWpm: Math.round(expectedWpm * 10) / 10, typed, typedS: Math.round(typedS * 10) / 10 });
+// MEASURE (D1): results.wpm is hand speed (the typist keys every 200 ms -> 60); the gross figure is results.throughput.
+P.check("results.throughput within +-15 % of the typist's cps x 12 (gross, over the typed window)", Math.abs(results.throughput - expectedWpm) / expectedWpm <= 0.15 || Math.abs(results.throughput - expectedWpm) <= 4, { throughput: results.throughput, expectedWpm: Math.round(expectedWpm * 10) / 10, typed, typedS: Math.round(typedS * 10) / 10 });
+P.check("results.wpm (hand speed) within +-15 % of the typist's 60 WPM", Math.abs(results.wpm - 60) / 60 <= 0.15, { wpm: results.wpm, n: results.wpmN });
 
-// 10 s idle -> #hudWpm 0
+// 10 s idle -> #hudWpm holds the live hand speed (its last 30 intervals); the gross tooling figure liveWpm() drops to 0
+await sleep(300);
+const idle0 = await P.g(() => document.getElementById("hudWpm").textContent);
 await sleep(10500);
-const idle = await P.g(() => document.getElementById("hudWpm").textContent);
-P.check("#hudWpm reads 0 after 10 s idle", idle === "0", { idle });
+const idle = await P.g(() => ({ hud: document.getElementById("hudWpm").textContent, gross: window.game.liveWpm() }));
+P.check("#hudWpm unchanged after 10 s idle (live hand speed holds); liveWpm() reads 0", idle.hud === idle0 && Number(idle.hud) > 0 && idle.gross === 0, { idle0, idle });
 
 // a 5 s pause adds < 100 ms to timeMs
 const t0 = await P.g(() => window.game.stats.timeMs);
@@ -61,7 +66,8 @@ await typeFor(P, 90, { wpm: 80, accuracy: 0.99, until: (s) => s.bossClear || s.m
 await waitFor(P, () => window.game.mode === "levelComplete", 12000);
 const blob = await P.saveBlob();
 const lc = await P.g(() => ({ results: window.game.lastResults, tally: window.game.lastTally }));
-P.check("sectorBests['1'] written after the first clear with rank in SABCD; bestWpm > 0; highScores row carries wpm", !!blob.sectorBests["1"] && "SABCD".includes(blob.sectorBests["1"].rank) && blob.bestWpm > 0 && blob.highScores[0] && blob.highScores[0].wpm > 0, { sectorBest: blob.sectorBests["1"], bestWpm: blob.bestWpm, hs: blob.highScores[0], rank: lc.results && lc.results.rank });
+// MEASURE (D6): save.bestWpm is frozen legacy; the clear logs a profile session instead (Best WPM needs >= 60 intervals).
+P.check("sectorBests['1'] written after the first clear with rank in SABCD; a profile session logged; highScores row carries wpm", !!blob.sectorBests["1"] && "SABCD".includes(blob.sectorBests["1"].rank) && blob.profile && blob.profile.sessions.length >= 1 && blob.highScores[0] && blob.highScores[0].wpm > 0, { sectorBest: blob.sectorBests["1"], sessions: blob.profile && blob.profile.sessions.length, hs: blob.highScores[0], rank: lc.results && lc.results.rank });
 P.check("levelStats clocks: bossTimeMs > 0 and <= timeMs; results.timeMs excludes intros", lc.results.timeMs > 0 && (await P.g(() => window.game.levelStats.bossTimeMs)) > 0, { timeMs: lc.results.timeMs, bossTimeMs: await P.g(() => window.game.levelStats.bossTimeMs) });
 
 P.check("zero pageErrors", P.errors.pageErrors.length === 0, P.errors.pageErrors);

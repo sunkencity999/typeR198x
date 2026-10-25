@@ -5,27 +5,33 @@
 // through the shared global scope, so index.html must load them in exactly this order:
 //
 //   assets/audio/sfx.js              window.SFX
-//   assets/js/core/00-util.js        clamp/lerp/rand/... helpers, normalizeKey/foldLatin, environment flags
+//   assets/js/core/00-util.js        clamp/lerp/rand/... helpers, normalizeKey/foldLatin, environment flags, GAME_HOOKS registry
 //   assets/js/core/10-tokens.js      PALETTE / FONT / MOTION / easings / SHAKE_PAD (CSS tokens mirrored into JS)
 //   assets/js/core/20-constants.js   balance constants, getHpBonusForLevel, buildBossSegments, LEVELS
+//   assets/js/core/25-lexicon.js     COMMON_WORDS / PHRASES, wave-pool mix, two-word plates, weak-key bias (WORDS)
 //   assets/js/core/30-content.js     word pools, boss tables, ship/boss/theme art, explosion sheet, victory script
 //   assets/js/core/40-save.js        LS_KEY, defaultSave/loadSave/storeSave/migrateSave, checkpoint + resume helpers
 //   assets/js/core/50-assets.js      Assets IIFE: manifest-driven image loader (window.TypeRAssets)
 //   assets/js/core/60-entities.js    Enemy, Powerup, Bullet, ExplosionSprite, Particle, Boss
 //   assets/js/core/70-canvas.js      roundRect, bracketRect, capsulePath, drawSplitText, fitText, drawTracked, typewriterText
-//   game.js (this file)              ASSET_VERSION/withAssetVersion + class Game { constructor, loop }
+//   game.js (this file)              ASSET_VERSION/withAssetVersion + class Game { constructor, loop } + hook / runMode / rand
 //   assets/js/game/05-boot.js        Game.prototype: boot sequence, loading overlay, per-sector asset gate, prefetch, warmSector
 //   assets/js/game/10-ui.js          Game.prototype: bindUI, setMode state machine, focus/announcer, modals/confirm, settings, toasts, top bar, mobile input
 //   assets/js/game/15-screens.js     Game.prototype: sector grid, resume card, records/help modals, results cards, tutorial toasts, CRT overlay, typewriter
+//   assets/js/game/17-onboarding.js  Game.prototype: first-run Flight Check, briefing disclosure (ONBOARD)
 //   assets/js/game/20-run.js         Game.prototype: run/level lifecycle, checkpoints, saves, level complete / game over / victory, ending dialogue
 //   assets/js/game/30-input.js       Game.prototype: keydown routing, handleTyped, lock rules, combo/multiplier, addScore
+//   assets/js/game/32-typist.js      Game.prototype: hand speed, key / bigram profile, typo pair, rank lines, Flight Log (MEASURE)
 //   assets/js/game/40-combat.js      Game.prototype: spawning, waves, kills, powerups, damage, update(dt)
+//   assets/js/game/42-pacing.js      Game.prototype: pace controller, stakes, Cadet assist (PACE)
 //   assets/js/game/45-feedback.js    Game.prototype: banner system (bossIntro/bossClear/sector/wave/callout), floaters
-//   assets/js/game/50-boss.js        Game.prototype: boss fight (phases, minions, Signal Surge, intro/outro, finale tally)
+//   assets/js/game/50-boss.js        Game.prototype: boss fight (phases, minions, Counter-Signal, intro/outro, finale tally)
+//   assets/js/game/52-modes.js       Game.prototype: Daily Sortie, Endless Drift, Drill (MODES)
 //   assets/js/game/60-hud.js         Game.prototype: DOM HUD (diffed writes on a 5 Hz commit cadence), chips, boss bar, live WPM
 //   assets/js/game/70-render.js      Game.prototype: resizeCanvas, plates/capsules/rails, boss art + slab, parallax, stars, render() layer order
 //   assets/js/game/75-fx-draw.js     Game.prototype: ship, beams, rings/bolts/debris, particles, overlays, vignette, active-target redraw
 //   assets/js/game/80-fx.js          Game.prototype: trauma camera, hit-stop/slow-mo, flash channels, onKeyFx/onKillFx, effect lists, stepAmbient
+//   assets/js/game/82-overdrive.js   Game.prototype: Overdrive, pilotWpm (ARCADE)
 //   assets/js/game/85-attract.js     Game.prototype: attract mode (ghost typist behind the title, PERF-10 idle drift)
 //   assets/js/99-boot.js             const game = new Game(); window.game = game; window.TypeRDebug
 //
@@ -35,22 +41,82 @@
 //
 // native/sync-web.sh patches the withAssetVersion return line below by sed; keep it byte-identical.
 
-const ASSET_VERSION = "20261016a";
-// Stale-shell guard. A host or CDN page cache can keep serving a previous index.html after a deploy (SiteGround's
-// dynamic cache did exactly that for "/" on 2026-10-17): that shell loads only this file and cannot boot the split
-// build, so the loading screen never ends. When the page that loaded this file has none of the assets/js/ scripts in
-// its markup, it is reloaded once with the current token in the query string, a URL no cache has seen. The current
-// shell (web and native) lists assets/js/core/*.js before this file, so it never takes this path; the v= check stops a
-// second reload if the stale copy somehow comes back.
+const ASSET_VERSION = "20261024b";
+// Stale-shell guard. A cache can keep serving a previous index.html after a deploy, and the server ignores ?v= when it
+// resolves a file, so the old shell's versioned URLs come back with this release's code:
+//   * a host page cache (SiteGround's dynamic cache did it for "/" on 2026-10-17) or a browser that cached a
+//     pre-overhaul shell: it loads only this file (no assets/js/ scripts) and cannot boot the split build;
+//   * a browser that kept an older modular /index.html (served max-age=15552000, 180 days): its assets/js/ tags carry
+//     an older ?v= token, so it boots this release's code without the scripts and markup the release added.
+// Either way the page is reloaded once with the current token in the query string, a URL no cache has seen. The
+// current shell carries ?v=ASSET_VERSION on every tag (tools/bump-version.sh writes both), so it never takes this
+// path; the v= check stops a second reload if a stale copy somehow comes back. Never on file: or in the native
+// wrappers (their bundled shell is synced with this file by native/sync-web.sh and its URLs are bare).
+// What it cannot reach: a browser that cached the whole older build at /index.html (shell and scripts, the normal
+// state after the footer pages' "Back to the game" links) runs that build with zero requests, so this file never
+// loads there (release finding RET-1). Nor a mixed cache (release review RB-1): a browser that kept the older
+// /index.html and the older game.js but lost one other assets/js script fetches that script's old ?v= URL, gets this
+// release's file (the host ignores the query) and runs old and new code together; Resume can do nothing, plates can
+// stop spawning or a boss can stop taking damage, with "[TypeR] frame error" in the console, until the player reloads
+// once (the reload revalidates /index.html, and the new shell's ?v= URLs are all new). Once a browser runs this shell
+// (it loads "/", served no-cache), revalidateDocs refreshes its long-lived copies of /index.html and the secondary
+// pages, and the in-site links carry ?v=<token> (bump-version.sh), so the next /index.html visit is this release. A
+// browser that never sends a request keeps its copy until it expires; only the host can stop new 180-day entries
+// (DEPLOY.md step 6).
 (function staleShellGuard() {
   try {
     if (typeof document === "undefined" || typeof location === "undefined" || location.protocol === "file:") return;
-    if (document.querySelector('script[src*="assets/js/"]')) return;
-    if (new URLSearchParams(location.search).get("v") === ASSET_VERSION) return;
+    if (typeof IS_NATIVE_SHELL !== "undefined" ? IS_NATIVE_SHELL : /TypeR198X-(macOS|iOS)/i.test(navigator.userAgent || "")) return;
+    if (new URLSearchParams(location.search).get("v") === ASSET_VERSION) {
+      // Arrived here through the reload or a tokenized in-site link: refresh the bare document URLs so the browser's
+      // 180-day copy of the old shell is replaced and the next visit to /index.html needs no reload ("/" is no-cache).
+      revalidateDocs(true);
+      return;
+    }
+    const tags = document.querySelectorAll('script[src*="assets/js/"]');
+    let stale = tags.length === 0;
+    for (const s of tags) {
+      const v = new URL(s.src, location.href).searchParams.get("v");
+      if (v && v !== ASSET_VERSION) { stale = true; break; }
+    }
+    if (!stale) { revalidateDocs(false); return; }
     const u = new URL(location.href);
     u.searchParams.set("v", ASSET_VERSION);
     location.replace(u.toString());
   } catch (_) { /* never let the guard itself break a boot */ }
+
+  // After load, revalidate the documents the host serves with max-age=15552000: cache "no-cache" sends a conditional
+  // request (a 304 without a body while the copy is current) and stores a changed copy. Only for a returning browser
+  // (the page arrived through ?v=, or a save exists; nothing new is stored): a first visit holds no stale copy.
+  function revalidateDocs(arrived) {
+    if (typeof fetch !== "function" || typeof addEventListener !== "function") return;
+    let returning = arrived;
+    if (!returning) { try { returning = typeof LS_KEY === "string" && localStorage.getItem(LS_KEY) !== null; } catch (_) { returning = false; } }
+    if (!returning) return;
+    const run = () => {
+      for (const page of ["index.html", "privacy-policy.html", "support.html", "info.html"]) {
+        // The body is read so the cache entry is written out whole (an unread body may stay pending).
+        try { fetch(new URL(page, location.href).toString(), { cache: "no-cache" }).then((r) => r.arrayBuffer()).catch(() => {}); } catch (_) { /* offline / blocked */ }
+      }
+    };
+    // At idle after the first keystroke (keydown, or the touch field's input), else 30 s after load for a visit that
+    // never types: never inside the boot budget measured up to the first keystroke (CONTRACT 8.z Z11; a returning
+    // save's matrix rows paid ~0.07 MB for it), and out of the way of the boot's own requests.
+    let fired = false, timer = 0;
+    const go = () => {
+      if (fired) return;
+      fired = true;
+      clearTimeout(timer);
+      removeEventListener("keydown", go, true);
+      removeEventListener("input", go, true);
+      if (typeof requestIdleCallback === "function") requestIdleCallback(run, { timeout: 3000 }); else setTimeout(run, 0);
+    };
+    addEventListener("keydown", go, true);
+    addEventListener("input", go, true);
+    const arm = () => { if (!fired) timer = setTimeout(go, 30000); };
+    if (document.readyState === "complete") arm();
+    else addEventListener("load", arm, { once: true });
+  }
 })();
 const withAssetVersion = (path) => {
   if (!path) return path;
@@ -349,3 +415,29 @@ class Game {
     }
   }
 }
+
+// Training scaffold: the hook emitter and the gameplay RNG every game/* mixin shares (they load after this file).
+Object.assign(Game.prototype, {
+  // Runs GAME_HOOKS[name] with this = game (core/00-util.js); returns evt so emit sites can read mutated fields.
+  hook(name, evt) {
+    return runGameHooks(name, evt, this);
+  },
+
+  // The run's mode (D9): "campaign" | "daily" | "endless" | "drill". No run (menu, Flight Check) reads as campaign.
+  runMode() {
+    return (this.run && this.run.mode) || "campaign";
+  },
+
+  // Gameplay randomness (spawner text / lane / speed / roll-in, powerup rolls and drops, minion picks): the seeded
+  // this._rng a mode installs (MODES' Daily Sortie), never during a campaign run; Math.random otherwise. Visual randomness
+  // (particles, shake, explosions, sparks, finale bursts) keeps Math.random.
+  rand() {
+    return (this._rng && this.runMode() !== "campaign") ? this._rng() : Math.random();
+  },
+  randRange(a, b) {
+    return a + this.rand() * (b - a);
+  },
+  randPick(list) {
+    return list[Math.floor(this.rand() * list.length)];
+  }
+});

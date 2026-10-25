@@ -14,7 +14,8 @@
 #     versioned URLs should be immutable / long max-age -> WARN; manifest.js should be no-cache -> WARN;
 #     MP3 should advertise Accept-Ranges -> WARN
 #   * the footer privacy target names the save key (typesmup198x.save.v1) and links back to the game;
-#     privacy.html is a meta-refresh stub
+#     privacy.html is a meta-refresh stub; the served privacy-policy.html carries the local file's effective date
+#     (WARN, FAIL with --strict: an older cached policy is still answering)
 # Local mode (--local), source checks against --root (default: this repo):
 #   * every <script src> in index.html exists and passes `node --check`
 #   * assets/opt/manifest.js version === assets/opt/manifest.json version (MANIFEST_ONLY=1 tools/build-web-assets.sh),
@@ -22,6 +23,8 @@
 #   * tools/check-globals.sh finds no duplicate top-level declarations across the classic scripts
 #   * the footer privacy link resolves to a local file that names the save key and links back to the game;
 #     privacy.html carries a meta refresh; info.html / support.html / privacy-policy.html link back to the game
+#   * privacy-policy.html's effective date is the one README.md and DEPLOY.md quote, and no main / release/* branch
+#     holds a different policy text under the same date (git, when available)
 #   * tools/unreferenced-assets.sh totals (informational; --unreferenced-out <file> keeps the full listing)
 #   * native sync dry run: copies index.html/game.js/style.css, the secondary pages and native/sync-web.sh into a
 #     temp tree, runs the sync, and asserts the `return path;` patch and the `id="loadingOverlay" class="hidden"`
@@ -225,12 +228,19 @@ NODE
   # Privacy pages
   st="$(fetch "$URL/privacy-policy.html" "$TMP/pp.html")"
   [[ "$st" == "200" ]] && pass "privacy-policy.html 200" || fail "privacy-policy.html status $st"
+  # The served policy is this release's text: its effective date equals the local file's (a cached older policy
+  # keeps the older date; release review CT-B1).
+  if [[ "$st" == "200" && -f "$ROOT/privacy-policy.html" ]]; then
+    served_d=$(grep -oE 'Effective date: [0-9]{1,2} [A-Z][a-z]+ [0-9]{4}' "$TMP/pp.html" | head -1 | cut -d' ' -f3-)
+    local_d=$(grep -oE 'Effective date: [0-9]{1,2} [A-Z][a-z]+ [0-9]{4}' "$ROOT/privacy-policy.html" | head -1 | cut -d' ' -f3-)
+    gate "$([[ -n "$served_d" && "$served_d" == "$local_d" ]] && echo 1 || echo 0)" "served privacy-policy.html effective date '${served_d:-<none>}' (local '${local_d:-<none>}')"
+  fi
   if [[ -n "$PRIVACY" ]]; then
     st="$(fetch "$(abs "$PRIVACY")" "$TMP/pl.html")"
     if [[ "$st" == "200" ]]; then
       pass "footer privacy link $PRIVACY 200"
       grep -q 'typesmup198x\.save\.v1' "$TMP/pl.html" && pass "privacy target names the save key typesmup198x.save.v1" || fail "privacy target $PRIVACY does not mention typesmup198x.save.v1"
-      grep -qE 'href="(\./)?index\.html"|href="\./?"' "$TMP/pl.html" && pass "privacy target links back to the game" || fail "privacy target $PRIVACY has no back link to index.html"
+      grep -qE 'href="(\./)?index\.html(\?v=[^"]*)?"|href="\./?"' "$TMP/pl.html" && pass "privacy target links back to the game" || fail "privacy target $PRIVACY has no back link to index.html"
     else fail "footer privacy link $PRIVACY status $st"; fi
   else warn "served index.html has no footer privacy link"; fi
   st="$(fetch "$URL/privacy.html" "$TMP/pstub.html")"
@@ -282,7 +292,7 @@ if [[ $LOCAL -eq 1 ]]; then
       if [[ -f "$pf" ]]; then
         pass "footer privacy link $src_privacy resolves to a local file"
         grep -q 'typesmup198x\.save\.v1' "$pf" && pass "$(basename "$pf") names the save key typesmup198x.save.v1" || fail "$(basename "$pf") does not mention typesmup198x.save.v1"
-        grep -qE 'href="(\./)?index\.html"' "$pf" && pass "$(basename "$pf") links back to the game" || fail "$(basename "$pf") has no back link to index.html"
+        grep -qE 'href="(\./)?index\.html(\?v=[^"]*)?"' "$pf" && pass "$(basename "$pf") links back to the game" || fail "$(basename "$pf") has no back link to index.html"
       else fail "footer privacy link $src_privacy -> $pf does not exist"; fi
     fi
     if [[ -f "$ROOT/privacy.html" ]]; then
@@ -290,8 +300,35 @@ if [[ $LOCAL -eq 1 ]]; then
     else warn "privacy.html missing (old links to it would 404)"; fi
     for page in info.html support.html privacy-policy.html; do
       [[ -f "$ROOT/$page" ]] || { warn "$page missing"; continue; }
-      grep -qE 'href="(\./)?index\.html"' "$ROOT/$page" && pass "$page links back to the game" || fail "$page has no back link to index.html"
+      grep -qE 'href="(\./)?index\.html(\?v=[^"]*)?"' "$ROOT/$page" && pass "$page links back to the game" || fail "$page has no back link to index.html"
     done
+    # Privacy policy date (release review CT-B1): README and DEPLOY.md quote the policy's effective date, and a policy
+    # whose text differs from an earlier release's (main, release/*; ?v= tokens ignored) must carry a different date.
+    if [[ -f "$ROOT/privacy-policy.html" ]]; then
+      pdate=$(grep -oE 'Effective date: [0-9]{1,2} [A-Z][a-z]+ [0-9]{4}' "$ROOT/privacy-policy.html" | head -1 | cut -d' ' -f3-)
+      if [[ -z "$pdate" ]]; then fail "privacy-policy.html has no 'Effective date: D Month YYYY' line"
+      else
+        bad=""
+        [[ -f "$ROOT/README.md" ]] && ! grep -qF "effective $pdate" "$ROOT/README.md" && bad="$bad README.md"
+        [[ -f "$ROOT/DEPLOY.md" ]] && ! grep -qF "# $pdate" "$ROOT/DEPLOY.md" && bad="$bad DEPLOY.md"
+        [[ -z "$bad" ]] && pass "privacy-policy.html effective date $pdate (README.md and DEPLOY.md agree)" || fail "privacy-policy.html says $pdate but$bad quote another date"
+        if command -v git > /dev/null 2>&1 && git -C "$ROOT" rev-parse --git-dir > /dev/null 2>&1; then
+          sed -E 's/[?&]v=[0-9A-Za-z]+//g' "$ROOT/privacy-policy.html" > "$TMP/pp-local.html"
+          same=""; nref=0
+          while IFS= read -r ref; do
+            [[ -z "$ref" ]] && continue
+            git -C "$ROOT" show "$ref:privacy-policy.html" 2>/dev/null | sed -E 's/[?&]v=[0-9A-Za-z]+//g' > "$TMP/pp-ref.html" || continue
+            [[ -s "$TMP/pp-ref.html" ]] || continue
+            nref=$((nref+1))
+            rdate=$(grep -oE 'Effective date: [0-9]{1,2} [A-Z][a-z]+ [0-9]{4}' "$TMP/pp-ref.html" | head -1 | cut -d' ' -f3-)
+            if [[ "$rdate" == "$pdate" ]] && ! cmp -s "$TMP/pp-local.html" "$TMP/pp-ref.html"; then same="$same ${ref#refs/heads/}"; fi
+          done < <(git -C "$ROOT" for-each-ref --format='%(refname)' refs/heads/main 'refs/heads/release/*' 2>/dev/null)
+          if [[ $nref -eq 0 ]]; then info "no main / release/* branch to compare the privacy policy with"
+          elif [[ -z "$same" ]]; then pass "privacy-policy.html: no earlier release ($nref compared) carries $pdate with a different text"
+          else fail "privacy-policy.html text differs from$same but keeps its effective date $pdate (update the date)"; fi
+        fi
+      fi
+    fi
   fi
   # unreferenced assets (report, never a gate)
   if [[ -f "$ROOT/tools/unreferenced-assets.sh" ]]; then

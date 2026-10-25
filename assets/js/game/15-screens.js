@@ -114,6 +114,7 @@ Object.assign(Game.prototype, {
     if (typeof this.renderSectorGrid === "function") this.renderSectorGrid();
     if (typeof this.renderResumeCard === "function") this.renderResumeCard();
     if (typeof this.renderMenuStats === "function") this.renderMenuStats();
+    this.hook("menuRender", {});   // MEASURE (Best WPM, goal line), MODES (mode deck)
   },
 
   // ------------------------- Shared fallbacks (shell hooks) -------------------------
@@ -435,7 +436,10 @@ Object.assign(Game.prototype, {
     if (next < 0) return;
     e.preventDefault();
     cards.forEach((c, i) => c.setAttribute("tabindex", i === next ? "0" : "-1"));
-    try { cards[next].focus({ preventScroll: true }); } catch (_) { /* no focus */ }
+    try {
+      cards[next].focus({ preventScroll: true });
+      cards[next].scrollIntoView({ block: "nearest" });   // release review J1: clear of the menu's sticky footer
+    } catch (_) { /* no focus */ }
   },
 
   // Sector tile -> confirm when a run is at stake -> audio unlock -> startSector(i) (20-run.js).
@@ -558,7 +562,12 @@ Object.assign(Game.prototype, {
     tbody.innerHTML = rows.map((h, i) => {
       const tag = SECTOR_TAG(h);
       const sector = h.levelReached === 11 ? "ALL" : String(h.levelReached | 0 || 1);
-      return `<tr class="hsRow${tag === "LEGEND" ? " is-legend" : ""}"><td>${i + 1}</td><td>${screensEscape(h.name || "PILOT")}</td><td>${formatInt(h.score | 0)}</td><td>${sector}</td><td>${h.wpm | 0}</td><td><span class="hsTag" data-tag="${screensEscape(tag)}">${screensEscape(tag)}</span></td></tr>`;
+      // MEASURE: rows from before honest speed keep their number, dimmed and flagged legacy; PACE: run tags as chips.
+      const wpm = (h.wpm | 0) || "--";
+      const wpmCell = h.wpmLegacy ? `<td class="hsLegacy" title="Legacy measure">${wpm}<span class="srOnly"> legacy</span></td>` : `<td>${wpm}</td>`;
+      const extra = (Array.isArray(h.tags) ? h.tags : []).filter((t) => typeof t === "string" && t).slice(0, 2)
+        .map((t) => ` <span class="hsTag" data-tag="${screensEscape(t)}">${screensEscape(t)}</span>`).join("");
+      return `<tr class="hsRow${tag === "LEGEND" ? " is-legend" : ""}"><td>${i + 1}</td><td>${screensEscape(h.name || "PILOT")}</td><td>${formatInt(h.score | 0)}</td><td>${sector}</td>${wpmCell}<td><span class="hsTag" data-tag="${screensEscape(tag)}">${screensEscape(tag)}</span>${extra}</td></tr>`;
     }).join("");
   },
 
@@ -566,6 +575,7 @@ Object.assign(Game.prototype, {
     const E = this.screenEls || {};
     if (!E.recordsModal) return;
     this.renderRecordsTable();
+    this.hook("recordsOpen", { modal: E.recordsModal });   // MEASURE: Flight log tab (idempotent; #btnRecords is bound twice)
     this.screensOpenModal(E.recordsModal, { returnFocusTo: E.btnRecords, initialFocus: "#btnRecordsClose" });
   },
 
@@ -586,7 +596,8 @@ Object.assign(Game.prototype, {
 // enemy on screen (t >= 1 s), first lock, first powerup on screen, boss intro end, first lock loss, the accuracy tip
 // after a sector-1 death below 70 %. Flags live in save.tutorialSeen; everything is suppressed for returning players
 // (lastUnlockedLevel > 1), deferred behind the sector card, DROPPED (never queued) while a boss intro or the finale
-// is on, and cleared outside play. The boss tip itself waits for the intro to end.
+// is on, and cleared outside play. The boss tip itself waits for the intro to end. FINISH is marked seen when it is
+// displayed, on the first multi-letter lock (D13); nothing here fires during the Flight Check (17-onboarding.js).
 const TUTORIAL_TIPS = {
   lock: { text: "TYPE THE FIRST LETTER OF A TARGET TO LOCK ON", ms: 4000 },
   finish: { text: "KEEP TYPING TO FINISH IT", ms: 2600 },
@@ -603,7 +614,7 @@ Object.assign(Game.prototype, {
   },
 
   tutorialEnabled() {
-    return !!this.save && ((this.save.lastUnlockedLevel | 0) || 1) <= 1;
+    return !!this.save && ((this.save.lastUnlockedLevel | 0) || 1) <= 1 && this.runMode() === "campaign";   // MODES (G10)
   },
 
   markTutorial(kind) {
@@ -656,6 +667,8 @@ Object.assign(Game.prototype, {
       return;
     }
     T.prevMode = mode;
+    // ONBOARD: the Flight Check teaches with its own toasts; nothing here fires during it or carries over from it.
+    if (this.flightCheck) { T.prevLock = null; T.prevCorrect = null; T.prevMisses = null; T.prevKills = null; T.watchPowerup = null; return; }
     const seen = (this.save && this.save.tutorialSeen) || {};
     const lock = this.lock;
     const st = this.stats || {};
@@ -665,13 +678,11 @@ Object.assign(Game.prototype, {
     // (single-letter targets lock and die inside one keystroke), a kill is a finished target, and a miss that leaves
     // the previous target alive at progress 0 is a lost lock.
     const firstCorrect = correct > T.prevCorrect && !this.inBoss;
-    const killed = kills > T.prevKills;
     const prevRef = T.prevLock && T.prevLock.ref;
     const lost = !!(T.prevLock && !lock && misses > T.prevMisses && prevRef && prevRef.alive && !prevRef.dying && (prevRef.progress | 0) === 0);
 
     // Progress flags are tracked whether or not a tip is on screen.
     if (firstCorrect && !seen.lock) this.markTutorial("lock");
-    if (killed && !seen.finish && !this.inBoss) this.markTutorial("finish");
     if (T.watchPowerup && T.watchPowerup.alive === false) {
       if ((T.watchPowerup.progress | 0) >= (T.watchPowerup.label || "").length && !seen.powerup) this.markTutorial("powerup");
       T.watchPowerup = null;
@@ -693,9 +704,12 @@ Object.assign(Game.prototype, {
       if (!seen.lock && !T.shown.lock && !lock && this.levelIndex === 0 && levelT >= 1 && this.hasEnemyOnScreen()) {
         this.tutorialToast("lock", TUTORIAL_TIPS.lock.text, TUTORIAL_TIPS.lock.ms);
       }
-      // The lock landed on a word (still alive): teach the finish; a letter target already taught it by dying.
-      if (!seen.finish && !T.shown.finish && firstCorrect && lock && lock.kind === "enemy") {
+      // The first multi-letter lock (a correct key that leaves the lock alive on a word) teaches the finish. It is marked
+      // seen only now, when it is displayed (D13): a letter kill used to mark it first, so the tip never showed.
+      if (!seen.finish && !T.shown.finish && firstCorrect && lock && lock.kind === "enemy" && lock.ref && lock.ref.alive &&
+          (lock.ref.text || "").length > 1 && (lock.ref.progress | 0) >= 1) {
         this.tutorialToast("finish", TUTORIAL_TIPS.finish.text, TUTORIAL_TIPS.finish.ms);
+        this.markTutorial("finish");
       }
       if (!seen.powerup && !T.shown.powerup && !T.watchPowerup) {
         const p = this.firstPowerupOnScreen();
@@ -770,6 +784,8 @@ Object.assign(Game.prototype, {
   resultsTitleFor(results) {
     if (results.scope === "run") return "LEGEND STATUS GRANTED";
     if (results.scope === "over") return "RUN REPORT";
+    // S is reachable with misses, and the ACC caption now counts them: FLAWLESS only when there were none (CT-08).
+    if (results.rank === "S" && results.misses > 0) return "S-CLASS SIGNAL";
     return RANK_TITLES[results.rank] || `SECTOR ${results.level} REPORT`;
   },
 
@@ -802,11 +818,24 @@ Object.assign(Game.prototype, {
     toggle(".newBest", level && !!results.newSectorBest);
     toggle(".newHigh", !!results.newHigh);
     toggle(".newWpm", !!results.newWpm && (results.wpm | 0) > 0);
+    // results.tags (PACE: CADET, PACE x1.6) as chips in the head, rebuilt per render (reuses .hsTag).
+    const head = q(".resultsHead");
+    if (head) {
+      for (const old of head.querySelectorAll(".resultsTag")) old.remove();
+      for (const t of (Array.isArray(results.tags) ? results.tags : []).slice(0, 3)) {
+        if (typeof t !== "string" || !t) continue;
+        const s = document.createElement("span");
+        s.className = "hsTag resultsTag";
+        s.dataset.tag = t;
+        s.textContent = t;
+        head.appendChild(s);
+      }
+    }
 
     const tally = level ? (this.lastTally || null) : null;
     const bonusTotal = tally ? (tally.total | 0) : 0;
     const tiles = {
-      wpm: { to: results.wpm | 0, fmt: (n) => String(Math.round(n)) },
+      wpm: { to: Math.round(Number(results.wpm) || 0), fmt: (n) => String(Math.round(n)) },   // MEASURE's wpm is unrounded
       acc: { to: Number(results.acc) || 0, fmt: (n) => `${Math.round(n)}%` },
       maxCombo: { to: results.maxCombo | 0, fmt: (n) => `x${Math.round(n)}` },
       words: { to: results.words | 0, fmt: (n) => String(Math.round(n)) },
@@ -857,6 +886,28 @@ Object.assign(Game.prototype, {
       }
     }
 
+    // results.notes (ARCADE: COUNTER-SIGNALS 3/4, OVERDRIVE 14 S): one ul.resultsNotes after .bonusList, created once.
+    const notes = Array.isArray(results.notes) ? results.notes : [];
+    let notesEl = q(".resultsNotes");
+    if (!notesEl && notes.length) {
+      notesEl = document.createElement("ul");
+      notesEl.className = "resultsNotes";
+      const anchor = q(".bonusList");
+      if (anchor) anchor.after(notesEl); else cardEl.appendChild(notesEl);
+    }
+    if (notesEl) {
+      notesEl.textContent = "";
+      for (const n of notes) {
+        if (!n || !n.text) continue;
+        const li = document.createElement("li");
+        li.className = "resultsNote";
+        li.dataset.note = String(n.id || "");
+        li.textContent = String(n.text);
+        notesEl.appendChild(li);
+      }
+      notesEl.classList.toggle("hidden", !notesEl.childElementCount);
+    }
+
     const badge = q(".rankBadge");
     if (badge) {
       badge.dataset.rank = rank;
@@ -877,6 +928,7 @@ Object.assign(Game.prototype, {
         }, RESULTS_RANK_AT_MS));
       }
     }
+    this.hook("resultsRender", { cardEl, results, animate });   // MEASURE: rank line, ACC caption, WEAK SIGNAL, Best WPM text
   },
 
   cancelResultsAnimation(cardEl) {

@@ -1310,6 +1310,28 @@
       this._burst({ t0, dur: 0.15, a: 0.002, d: 0.04, s: 0.5, r: 0.108, peak: 0.3, filter: { type: "highpass", f0: 4000 } });
     }
 
+    // Counter-Signal (ARCADE D10): silently cut the riser (pause, phase clear, fight end); not a cue (lastCue untouched).
+    surgeStop() { this._cutSurge(); }
+
+    // Overdrive (ARCADE D11): a rising sine sweep + a bright triangle arpeggio + a band-passed air burst.
+    overdrive() {
+      this.lastCue = "overdrive";
+      if (!this.ctx) return;
+      const t0 = this._now();
+      this._osc({ type: "sine", f0: 400, f1: 1600, t0, dur: 0.18, a: 0.01, d: 0.06, s: 0.6, r: 0.11, peak: 0.25 });
+      this._arp([784, 1047, 1319], { t0: t0 + 0.08, step: 0.05, dur: 0.12, type: "triangle", peak: 0.2 });
+      this._burst({ t0, dur: 0.25, a: 0.02, d: 0.08, s: 0.5, r: 0.15, peak: 0.12, filter: { type: "bandpass", f0: 800, f1: 4000, Q: 1, sweep: 0.25 } });
+    }
+
+    // Overdrive vented: a falling steam hiss + a short sine drop.
+    overdriveVent() {
+      this.lastCue = "overdriveVent";
+      if (!this.ctx) return;
+      const t0 = this._now();
+      this._burst({ t0, dur: 0.35, a: 0.005, d: 0.1, s: 0.5, r: 0.245, peak: 0.22, filter: { type: "bandpass", f0: 6000, f1: 1500, Q: 0.8, sweep: 0.35 } });
+      this._osc({ type: "sine", f0: 900, f1: 300, t0, dur: 0.18, peak: 0.12 });
+    }
+
     // Boss death t=0 (riser) and t=.4 (crack over bigexplosion).
     bossCharge() {
       this.lastCue = "bossCharge";
@@ -1442,7 +1464,7 @@
     "zap", "lock", "lockRelease", "lockLost", "error", "explosion", "impact", "damage", "shieldHit", "shieldBreak",
     "lowHp", "pickup", "powerDown", "chainZap", "comboTier", "comboBreak", "sectorStart", "waveStart", "waveClear",
     "bossWarning", "bossSiren", "segmentDown", "bossPhaseClear", "surgeCharge", "surgeFire", "surgeCancel",
-    "bossCharge", "bossKill", "fanfare", "uiTick", "typeTick"
+    "bossCharge", "bossKill", "fanfare", "uiTick", "typeTick", "overdrive", "overdriveVent"
   ];
   SFX.ALIASES = [
     "hit", "laser", "lockOn", "dryFire", "segmentClear", "bossSegmentClear", "shieldAbsorb", "powerExpire", "heal",

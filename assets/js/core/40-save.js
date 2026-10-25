@@ -1,4 +1,4 @@
-// Type-R 198X — save schema v2, migration, checkpoint snapshots and resume helpers. Classic script; load order is defined in index.html.
+// Type-R 198X — save schema v3, migration, checkpoint snapshots and resume helpers. Classic script; load order is defined in index.html.
 // Key stays typesmup198x.save.v1; every change is additive (CONTRACT §9). Legacy v1 blobs are migrated on load.
 
 function getResumeLevelIndex(save) {
@@ -11,15 +11,15 @@ function getResumeLevelIndex(save) {
 
 // Full stats / levelStats shapes (CONTRACT §9). Later tracks increment these fields; they always exist.
 function defaultStats() {
-  return { score: 0, combo: 0, mult: 1, correct: 0, total: 0, maxCombo: 0, kills: 0, words: 0, letters: 0, chars: 0, misses: 0, timeMs: 0, bossTimeMs: 0, retries: 0 };
+  return { score: 0, combo: 0, mult: 1, correct: 0, total: 0, maxCombo: 0, kills: 0, words: 0, letters: 0, chars: 0, misses: 0, timeMs: 0, bossTimeMs: 0, retries: 0, overdriveMs: 0, csCountered: 0, csFired: 0 };
 }
 
 function defaultLevelStats() {
-  return { kills: 0, words: 0, chars: 0, correct: 0, total: 0, maxCombo: 0, timeMs: 0, bossTimeMs: 0, damageTaken: 0, waveDamage: 0, bossDamage: 0, surgesCancelled: 0, perfectWaves: 0, perfectWaveBonus: 0, retries: 0, levelScore: 0 };
+  return { kills: 0, words: 0, chars: 0, correct: 0, total: 0, maxCombo: 0, timeMs: 0, bossTimeMs: 0, damageTaken: 0, waveDamage: 0, bossDamage: 0, surgesCancelled: 0, perfectWaves: 0, perfectWaveBonus: 0, retries: 0, levelScore: 0, spdN: 0, spdMs: 0, spdSq: 0, hits: 0, overdriveMs: 0, surgesFired: 0 };
 }
 
 // Every stats field a checkpoint carries (all of them except the live combo/mult).
-const STAT_SNAPSHOT_FIELDS = ["score", "correct", "total", "kills", "words", "letters", "chars", "misses", "maxCombo", "timeMs", "bossTimeMs", "retries"];
+const STAT_SNAPSHOT_FIELDS = ["score", "correct", "total", "kills", "words", "letters", "chars", "misses", "maxCombo", "timeMs", "bossTimeMs", "retries", "overdriveMs", "csCountered", "csFired"];
 
 function makeRunId() {
   let id = "";
@@ -61,6 +61,7 @@ function buildResumeRun(levelIndex, maxHp, shipId) {
     levelStats: defaultLevelStats(),
     shipId,
     difficulty: "standard",
+    mode: "campaign",                  // MODES (D9): a stored run is always a campaign run
     retries: 0,
     checkpoint: snapshotCheckpoint("level", i, stats, hp, 0),
     bossCheckpoint: null,
@@ -83,7 +84,7 @@ function byScoreThenNewest(a, b) {
 
 // ----------------------------- Storage -----------------------------
 const LS_KEY = "typesmup198x.save.v1";
-const SAVE_SCHEMA = 2;
+const SAVE_SCHEMA = 3;   // MEASURE (D6): save.profile; pre-3 WPM rows flagged wpmLegacy (32-typist.js saveMigrate)
 // Set when localStorage cannot be read or written; the game keeps playing from memory (F044).
 const SAVE_STATE = { unavailable: false };
 
@@ -101,7 +102,10 @@ const defaultSave = () => ({
   bestWpm: 0,
   victories: 0,
   legacySeeded: false,
-  tutorialSeen: { lock: false, finish: false, powerup: false, boss: false, release: false, accuracy: false },
+  tutorialSeen: { lock: false, finish: false, powerup: false, boss: false, release: false, accuracy: false, phrase: false, surge: false, overdrive: false },
+  onboardingDone: 0,   // ONBOARD (D13): ms epoch when the Flight Check was passed or skipped; 0 = not yet
+  profile: null,       // MEASURE (D6): pilot profile, created lazily by 32-typist.js
+  modes: null,         // MODES (D9): daily / endless / drill records, created on the first finished mode run
   run: null
 });
 
@@ -118,6 +122,7 @@ function migrateRun(run) {
   // E-3: a run migrated from v1 keeps feeding the headline high score even if it was saved mid-game.
   if (legacy) r.legacy = true;
   r.difficulty = r.difficulty || "standard";
+  r.mode = "campaign";   // MODES (D9): forced, never defaulted (a mode run is never stored)
   r.retries = Number.isFinite(r.retries) ? r.retries : 0;
   r.stats = { ...defaultStats(), ...((r.stats && typeof r.stats === "object") ? r.stats : {}) };
   r.levelStats = { ...defaultLevelStats(), ...((r.levelStats && typeof r.levelStats === "object") ? r.levelStats : {}) };
@@ -218,7 +223,14 @@ function migrateSave(obj) {
   }
   save.highScores.sort(byScoreThenNewest);
   if (save.highScores.length > 10) save.highScores.length = 10;
-  save.schema = SAVE_SCHEMA;
+  save.onboardingDone = Number(obj.onboardingDone) > 0 ? Number(obj.onboardingDone) : 0;   // ONBOARD (D13)
+  // saveMigrate (scaffold): MEASURE normalises save.profile and flags pre-schema-3 WPM as legacy (src = the raw blob).
+  // Feature-detected: an older 00-util.js still cached beside this file has no registry, and without the guard the
+  // ReferenceError made loadSave return a blank pilot (release finding RET-3). Then MEASURE never migrated the blob,
+  // so it keeps schema 2 and the full release still flags its pre-hand-speed WPM as legacy.
+  const hooks = typeof runGameHooks === "function";
+  if (hooks) runGameHooks("saveMigrate", { save, src: obj }, null);
+  save.schema = (hooks || Number(obj.schema) >= SAVE_SCHEMA) ? SAVE_SCHEMA : 2;
   return save;
 }
 
@@ -240,6 +252,8 @@ function loadSave() {
 
 // Returns false (and flags the game once) when storage is blocked; the run keeps going in memory (F044).
 function storeSave(save) {
+  // saveStore (scaffold): MEASURE folds its dirty per-key tables into save.profile; this adds no write.
+  if (typeof runGameHooks === "function") runGameHooks("saveStore", { save }, (typeof window !== "undefined" && window.game) || null);
   try {
     localStorage.setItem(LS_KEY, JSON.stringify(save));
     return true;

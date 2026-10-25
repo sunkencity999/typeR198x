@@ -117,21 +117,21 @@ const caps = await P.g(() => {
 });
 P.check("caps: 40 beams in one frame -> bullets.length <= 24; 12 x addExplosion(140) -> particles <= 600", caps.bullets <= 24 && caps.bullets >= 20 && caps.particles <= 600 && caps.particles >= 500, caps);
 
-// ---- kill: rings[0].life .28, ring visible at r ~ 40 .1 s later, debris on medium ----
+// ---- kill: rings[0].life .28, ring visible at r ~ 48 .12 s later, debris on the kill set (ARCADE D12: ring 26, kill set) ----
 const kill = await P.g(async () => {
   const g = window.game; const ctx = g.ctx; const s = g.renderScale;
   g.enemies.length = 0; g.lock = null; g.rings.length = 0; g.particles.length = 0; g.explosions.length = 0; g.debris.length = 0; g.bullets.length = 0;
   const KX = 420, KY = 250;   // dark starfield: the "brighter than background by > 60" rule needs headroom
   await new Promise(r => requestAnimationFrame(r));
-  // background luminance around the plate before the kill (ring radius band 30..50 px); ONE readback per sample
+  // background luminance around the plate before the kill (ring radius band 40..60 px); ONE readback per sample
   // (per-pixel getImageData calls take longer than the ring lives)
   const probeRing = () => {
-    const R = 52, X0 = Math.round((KX - R) * s), Y0 = Math.round((KY - R) * s), W = Math.round(2 * R * s);
+    const R = 64, X0 = Math.round((KX - R) * s), Y0 = Math.round((KY - R) * s), W = Math.round(2 * R * s);
     const img = ctx.getImageData(X0, Y0, W, W).data;
     const out = [];
     for (let i = 0; i < 16; i++) {
       const a = (i / 16) * Math.PI * 2; let best = 0;
-      for (let r = 30; r <= 50; r += 0.5) {
+      for (let r = 40; r <= 60; r += 0.5) {
         const px = Math.round((KX + Math.cos(a) * r) * s) - X0, py = Math.round((KY + Math.sin(a) * r) * s) - Y0;
         const k = (py * W + px) * 4;
         best = Math.max(best, 0.2126 * img[k] + 0.7152 * img[k + 1] + 0.0722 * img[k + 2]);
@@ -152,15 +152,15 @@ const kill = await P.g(async () => {
   // isolate the ring: drop the sprite + particles so the band reads the ring alone
   g.explosions.length = 0; g.particles.length = 0; g.debris.length = 0; g.floaters.length = 0;
   await new Promise(r => requestAnimationFrame(r));
-  await new Promise(r => setTimeout(r, 135));   // ring time runs on world dt: the .045 s hit-stop holds it back ~40 ms
+  await new Promise(r => setTimeout(r, 135));   // ring time runs on world dt: the .055 s hit-stop holds it back ~50 ms
   await new Promise(r => requestAnimationFrame(r));
   const ringR = g.rings[0] ? g.rings[0].radius() : null;
   const lit = probeRing();
   const brighter = lit.filter((v, i) => v - bg[i] > 60).length;
   return { ring0, debris, explosionType, ringR, brighter, bgMean: bg.reduce((a, b) => a + b, 0) / 16, litMean: lit.reduce((a, b) => a + b, 0) / 16 };
 });
-P.check("killEnemy: rings[0].life === .28 (size 20 cyan); ~.12 s later the ring (r ~ 36-42) is > 60 brighter than background on >= 10/16 angles", kill.ring0 && Math.abs(kill.ring0.life - 0.28) < 1e-9 && kill.ring0.size === 20 && kill.brighter >= 10, kill);
-P.check("medium explosion spawns 2-4 debris shards (frame 16, gravity 520, .7 s)", kill.explosionType === "medium" && kill.debris >= 2 && kill.debris <= 4, { type: kill.explosionType, debris: kill.debris });
+P.check("killEnemy: rings[0].life === .28 (size 26 cyan, D12); ~.12 s later the ring (r ~ 44-52) is > 60 brighter than background on >= 10/16 angles", kill.ring0 && Math.abs(kill.ring0.life - 0.28) < 1e-9 && kill.ring0.size === 26 && kill.brighter >= 10, kill);
+P.check("a word kill's explosion (kill set, D12) spawns 2-4 debris shards (frame 16, gravity 520, .7 s)", kill.explosionType === "kill" && kill.debris >= 2 && kill.debris <= 4, { type: kill.explosionType, debris: kill.debris });
 await P.shot("ring-frame");
 
 // ---- RAPID chain: bolts.length >= 1 the frame of the key; SPREAD ring 160 magenta ----

@@ -5,6 +5,7 @@
 // manifest without its music/sfx members (the art loader keeps working) so sfx.js takes the WAV fallback.
 // Writes <out>/report.json; exit code 1 on any failed check.
 import { chromium } from "playwright";
+import { harnessFlags } from "./_lib.mjs";
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
@@ -117,6 +118,7 @@ const exerciseRegistry = `(() => {
 
 try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  await harnessFlags(context);   // ONBOARD: a fresh-save Start skips the Flight Check (harness default)
   const { page, errors, consoleErrors, requests } = await newPage(context);
   await boot(page);
 
@@ -316,6 +318,7 @@ try {
 
   // 19. Native shell UA: FORCE_HTML_AUDIO path (elements play directly, volume = v*v, synths still run)
   const ctxNative = await browser.newContext({ viewport: { width: 1440, height: 900 }, userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) TypeR198X-macOS/1.0" });
+  await harnessFlags(ctxNative);   // ONBOARD: as above
   const pn = await newPage(ctxNative);
   await boot(pn.page);
   await pn.page.fill("#playerName", "NATIVE").catch(() => {});
