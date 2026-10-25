@@ -1,9 +1,10 @@
 // Type-R 198X — PACE track (D2 / D3): pace follows the pilot (paceMul per wave into this.waveTuning), PERFECT WAVE by
 // quota only, WAVE TIMED OUT with quota carry, hull carry from sector 4, the Cadet assist and the diff() row. Loads after
 // 40-combat.js. Hooks consumed: waveWillStart, waveWillEnd, waveDrained, levelWillStart, checkpointRestored,
-// clearWillRepair, results, recordWillSave, gameOverWillShow, levelCompleteWillShow, sectorCardWillShow, modesRunStart, leak (plus
-// bossWillApproach: a wave-3 timeout whose drain the sector clock cuts short still gets its callout). Top-level names
-// PACE* / pace*. No per-frame code, no canvas drawing, no save writes of its own (run.pace rides the existing save points).
+// clearWillRepair, results, recordWillSave, gameOverWillShow, levelCompleteWillShow, sectorCardWillShow, modesRunStart,
+// leak (Z12: the wave's leaks) (plus bossWillApproach: a wave-3 timeout whose drain the sector clock cuts short still
+// gets its callout). Top-level names PACE* / pace*. No per-frame code, no canvas drawing, no save writes of its own
+// (run.pace rides the existing save points).
 //
 // Pace (D2 + lead ruling Z12): at every wave boundary paceMul = clamp(0.85 x pilotCpsEff / targetCps, 1.0, 2.5), moving
 // at most 0.35 from the previous wave of the run; pilotCpsEff = L / (L / pilotCps + acq / 1000): the hand speed plus the
