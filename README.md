@@ -285,7 +285,13 @@ old `game.js` is no longer in the browser cache, so its versioned URLs return th
 ignores the query), it reloads once with `?v=<ASSET_VERSION>` and stops if that query is already there. It cannot
 reach a browser that cached the whole older build at `/index.html` (shell and scripts: the normal state after the
 footer pages' "Back to the game" links): that browser runs the old build with zero requests until the player
-reloads, opens `/` (served no-cache) or the cache expires. Once a returning browser runs this shell (a save exists,
+reloads, opens `/` (served no-cache) or the cache expires. Nor does it reach a mixed cache: a browser that still holds
+the older `/index.html` and the older `game.js` but has lost one of the other `assets/js/` scripts fetches that
+script's old `?v=` URL, gets this release's file (the host ignores the query) and runs old and new code together.
+Resume can do nothing, plates can stop spawning or a boss can stop taking damage, with `[TypeR] frame error` in the
+console, until the player reloads once (the reload revalidates `/index.html` and the new shell's `?v=` URLs are all
+new). It is rare (the browser must evict one script but keep the shell and `game.js`), loses no data, and the
+20261016a -> 20261024a step had the same gap. Once a returning browser runs this shell (a save exists,
 or it arrived through `?v=`), the guard revalidates `/index.html`, `privacy-policy.html`, `support.html` and
 `info.html` at idle after the first keystroke (30 s after load when the player never types, so it stays out of the
 boot budget) with `cache: "no-cache"` (a 304 without a body while the copy is current, the new page once

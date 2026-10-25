@@ -54,7 +54,11 @@ const ASSET_VERSION = "20261024b";
 // wrappers (their bundled shell is synced with this file by native/sync-web.sh and its URLs are bare).
 // What it cannot reach: a browser that cached the whole older build at /index.html (shell and scripts, the normal
 // state after the footer pages' "Back to the game" links) runs that build with zero requests, so this file never
-// loads there (release finding RET-1). Once that browser runs this shell (it loads "/", served no-cache),
+// loads there (release finding RET-1). Nor a mixed cache (release review RB-1): a browser that kept the older
+// /index.html and the older game.js but lost one other assets/js script fetches that script's old ?v= URL, gets this
+// release's file (the host ignores the query) and runs old and new code together; Resume can do nothing, plates can
+// stop spawning or a boss can stop taking damage, with "[TypeR] frame error" in the console, until the player reloads
+// once (the reload revalidates /index.html, and the new shell's ?v= URLs are all new). Once that browser runs this shell (it loads "/", served no-cache),
 // revalidateDocs refreshes its long-lived copies of /index.html and the secondary pages, and the in-site links carry
 // ?v=<token> (bump-version.sh), so the next /index.html visit is this release. A browser that never sends a request
 // keeps its copy until it expires; only the host can stop new 180-day entries (DEPLOY.md step 6).

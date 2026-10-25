@@ -15,6 +15,11 @@ actually receive this release. The stale-shell guard in `game.js` reloads an old
 when that shell's `game.js` is no longer cached. A browser that cached the whole previous build at `/index.html`
 (shell and scripts, the usual state after the footer pages' "Back to the game" links) runs it with zero requests
 and never loads the new `game.js`: it stays on that build until the player reloads, opens `/` or the cache expires.
+Nor does the guard reach a mixed cache: a browser that still holds the older `/index.html` and the older `game.js`
+but has lost one of the other `assets/js/` scripts fetches that script's old `?v=` URL, gets this release's file (the
+host ignores the query) and runs old and new code together. Resume can do nothing, plates can stop spawning or a boss
+can stop taking damage, with `[TypeR] frame error` in the console, until the player reloads once (the reload
+revalidates `/index.html` and the new shell's `?v=` URLs are all new).
 On its first visit to `/` the new shell revalidates `/index.html`, `privacy-policy.html`, `support.html` and
 `info.html` (after the first keystroke, or 30 s after load), and the in-site links carry `?v=20261024b`, so from then
 on it gets this release.
@@ -148,8 +153,14 @@ curl -s  https://typer198x.com/privacy-policy.html | grep 'Effective date'    # 
 
 ## 7. After the deploy
 
-- Open the site in a browser that played the old build: the loading screen should show the new bar and
-  the title cabinet; `localStorage['typesmup198x.save.v1']` keeps the old progress (Continue offered).
+- Open `https://typer198x.com/` (the bare root, served no-cache; not `/index.html`) in a browser that played
+  before. The title shows the DAILY SORTIE tile and the PRACTICE panel (DRILL · 60 S, ENDLESS DRIFT) under the
+  Start / New run button. In the console, `document.querySelector('meta[name=asset-version]').content` and
+  `ASSET_VERSION` both read `20261024b`. `localStorage['typesmup198x.save.v1']` keeps the old progress (Resume /
+  Continue offered when a run was saved). The loading bar and title cabinet look the same as in 20261016a and
+  20261024a, so they do not identify the build. `/index.html` in that same browser may still show the previous build
+  (no deck on 20261016a, the deck hidden on 20261024a) until one reload or the next visit to `/`: that is the
+  cached-whole-build case in Background, expected.
 - Tag the release commit and record the token in the README changelog heading if it was left generic.
 
 ## Rollback
