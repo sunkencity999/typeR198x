@@ -19,9 +19,10 @@
 //                   first, otherwise the boss; 'always' = any targetable minion first
 //   --expect        adds the pass/fail lines of that profile's B10 targets (see balance.md)
 // PACE (D2 / D3): every wave also records the paceMul / quota PACE applied (waveTuning, read after PACE's waveWillStart
-// listener), whether it timed out and how many plates escaped; every sector the hull its card showed (hullIn) and the
-// gross throughput. The incomingCps band is judged per wave against targetCps x the applied paceMul, [0.85, 1.35]
-// (the 0.1 s empty-field rule and the 2-alive top-up from PACE.hungryMin2AtMul feed a fast typist above the stream).
+// listener), whether it timed out and how many plates escaped (alive at the cap, lead ruling Z5); every sector the hull
+// its card showed (hullIn) and the gross throughput. The incomingCps band is judged per wave against targetCps x the
+// applied paceMul, [0.85, 1.35] (the 0.1 s empty-field rule and the 2-alive top-up from PACE.hungryMin2AtMul feed a
+// fast typist above the stream).
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -78,8 +79,9 @@ async function installHooks() {
     // PACE: the tuning each wave really ran with (listeners after 42-pacing.js read what it wrote), timeouts, card hull
     if (typeof onGameHook === "function") {
       onGameHook("waveWillStart", function (e) { B.pace.push({ L: e.level, wave: e.wave, mul: e.tuning ? e.tuning.spawnMul : 1, quota: e.tuning ? e.tuning.quota : null, timedOut: false, escaped: 0 }); });
-      onGameHook("waveWillEnd", function (e) { const p = B.pace[B.pace.length - 1]; if (p && !e.byQuota) p.timedOut = true; });
-      onGameHook("waveDrained", function (e) { const p = B.pace[B.pace.length - 1]; if (p && !e.byQuota) p.escaped = e.detonated | 0; });
+      // Z5: the plates alive at the cap leave at once (waveWillEnd's alive); a drain timeout would detonate the rest
+      onGameHook("waveWillEnd", function (e) { const p = B.pace[B.pace.length - 1]; if (p && !e.byQuota) { p.timedOut = true; p.escaped = e.alive | 0; } });
+      onGameHook("waveDrained", function (e) { const p = B.pace[B.pace.length - 1]; if (p && !e.byQuota) p.escaped += e.detonated | 0; });
       onGameHook("sectorCardWillShow", function () { B.lastCard = { hp: this.player.hp, maxHp: this.player.maxHp }; });
     }
   });

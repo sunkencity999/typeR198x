@@ -134,8 +134,9 @@ await P.g(() => {
     const l = this._paceLast || {};
     B.waves.push({ L: e.level, w: e.wave, mul: e.tuning.spawnMul, quota: e.tuning.quota, source: l.source || null, target: l.target ?? null, runN: l.n ?? null, carry: l.carry || 0, timedOut: false, escaped: 0 });
   });
-  onGameHook("waveWillEnd", function (e) { const w = B.waves[B.waves.length - 1]; if (w && !e.byQuota) { w.timedOut = true; w.aliveAtCap = e.alive; } });
-  onGameHook("waveDrained", function (e) { const w = B.waves[B.waves.length - 1]; if (w && !e.byQuota) w.escaped = e.detonated; });
+  // Z5: the plates alive at the cap leave at once, so escaped = alive at the cap (+ any a drain timeout detonated)
+  onGameHook("waveWillEnd", function (e) { const w = B.waves[B.waves.length - 1]; if (w && !e.byQuota) { w.timedOut = true; w.aliveAtCap = e.alive; w.escaped = e.alive | 0; } });
+  onGameHook("waveDrained", function (e) { const w = B.waves[B.waves.length - 1]; if (w && !e.byQuota) w.escaped += e.detonated | 0; });
   onGameHook("hullDamage", function (e) { B.dmg += e.dmg; });
   onGameHook("sectorCardWillShow", function () { B.lastCard = { hp: this.player.hp, maxHp: this.player.maxHp }; if (!B.hullIn) B.hullIn = B.lastCard; });
 });

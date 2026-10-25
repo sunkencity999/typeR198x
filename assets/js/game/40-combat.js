@@ -219,7 +219,13 @@ Object.assign(Game.prototype, {
         this.waveT += dt;
         this.tickSpawner(dt, cfg);
         const wt = this.waveTuningNow();
-        if (this.waveKills >= this.waveQuota() || this.waveT >= (wt ? wt.cap : cfg.cap)) this.endWave();
+        if (this.waveKills >= this.waveQuota()) this.endWave();
+        else if (this.waveT >= (wt ? wt.cap : cfg.cap)) {
+          // Lead ruling Z5: the cap times a wave out only with plates on the field. An empty field means the pilot has
+          // killed everything that spawned, so the cap lifts for this wave and it ends by quota.
+          if (this.countAliveEnemies() > 0) this.endWave();
+          else if (wt) wt.cap = Infinity;
+        }
         break;
       }
       case "drain": {

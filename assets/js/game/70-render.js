@@ -39,6 +39,8 @@ const DIM_BAND_ALPHA = 0.45;
 const IMPACT_FRAME_S = 0.09;        // white / danger plate before the .2 s fade
 const DYING_FADE_S = 0.2;
 const DYING_PLATES_CAP = 24;
+const ESCAPE_PLATE_S = 0.6;         // PACE Z5: a timed-out wave's plates warp back out to the right (fade only, reduced motion)
+const ESCAPE_PLATE_DX = 520;
 const RAIL_FROM = 0.40;
 const RAIL_STROKE_ALPHA = 0.20;     // ARCADE D12 (was .12): rail hairline alpha, times the rail fade (>= .35 while plates live)
 const VISTA_DRIFT_PX = 20;          // tenth-sector foreground drift amplitude
@@ -959,7 +961,9 @@ Object.assign(Game.prototype, {
   // ------------------------- Dying plates (lifecycle ceremony, L12) -------------------------
   // Records a plate's last frame so it can leave with a ceremony after the entity is compacted away:
   // kill: white impact plate 1.25 -> 1 over 90 ms, then a .2 s fade; slam (contact leak): danger plate 90 ms with
-  // the text struck through, then the fade; detonate: fade only; collect (capsule): scale 1 -> 1.3 + fade over .18 s.
+  // the text struck through, then the fade; detonate: fade only; collect (capsule): scale 1 -> 1.3 + fade over .18 s;
+  // escape (PACE Z5, a timed-out wave): plate and word warp back out to the right and fade over .6 s (fade in place
+  // under reduced motion).
   notePlateDeath(en, mode = "kill", at = null) {
     if (!en) return null;
     const list = this.dyingPlates || (this.dyingPlates = []);
@@ -980,7 +984,7 @@ Object.assign(Game.prototype, {
       progress: en.progress | 0,
       font: capsule ? FONT.target(18, 600) : (en.kind === "bossMinion" ? this.plateGeometry().minionFont : this.plateGeometry().font),
       t: 0,
-      life: mode === "collect" ? 0.18 : (mode === "detonate" ? DYING_FADE_S : IMPACT_FRAME_S + DYING_FADE_S)
+      life: mode === "collect" ? 0.18 : mode === "detonate" ? DYING_FADE_S : mode === "escape" ? ESCAPE_PLATE_S : IMPACT_FRAME_S + DYING_FADE_S
     };
     list.push(rec);
     return rec;
@@ -1007,6 +1011,19 @@ Object.assign(Game.prototype, {
         ctx.globalAlpha *= alpha;
         if (scale !== 1) { ctx.translate(d.x, d.y); ctx.scale(scale, scale); ctx.translate(-d.x, -d.y); }
         this.drawGlyphPlate(ctx, d.x, d.y, d.w, d.h, { state: d.kind === "bossMinion" ? "minion" : "idle", shape: d.shape });
+      } else if (d.mode === "escape") {
+        const k = clamp(d.t / d.life, 0, 1);
+        const dx = rm ? 0 : ESCAPE_PLATE_DX * k * k;
+        scale = rm ? 1 : 1 + 0.3 * k;                       // horizontal stretch, the warp-in streak in reverse
+        ctx.globalAlpha *= 1 - k;
+        d.drawX = d.x + dx;
+        if (scale !== 1) { ctx.translate(d.drawX, d.y); ctx.scale(scale, 1); ctx.translate(-d.drawX, -d.y); }
+        this.drawGlyphPlate(ctx, d.drawX, d.y, d.w, d.h, { state: "idle", shape: d.shape });
+        ctx.font = d.font;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = PALETTE.rgba("text", 0.7);
+        ctx.fillText(d.text, d.drawX, d.y);
       } else if (d.t < IMPACT_FRAME_S) {
         // impact frame: a solid plate (white for a kill, danger for a contact slam), 1.25 -> 1 over 90 ms
         const k = clamp(d.t / IMPACT_FRAME_S, 0, 1);
