@@ -1,7 +1,8 @@
 // t-measure-profile (MEASURE, D6 pilot profile data): schema 2 -> 3 migration, lazy blank profile and Reset save, key /
 // bigram EMAs, the 200-bigram cap, the 16 KB budget, no new storage writes while typing, weak keys / bigram formulas,
-// sessions, speedEma, sector bests, practice sessions and mode bests (R17), the goal line, blocked storage and the
-// hot-path allocation scan. PASS = the feature works.
+// sessions, speedEma, sector bests, practice sessions and mode bests (R17), the goal line, blocked storage, the
+// hot-path allocation scan, and lead ruling Z12's lifetime acquisition EMA (profile.acqEma: additive, absent by default,
+// normalised and capped in typistNormaliseAcq, inside the 16 KB budget). PASS = the feature works.
 // Usage: node tools/playtest/probes/t-measure-profile.mjs
 import { openProbe, sleep, waitFor, installTypist, holdField, startFresh, jumpTo, clearBoss, typeFor, wordSteps, runSteps, dieByLeak, SIGNAL12 } from "./measure_lib.mjs";
 
@@ -33,19 +34,28 @@ const mig = await P.g((src) => {
   const sb = migrateSave(JSON.parse(JSON.stringify(sa)));
   // a hand-edited profile: junk keys, long decimals, an object session row, an invalid row
   const junk = { ...JSON.parse(JSON.stringify(src)), profile: { v: 1, extra: 1, keys: { a: { n: 5.7, err: 0.123456, ms: 210.6 }, A: { n: 3 }, "1": { n: 2 } },
-    bigrams: { th: { n: 9, ms: 330.4 }, tH: { n: 1, ms: 1 } }, speedEma: 41.27, sessions: [[1790000000, "campaign", 2, 41, 95.55, "A", 3000, 4, 80, "kp"], [1, "bogus"], { t: 1790000100000, mode: "drill", sector: 0, speed: 50, acc: 97, rank: null, score: 0, misses: 2, steady: null, weak: "" }] } };
+    bigrams: { th: { n: 9, ms: 330.4 }, tH: { n: 1, ms: 1 } }, speedEma: 41.27, acqEma: 412.7, sessions: [[1790000000, "campaign", 2, 41, 95.55, "A", 3000, 4, 80, "kp"], [1, "bogus"], { t: 1790000100000, mode: "drill", sector: 0, speed: 50, acc: 97, rank: null, score: 0, misses: 2, steady: null, weak: "" }] } };
   const ja = migrateSave(JSON.parse(JSON.stringify(junk)));
   const jb = migrateSave(JSON.parse(JSON.stringify(ja)));
+  // Z12 profile.acqEma: number > 0 -> rounded, capped 10 .. 1500; anything else -> left out; fixed point
+  const acqCases = [412.7, 99999, -5, "300", 3, NaN, null, undefined].map((v) => { const m = typistMigrateProfile({ v: 1, acqEma: v }); return "acqEma" in m ? m.acqEma : "absent"; });
+  const acqOnce = typistMigrateProfile({ v: 1, acqEma: 412.7 });
+  const acqFixed = JSON.stringify(typistMigrateProfile(JSON.parse(JSON.stringify(acqOnce)))) === JSON.stringify(acqOnce);
+  const blankAcq = "acqEma" in typistBlankProfile() || "acqEma" in typistMigrateProfile(null);
   return {
     schema: s.schema, shape, rows: s.highScores.map((h) => h.wpmLegacy), bests: Object.values(s.sectorBests).map((e) => e.wpmLegacy), bestWpm: s.bestWpm,
     idem: clean(a) === clean(b), idemSeeded: clean(sa) === clean(sb), seededLegacy: sa.highScores.length === 1 && sa.highScores[0].wpmLegacy === true,
-    idemJunk: JSON.stringify(ja) === JSON.stringify(jb), junk: ja.profile, secondPassMarksNothing: b.highScores.every((h) => h.wpmLegacy === true)
+    idemJunk: JSON.stringify(ja) === JSON.stringify(jb), junk: ja.profile, secondPassMarksNothing: b.highScores.every((h) => h.wpmLegacy === true),
+    acqCases, acqFixed, blankAcq, migratedAcq: "acqEma" in s.profile
   };
 }, SAVE2);
 P.check("1. schema 2 blob -> schema 3, blank profile shape, highScores and sectorBests flagged wpmLegacy, bestWpm 44 kept; migrateSave is a fixed point (also seeded / hand-edited profiles)",
   mig.schema === 3 && mig.shape && mig.rows.length === 2 && mig.rows.every((v) => v === true) && mig.bests.every((v) => v === true) && mig.bestWpm === 44 &&
   mig.idem && mig.idemSeeded && mig.seededLegacy && mig.idemJunk && Object.keys(mig.junk.keys).join() === "a" && mig.junk.keys.a.n === 5 && mig.junk.keys.a.err === 0.1235 &&
   mig.junk.sessions.length === 2 && mig.junk.sessions[1][1] === "drill" && mig.junk.sessions[1][0] === 1790000100 && !("extra" in mig.junk) && Object.keys(mig.junk.bigrams).join() === "th", mig);
+P.check("1b. Z12 profile.acqEma: absent on a blank / migrated profile without it; 412.7 -> 413, 99999 -> 1500, -5 / '300' / NaN / null / undefined -> left out, 3 -> 10; a fixed point (also inside migrateSave's hand-edited blob)",
+  !mig.blankAcq && !mig.migratedAcq && JSON.stringify(mig.acqCases) === JSON.stringify([413, 1500, "absent", "absent", 10, "absent", "absent", "absent"]) && mig.acqFixed && mig.junk.acqEma === 413 && mig.idemJunk,
+  { acqCases: mig.acqCases, acqFixed: mig.acqFixed, blankAcq: mig.blankAcq, migratedAcq: mig.migratedAcq, junkAcq: mig.junk.acqEma });
 
 // ---- 2. fresh save: profile null until the first key; Reset save ----
 await startFresh(P, "PROFILE");
@@ -115,7 +125,7 @@ const size = await P.g(() => {
   const bigrams = {}; let k = 0; for (const a of L) for (const b of L) if (k++ < 200) bigrams[a + b] = { n: 12345, ms: 1234 };
   const sessions = []; for (let i = 0; i < 100; i++) sessions.push([1761234567 + i, "campaign", 10, 123, 96.5, "A", 123456, 123, 78, "kpt"]);
   const sectorBest = {}; for (let i = 1; i <= 10; i++) sectorBest[String(i)] = { speed: 123, acc: 99.5, t: 1761234567 };
-  g.save.profile = { v: 1, keys, bigrams, speedEma: 123.4, thrEma: 123.4, speedN: 123456, sessions, sectorBest, bests: { speed: 123, ceiling: 123, drill: { speed: 123, acc: 99.5 } }, days: { n: 1234, last: 20261023 } };
+  g.save.profile = { v: 1, keys, bigrams, speedEma: 123.4, thrEma: 123.4, speedN: 123456, sessions, sectorBest, bests: { speed: 123, ceiling: 123, drill: { speed: 123, acc: 99.5 } }, days: { n: 1234, last: 20261023 }, acqEma: 1500 };
   g._ty.saveRef = null;                    // re-hydrate the typed tables from the injected profile
   g.typistState();
   storeSave(g.save);
@@ -123,10 +133,10 @@ const size = await P.g(() => {
   const first0 = g.save.profile.sessions[0][0];
   const out = g.typistEndSession({ mode: "drill" });
   const p = g.save.profile;
-  return { len0, len1: JSON.stringify(p).length, count: p.sessions.length, first0, first1: p.sessions[0][0], lastMode: p.sessions[p.sessions.length - 1][1], out };
+  return { len0, len1: JSON.stringify(p).length, count: p.sessions.length, first0, first1: p.sessions[0][0], lastMode: p.sessions[p.sessions.length - 1][1], acq: p.acqEma, out };
 });
-P.check("5. worst-case profile (26 keys, 200 bigrams, 100 max rows, 10 sector bests) <= 16,384 B; a 101st session drops the oldest",
-  size.len0 <= 16384 && size.len1 <= 16384 && size.count === 100 && size.first1 === size.first0 + 1 && size.lastMode === "drill", size);
+P.check("5. worst-case profile (26 keys, 200 bigrams, 100 max rows, 10 sector bests, Z12 acqEma 1500) <= 16,384 B; a 101st session drops the oldest",
+  size.len0 <= 16384 && size.len1 <= 16384 && size.count === 100 && size.first1 === size.first0 + 1 && size.lastMode === "drill" && size.acq === 1500, size);
 
 // ---- 6. typing adds no storage writes ----
 await P.goto("fresh");
@@ -314,7 +324,8 @@ P.check("13. storage blocked (setItem throws): 20 s of play without page errors,
 
 // ---- 14. hot-path allocation scan ----
 const scan = await P.g(() => {
-  const names = ["typistOnCorrect", "typistOnMiss", "typistHudAcc", "typistHudWpm", "typistDrawOverlay", "typistAttempt", "typistAddInterval", "typistNearest", "typistPopBlocked"];
+  const names = ["typistOnCorrect", "typistOnMiss", "typistHudAcc", "typistHudWpm", "typistDrawOverlay", "typistAttempt", "typistAddInterval", "typistNearest", "typistPopBlocked",
+    "typistAcqKey", "typistAcqOff", "typistAcqArm", "typistAcqTargetUp", "typistAddAcquire", "typistAcquireMs"];   // + Z12 acquisition gap
   const rules = [[/\bnew\s/, "new"], [/\.map\(/, ".map("], [/\.filter\(/, ".filter("], [/\.slice\(/, ".slice("], [/\.concat\(/, ".concat("], [/JSON\./, "JSON."], [/`/, "template literal"],
     [/(^|[=(,:?!&|;{]|return)\s*\[/m, "array literal"], [/(^|[=(,:?!&|;]|return)\s*\{/m, "object literal"], [/\.\.\./, "spread"]];
   const hits = [];
@@ -326,7 +337,7 @@ const scan = await P.g(() => {
   }
   return { names: names.length, hits };
 });
-P.check("14. hot path (typistOnCorrect / OnMiss / HudAcc / HudWpm / DrawOverlay + helpers): no new, .map / .filter / .slice / .concat, JSON, template, array or object literals", scan.hits.length === 0, scan);
+P.check("14. hot path (typistOnCorrect / OnMiss / HudAcc / HudWpm / DrawOverlay + helpers, Z12 acquisition gap): no new, .map / .filter / .slice / .concat, JSON, template, array or object literals", scan.hits.length === 0, scan);
 
 // ---- 15. 40-save.js beside an older 00-util.js (no hook registry; release finding RET-3) ----
 const mixed = await P.g(async () => {
