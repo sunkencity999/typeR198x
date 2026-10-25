@@ -2408,6 +2408,21 @@ fieldset.shipGrid > legend {
   .wordmark { font-size: clamp(32px, 4vw, 52px); }
   .pressStart { margin: var(--sp-2) 0; }
 }
+/* Laptops (release review J1): the mode deck made the left column ~120 px taller, so with a saved run the footer
+   (Records -> Flight log, How to play, Settings, Reset save) fell below the menu scroller's fold at 1440 x 900,
+   1366 x 768 and 1280 x 800. It sticks to the scroller's bottom edge instead (the results bar pattern: the negative
+   inset cancels the .screen's bottom padding); the half-covered sector row under it is the scroll cue, and at the end
+   of the scroll it sits in flow and covers nothing. Phone landscape (8 px padding, its own layout) is left alone. */
+@media (min-width: 901px) and (min-height: 521px) {
+  .screen--menu .menuFooterRow {
+    position: sticky;
+    bottom: calc(-1 * var(--sp-5));
+    z-index: 1;
+    background: rgba(5, 6, 11, .94);
+  }
+  /* A control reached by Tab / arrows is scrolled into view above the footer (53 px tall; trapFocus, onSectorGridKey). */
+  .screen--menu { scroll-padding-bottom: 64px; }
+}
 
 /* Pause as a cockpit: run summary + actions left, settings right (fits 1280x720 without scrolling) */
 @media (min-width: 900px) {

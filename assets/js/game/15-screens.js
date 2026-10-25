@@ -436,7 +436,10 @@ Object.assign(Game.prototype, {
     if (next < 0) return;
     e.preventDefault();
     cards.forEach((c, i) => c.setAttribute("tabindex", i === next ? "0" : "-1"));
-    try { cards[next].focus({ preventScroll: true }); } catch (_) { /* no focus */ }
+    try {
+      cards[next].focus({ preventScroll: true });
+      cards[next].scrollIntoView({ block: "nearest" });   // release review J1: clear of the menu's sticky footer
+    } catch (_) { /* no focus */ }
   },
 
   // Sector tile -> confirm when a run is at stake -> audio unlock -> startSector(i) (20-run.js).

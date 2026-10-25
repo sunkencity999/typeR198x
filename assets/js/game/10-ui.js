@@ -663,8 +663,10 @@ Object.assign(Game.prototype, {
     e.preventDefault();
     try {
       next.focus({ preventScroll: true });
-      // review R5: a control inside a scrolling modal body (the help summaries) stays visible once focused.
-      if (next.closest(".modalBody")) next.scrollIntoView({ block: "nearest" });
+      // review R5: a control inside a scrolling modal body (the help summaries) stays visible once focused. Release
+      // review J1 / B-PERF-A11Y-1: the same inside a scrolling .screen (the title menu under its sticky footer, the mode
+      // results share row under the sticky actions); scroll-padding / scroll-margin in style.css clear the bars.
+      if (next.closest(".modalBody, .screen")) next.scrollIntoView({ block: "nearest" });
     } catch (_) {}
   },
 

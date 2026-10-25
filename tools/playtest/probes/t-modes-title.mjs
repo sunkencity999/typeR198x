@@ -56,6 +56,42 @@ await page.setViewportSize({ width: 1440, height: 900 });
 P.check("T3 1440x900 and 1280x720: deck inside the viewport and #screenMenu; sector grid 5 x 2 inside #screenMenu; no page scroll either way",
   Object.values(t3).every((l) => l.deckIn && l.gridIn && l.rows === 2 && l.cols === 5 && l.sh <= l.ih && l.sw <= l.iw), t3);
 
+// T3c (release review J1): the deck made the left column ~120 px taller; with a saved run (F5) the menu footer must stay
+// reachable without scrolling on laptop windows, and at the end of the scroll it must cover no sector tile.
+const t3c = {};
+for (const [w, h] of [[1536, 864], [1440, 900], [1440, 790], [1366, 768], [1280, 800], [1280, 720]]) {
+  await page.setViewportSize({ width: w, height: h });
+  await sleep(350);
+  t3c[`${w}x${h}`] = await P.g(() => {
+    const m = document.getElementById("screenMenu");
+    const hit = (el) => { const b = el.getBoundingClientRect(); const e = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2); return !!e && (e === el || el.contains(e)); };
+    const foot = ["btnRecords", "btnBriefing", "btnHelp", "btnMenuSettings", "btnResetSave"].map((id) => document.getElementById(id));
+    m.scrollTop = 0;
+    const top = foot.every(hit);
+    m.scrollTop = m.scrollHeight;
+    const end = [...document.querySelectorAll("#sectorGrid .sectorCard")].every(hit) && foot.every(hit);
+    const r = { top, end, overflow: m.scrollHeight - m.clientHeight };
+    m.scrollTop = 0;
+    return r;
+  });
+  // Tab from the Endless tile reaches the sector grid's stop; trapFocus scrolls it clear of the sticky footer.
+  await page.focus("#btnEndless");
+  await page.keyboard.press("Tab");
+  await sleep(120);
+  t3c[`${w}x${h}`].tab = await P.g(() => {
+    const a = document.activeElement, b = a.getBoundingClientRect();
+    let own = 0;
+    for (const fx of [0.1, 0.5, 0.9]) for (const fy of [0.1, 0.5, 0.9]) { const e = document.elementFromPoint(b.left + b.width * fx, b.top + b.height * fy); if (e && (e === a || a.contains(e))) own++; }
+    const r = { el: a.classList.contains("sectorCard") ? "sector" + a.dataset.level : a.id, own };
+    document.getElementById("screenMenu").scrollTop = 0;
+    return r;
+  });
+}
+await page.setViewportSize({ width: 1440, height: 900 });
+await sleep(300);
+P.check("T3c saved run at 1536x864 / 1440x900 / 1440x790 / 1366x768 / 1280x800 / 1280x720: the menu footer (Records, Re-read briefing, How to play, Settings, Reset save) is hit-testable at scrollTop 0; at the end of the scroll every sector tile and the footer are; Tab from #btnEndless lands on a sector tile that is wholly visible (9/9 points, review J1)",
+  Object.values(t3c).every((r) => r.top && r.end && /^sector\d+$/.test(r.tab.el) && r.tab.own === 9), t3c);
+
 // T4 phones (touch)
 const t4 = {};
 for (const [w, h] of [[390, 844], [844, 390]]) {
