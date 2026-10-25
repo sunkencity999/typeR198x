@@ -310,7 +310,8 @@ Object.assign(Game.prototype, {
   // ------------------------- Counter-Signal (ARCADE D10) -------------------------
   // From sector 2 a boss arms a surge min(COUNTER_SIGNAL.firstAtS, surgeEvery) s after the intro unlock, then every
   // surgeEvery s; it starts at a segment start and covers the whole segment: window surgeWindow(chars, L, slow, hand
-  // speed), the table's surgeDuration or 1.5 x the pilot's time for the segment, whichever is longer (Z6).
+  // speed), the table's surgeDuration or COUNTER_SIGNAL.fairMul (1.75) x the pilot's time for the segment, whichever
+  // is longer (Z6).
   // Finishing the word counters it (bonus, the bolt reflects into the boss); otherwise it fires from the boss's aim
   // point (DAMAGE.surge, the word starts over with a scramble). At most maxFiredPerPhase fired surges per phase.
   // Telegraph: red glow on the art (drawCounterSignalGlow), the slab outline pulse (70-render.js drawBossSlab), the DOM

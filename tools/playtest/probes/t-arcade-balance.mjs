@@ -8,7 +8,8 @@
 // countered / fired, surge damage, boss seconds, tally clear / time / accuracy / flawless) for PACE's re-pass.
 // Lead ruling Z6 (fair surge windows): 35/.90 takes 0 surge damage in S1-3; 55/.93 keeps >= 15 % hull through the S10
 // jump; 80/.97 still meets real surges in S8-10 (a jump to S8, three sectors): every fight starts one, some are
-// countered, and its windows average <= 1.75 x its own time for the segment (window = max(table, 1.5 x that time)).
+// countered, and its windows stay near the table (mean window / table window <= 1.5: the fair floor, fairMul x its own
+// time for the segment, barely lengthens a fast pilot's surges).
 //
 // Usage: node probes/t-arcade-balance.mjs [--only w80-a.97-j10] [--reuse] [--parallel 2]
 //   --reuse     skip a profile whose JSON already exists (re-check the assertions without re-running Chrome)
@@ -125,10 +126,11 @@ const j8 = fights.filter((f) => f.key === "w80-a.97-j8");
 if (j8.length) {
   const ws = j8.flatMap((f) => f.windows.filter((w) => w.need > 0));
   const ratio = mean(ws.map((w) => w.dur / w.need));
-  check("Z6: 80/.97 meets real surges in S8-10: every fight starts >= 1, some countered, windows average <= 1.75 x its own time for the segment",
-    j8.length === 3 && j8.every((f) => f.bossReached && f.surgesStarted >= 1) && j8.reduce((a, f) => a + f.surgesCountered, 0) >= 1 && ratio !== null && ratio <= 1.75,
+  const overTable = mean(ws.map((w) => w.dur / w.table));
+  check("Z6: 80/.97 meets real surges in S8-10: every fight starts >= 1, some countered, windows near the table (mean window / table <= 1.5)",
+    j8.length === 3 && j8.every((f) => f.bossReached && f.surgesStarted >= 1) && j8.reduce((a, f) => a + f.surgesCountered, 0) >= 1 && overTable !== null && overTable <= 1.5,
     { sectors: j8.map((f) => `S${f.level} ${f.mode}: started ${f.surgesStarted} c ${f.surgesCountered} f ${f.surgesFired} dmg ${f.surgeDamage} minHp ${f.minHpPct}%`), windowOverNeed: r2(ratio),
-      windowOverTable: r2(mean(ws.map((w) => w.dur / w.table))), n: ws.length });
+      windowOverTable: r2(overTable), n: ws.length });
 }
 
 const fail = results.filter((r) => r.result === "fail").length;

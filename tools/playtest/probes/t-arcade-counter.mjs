@@ -1,6 +1,7 @@
 // t-arcade-counter (ARCADE D10 Counter-Signal, ~2.5 min, DPR 1 + a DPR 2 budget context): the table and window
-// numbers, the fair window (lead ruling Z6: never shorter than 1.5 x the pilot's time for the segment at their hand
-// speed, run else lifetime else 30 WPM, never shorter than the table), sector 1 never surging, the first surge of a
+// numbers, the fair window (lead ruling Z6: never shorter than COUNTER_SIGNAL.fairMul (1.75, the ruling's floor 1.5) x
+// the pilot's time for the segment at their hand speed, run else lifetime else 30 WPM, never shorter than the table),
+// sector 1 never surging, the first surge of a
 // sector-2 fight at 6.0 s at a segment start with the whole segment (slow widen and the 30 WPM fair window for an
 // unknown speed), the pending start on the keystroke that opens the next segment, the
 // telegraph (DOM charge bar, meter class, art glow and slab outline draws), the fail (damage 8 + 2L, the word starts
@@ -57,7 +58,7 @@ const t1 = await P.g(() => ({
   cs: { fromLevel: COUNTER_SIGNAL.fromLevel, firstAtS: COUNTER_SIGNAL.firstAtS, maxFiredPerPhase: COUNTER_SIGNAL.maxFiredPerPhase, slowWpm: COUNTER_SIGNAL.slowWpm, slowWiden: COUNTER_SIGNAL.slowWiden }
 }));
 const near = (a, b, e = 1e-9) => Math.abs(a - b) <= e;
-// 1b. Z6 fair window: surgeWindow(chars, L, slow, handWpm) = max(table, 1.5 x chars x 12 / handWpm), 30 WPM when unknown;
+// 1b. Z6 fair window: surgeWindow(chars, L, slow, handWpm) = max(table, 1.75 x chars x 12 / handWpm), 30 WPM when unknown;
 //     counterSignalWindow() reads pilotWpm("base") (run, else lifetime) through a stubbed MEASURE speed
 const t1b = await P.g(() => {
   const g = window.game, orig = g.typistSpeed;
@@ -71,9 +72,9 @@ const t1b = await P.g(() => {
   delete g.typistSpeed;
   return out;
 });
-P.check("1b. Z6: surgeWindow(6,2,slow,unknown) 3.6 (30 WPM fair > 2.88), (6,2,40 WPM) 2.7 > 2.4, (6,10,100 WPM) table 1.32, (10,10,74 WPM) 2.43 > 1.8; counterSignalWindow from run 30 -> 3.6, run n<20 + lifetime 40 -> 2.7, no speed -> 3.6, run 100 at S10 -> 1.32",
-  near(t1b.fn[0], 3.6) && near(t1b.fn[1], 2.7) && near(t1b.fn[2], 1.32) && near(t1b.fn[3], 1.5 * 10 * 12 / 74) && near(t1b.fn[4], 0.6) && t1b.cs[0] === 1.5 && t1b.cs[1] === 30
-  && near(t1b.run30, 3.6) && near(t1b.life40, 2.7) && near(t1b.none, 3.6) && near(t1b.fast10, 1.32), t1b);
+P.check("1b. Z6 (fairMul 1.75 >= the ruling's 1.5, fairWpm 30): surgeWindow(6,2,slow,unknown) 4.2 (> 2.88), (6,2,40 WPM) 3.15 > 2.4, (6,10,100 WPM) table 1.32, (10,10,74 WPM) 2.84 > 1.8; counterSignalWindow from run 30 -> 4.2, run n<20 + lifetime 40 -> 3.15, no speed -> 4.2, run 100 at S10 -> 1.32",
+  near(t1b.fn[0], 4.2) && near(t1b.fn[1], 3.15) && near(t1b.fn[2], 1.32) && near(t1b.fn[3], 1.75 * 10 * 12 / 74) && near(t1b.fn[4], 0.6) && t1b.cs[0] === 1.75 && t1b.cs[1] === 30
+  && near(t1b.run30, 4.2) && near(t1b.life40, 3.15) && near(t1b.none, 4.2) && near(t1b.fast10, 1.32), t1b);
 P.check("1. surgeEvery [null,20,20,14,13,12,11,10,9,8]; perChar(2/6/10) .30/.21/.12; surgeDuration(6,2) 2.4, (6,10) 1.32, (6,10,slow) 1.584; SCORE.par(100,5) = 100/(0.9 x 3.7)",
   JSON.stringify(t1.every) === JSON.stringify([null, 20, 20, 14, 13, 12, 11, 10, 9, 8]) && near(t1.pc[0], 0.30) && near(t1.pc[1], 0.21) && near(t1.pc[2], 0.12)
   && near(t1.d[0], 2.4) && near(t1.d[1], 1.32) && near(t1.d[2], 1.584) && near(t1.par, 100 / 3.33) && near(t1.par2, 100 / (0.9 * 1.7))
@@ -93,9 +94,9 @@ await waitFor(P, () => window.__cs.events.some((e) => e.result === "start" && e.
 const t3 = await P.g(() => {
   const C = window.__cs, e = C.events.find((x) => x.result === "start" && x.level === 2);
   const s = window.game.boss.surge;
-  return { dt: e ? e.playClock - C.unlockAt : null, e, surge: s && { ...s }, expDur: e ? Math.max(surgeDuration(e.chars, 2, true), 1.5 * e.chars * 12 / 30) : null, segLen: e && e.segment ? e.segment.length : null, liveWpm: window.game.pilotWpm("window") };
+  return { dt: e ? e.playClock - C.unlockAt : null, e, surge: s && { ...s }, expDur: e ? Math.max(surgeDuration(e.chars, 2, true), COUNTER_SIGNAL.fairMul * e.chars * 12 / 30) : null, segLen: e && e.segment ? e.segment.length : null, liveWpm: window.game.pilotWpm("window") };
 });
-P.check("3. sector 2: first surge 6.0 +- 0.3 s after the unlock, progress 0, chars === segment length, slow (no speed yet), dur === max(surgeDuration(chars, 2, true), Z6 1.5 x chars x 12 / 30 WPM)",
+P.check("3. sector 2: first surge 6.0 +- 0.3 s after the unlock, progress 0, chars === segment length, slow (no speed yet), dur === max(surgeDuration(chars, 2, true), Z6 fairMul x chars x 12 / 30 WPM)",
   t3.e && Math.abs(t3.dt - 6.0) <= 0.3 && t3.e.progress === 0 && t3.e.chars === t3.segLen && t3.e.slow === true && t3.surge && near(t3.surge.dur, t3.expDur) && t3.liveWpm === null,
   { dt: t3.dt && Math.round(t3.dt * 1000) / 1000, chars: t3.e && t3.e.chars, segLen: t3.segLen, slow: t3.e && t3.e.slow, dur: t3.surge && t3.surge.dur, expDur: t3.expDur, pilotWindow: t3.liveWpm });
 
