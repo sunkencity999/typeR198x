@@ -80,15 +80,27 @@ const PoolW = ["skylines", "galaxies", "moonbeam", "starship", "sunbeams", "cros
 let wi = 0;
 const nextWords = (n) => Array.from({ length: n }, () => PoolW[(wi++) % PoolW.length]);
 // Typing plan: each word is pushed as a plate just before its first key; extra = [{ afterWord, steps(t) }].
-function plan(words, ms, { start = 40, hold = true } = {}) {
+// gap: extra ms between two words, with the next plate already up (a between-target pause inside the 600 ms grace: the
+// arc keeps filling, no interval is added), so MEASURE's 20th interval comes later than a fresh pilot's first activation.
+function plan(words, ms, { start = 40, hold = true, gap = 0 } = {}) {
   const steps = [];
   let t = start;
-  for (const w of words) {
-    if (hold) steps.push({ at: t - 20, hold: true });
-    steps.push({ at: t - 10, plate: w });
+  words.forEach((w, i) => {
+    const up = t;
+    if (i && gap) t += gap;
+    if (hold) steps.push({ at: up - 20, hold: true });
+    steps.push({ at: up - 10, plate: w });
     for (const ch of w) { steps.push({ at: t, ch }); t += ms; }
-  }
+  });
   return { steps, end: t };
+}
+// A fresh pilot's first Overdrive (checks 2 and 2b): three words at 120 ms / key (100 WPM) with 400 ms between words
+// activate it at ~2.5 s while T is the provisional 25 WPM floor, before the 20th interval (~3.7 s); the next words at
+// 90 ms / key (133 WPM) keep it on once T meets 1.05 x the run speed (Z2), whatever the timer jitter.
+function firstOdPlan() {
+  const a = plan(nextWords(3), 120, { gap: 400 });
+  const b = plan(nextWords(2), 90, { start: a.end + 120 });
+  return { steps: [...a.steps, ...b.steps], end: b.end };
 }
 const run = (T, steps) => T.g((s) => window.__odrun(s), steps);
 const od = (T = P) => T.g(() => { const S = window.game._od; return { on: window.game.overdriveOn === true, charge: S.charge, burst: S.burst, threshold: S.threshold, count: S.count, clock: S.clock, reason: S.lastReason, ventT: S.ventT, activations: S.activations }; });
@@ -111,12 +123,12 @@ const t1 = await P.g(() => {
 P.check("1. overdriveState() fields; fresh threshold 25 (no run / lifetime speed); stubbed run 60 (n 50) -> pilotWpm('run') 60 and threshold 63; n 19 -> run ignored (25)",
   t1.missing.length === 0 && t1.typed && t1.fresh.T === 25 && t1.fresh.S === 25 && t1.fresh.run === null && t1.fresh.base === null && t1.stub.run === 60 && near(t1.stub.T, 63) && t1.stubFew.run === null && t1.stubFew.T === 25 && t1.measure, t1);
 
-// 2-4. Run A at 120 ms / key (100 WPM) on a fresh pilot (T 25): words, a SHIELD capsule, more words
+// 2-4. Run A on a fresh pilot (T 25): 100 WPM words (firstOdPlan), a SHIELD capsule and more words at 133 WPM
 await P.g(() => { window.__od.sample = true; window.__od.frames.length = 0; window.__od.keyT.length = 0; });
-const A1 = plan(nextWords(5), 120);
+const A1 = firstOdPlan();
 const capT = A1.end;
-const capSteps = [{ at: capT - 20, hold: true }, { at: capT - 10, capsule: "SHIELD" }, ...[..."shield"].map((ch, k) => ({ at: capT + k * 120, ch }))];
-const A2 = plan(nextWords(4), 120, { start: capT + 6 * 120 });
+const capSteps = [{ at: capT - 20, hold: true }, { at: capT - 10, capsule: "SHIELD" }, ...[..."shield"].map((ch, k) => ({ at: capT + k * 90, ch }))];
+const A2 = plan(nextWords(4), 90, { start: capT + 6 * 90 });
 await run(P, [...A1.steps, ...capSteps, ...A2.steps]);
 await P.g(() => { window.__od.sample = false; });
 const A = await P.g(() => { const O = window.__od; return { ev: O.ev.slice(), key2: O.keyT[1], ann: O.ann.slice(), frames: O.frames.slice(), lasers: O.lasers.slice(), floaters: O.floaters.slice(), score: O.score.slice(), on: window.game.overdriveOn === true }; });
@@ -399,7 +411,7 @@ async function freshContext(tag, name, opts = {}) {
   await R.g(() => { const g = window.game, ts = g.save.tutorialSeen; ts.lock = ts.finish = ts.release = ts.accuracy = true; g.tutorialToast("powerup", "TYPE SHIELD TO GRAB IT", 20000); });
   await R.g(() => { window.__od.sample = true; });
   wi = 0;
-  await run(R, plan(nextWords(5), 120).steps);
+  await run(R, firstOdPlan().steps);
   const tip = await R.g(() => ({ on: window.game.overdriveOn === true, enabled: window.game.tutorialEnabled(), toasts: [...document.querySelectorAll(".toast")].map((e) => e.textContent) }));
   P.check("2b. first Overdrive on a save with an S1 tutorial tip up: the Overdrive tip stacks beside it (own toast key), the tutorial tip stays",
     tip.on && tip.enabled && tip.toasts.includes("TYPE SHIELD TO GRAB IT") && tip.toasts.some((t) => /^OVERDRIVE — FAST AND CLEAN/.test(t)), tip);
