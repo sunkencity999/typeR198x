@@ -53,7 +53,7 @@ const PACE_DIFF_CADET = Object.freeze({ id: "cadet", score: PACE.cadetScore, dam
 // Copy (spec-pace 16.1). Every line that shows also reaches announce().
 const PACE_COPY = {
   timeout: (n) => (n > 0 ? `WAVE TIMED OUT · ${n} ESCAPED` : "WAVE TIMED OUT"),
-  timeoutSay: (w, n, carried) => (n > 0 ? `Wave ${w + 1} timed out. ${n} escaped${carried ? ` and join wave ${w + 2}` : ""}.` : `Wave ${w + 1} timed out.`),
+  timeoutSay: (w, n, carried) => (n > 0 ? `Wave ${w + 1} timed out. ${n} escaped${carried ? ` and join${n === 1 ? "s" : ""} wave ${w + 2}` : ""}.` : `Wave ${w + 1} timed out.`),
   hullLine: (pct, rep) => (rep > 0 ? `HULL ${pct}% · REPAIRED +${rep}%` : `HULL ${pct}%`),
   hullSay: (pct, rep) => (rep > 0 ? `Hull ${pct} percent, repaired ${rep} percent.` : `Hull ${pct} percent.`),
   hullSuffix: (pct, rep) => ` · Hull ${pct}% (+${rep}% repaired)`,

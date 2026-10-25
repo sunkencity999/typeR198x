@@ -1160,7 +1160,7 @@ Object.assign(Game.prototype, {
     const b = p.bests || {};
     const drill = b.drill && b.drill.speed > 0 ? `${b.drill.speed | 0} · ${typistRound(b.drill.acc, 1)}%` : "--";
     const stat = (label, value, cap) => `<div class="flStat"><span class="flStat__label">${label}</span><span class="flStat__value mono">${value}</span>${cap ? `<span class="flStat__cap">${cap}</span>` : ""}</div>`;
-    const stats = `<div class="flStats">${stat("Best WPM", dash(b.speed | 0), (b.speed | 0) > 0 ? "" : `needs a clear with ${TYPIST_BEST_MIN_N} timed keys`)}${stat("Throughput", dash(Math.round(p.thrEma || 0)), "what the stream let you type")}${stat("Days flown", dash(this.typistDaysFlown()))}${stat("Ceiling", dash(b.ceiling | 0))}${stat("Drill", drill)}</div>`;
+    const stats = `<div class="flStats">${stat("Best WPM", dash(b.speed | 0), (b.speed | 0) > 0 ? "" : `needs a clear with ${TYPIST_BEST_MIN_N} timed keys`)}${stat("Throughput", dash(Math.round(p.thrEma || 0)), "what the stream let you type")}${stat("Days flown", dash(this.typistDaysFlown()))}${stat("Ceiling", dash(b.ceiling | 0), "best endless drift")}${stat("Drill", drill, "best 60 s drill")}</div>`;
     // keyboard glyph
     const med = this.typistKeyMedianMs(ty);
     let keyRows = "";

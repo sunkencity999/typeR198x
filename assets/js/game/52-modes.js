@@ -746,7 +746,7 @@ Object.assign(Game.prototype, {
 
   modesStartSpeech(M) {
     if (M.mode === "daily") return `Daily sortie, sector ${M.sector}, ${modesTitleCase(LEVELS[M.levelIndex].bossName)}. Three waves, no boss. ${M.counted ? "Counted attempt." : "Practice, not counted."}`;
-    if (M.mode === "endless") return `Endless drift. The stream starts at ${Math.round(M.cps0 * 12)} words per minute and rises every 20 seconds. The first word that gets through ends the run.`;
+    if (M.mode === "endless") return `Endless drift. The stream starts at ${Math.round(M.cps0 * 12)} words per minute and rises every 20 seconds. The first target that gets through ends the run.`;
     const said = M.weak.map((w) => w.key.toUpperCase());
     if (M.bigram) said.push(M.bigram.bg.toUpperCase().split("").join(" "));
     const list = said.length > 1 ? `${said.slice(0, -1).join(", ")} and ${said[said.length - 1]}` : said[0];
