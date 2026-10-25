@@ -117,8 +117,9 @@ bash tools/deploy-check.sh https://typer198x.com --strict
 shell tokens that disagree or differ from `<meta name="asset-version">`, any script, stylesheet, WebP or
 MP3 with a wrong status or MIME type, the font with a wrong status or a non-font MIME type, a served
 `game.js` failing `node --check`, no served script carrying the `window.SFX` guard, `assets/opt/manifest.js`
-differing from the local one, a ship-card `?v=` that differs from the served manifest version, or a
-missing/incorrect privacy target. Warnings about `immutable`, `Accept-Ranges`, a `/` that does not answer
+differing from the local one, a ship-card `?v=` that differs from the served manifest version, a
+missing/incorrect privacy target, or a served `privacy-policy.html` whose effective date is not the local one
+(an older policy still cached; step 6). Warnings about `immutable`, `Accept-Ranges`, a `/` that does not answer
 200, a font served as `application/octet-stream` or a `game.js` whose `window.SFX` guard sits in another
 script are worth fixing but do not block.
 
@@ -142,7 +143,7 @@ Spot checks by hand:
 curl -sI https://typer198x.com/index.html | grep -i cache-control
 curl -sI https://typer198x.com/privacy-policy.html | grep -i cache-control
 curl -s  https://typer198x.com/ | grep -o 'v=[0-9a-z]*' | sort | uniq -c
-curl -s  https://typer198x.com/privacy-policy.html | grep 'Effective date'    # 24 October 2026
+curl -s  https://typer198x.com/privacy-policy.html | grep 'Effective date'    # 25 October 2026
 ```
 
 ## 7. After the deploy
