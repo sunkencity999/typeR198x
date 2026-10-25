@@ -1,13 +1,17 @@
 // Type-R 198X — PACE track (D2 / D3): pace follows the pilot (paceMul per wave into this.waveTuning), PERFECT WAVE by
 // quota only, WAVE TIMED OUT with quota carry, hull carry from sector 4, the Cadet assist and the diff() row. Loads after
 // 40-combat.js. Hooks consumed: waveWillStart, waveWillEnd, waveDrained, levelWillStart, checkpointRestored,
-// clearWillRepair, results, recordWillSave, gameOverWillShow, levelCompleteWillShow, sectorCardWillShow, modesRunStart (plus
+// clearWillRepair, results, recordWillSave, gameOverWillShow, levelCompleteWillShow, sectorCardWillShow, modesRunStart, leak (plus
 // bossWillApproach: a wave-3 timeout whose drain the sector clock cuts short still gets its callout). Top-level names
 // PACE* / pace*. No per-frame code, no canvas drawing, no save writes of its own (run.pace rides the existing save points).
 //
-// Pace (D2): at every wave boundary paceMul = clamp(0.85 x pilotCps / targetCps, 1.0, 2.5), moving at most 0.35 from
-// the previous wave of the run; pilotCps = MEASURE's run speed (>= 20 intervals), else the profile's lifetime speed
-// (>= 60 intervals, so a Flight Check alone never moves a fresh pilot's S1 W1 off 1.0), else the table. The wave's
+// Pace (D2 + lead ruling Z12): at every wave boundary paceMul = clamp(0.85 x pilotCpsEff / targetCps, 1.0, 2.5), moving
+// at most 0.35 from the previous wave of the run; pilotCpsEff = L / (L / pilotCps + acq / 1000): the hand speed plus the
+// time the pilot takes to find each new target (MEASURE's typistAcquireMs(), 300 ms without it), over the sector's mean
+// target length L in characters (letters 1; paceMeanLen, from WORDS' word / letter / phrase mix). pilotCps = MEASURE's
+// run speed (>= 20 intervals), else the profile's lifetime speed (>= 60 intervals, so a Flight Check alone never moves
+// a fresh pilot's S1 W1 off 1.0), else the table. Safety net (Z12): a wave that times out with no leak in it lowers the
+// next wave's target by 0.35 (floor 1.0); cleared at sector entry and on a checkpoint restore. The wave's
 // tuning (scaffold, 40-combat.js beginWave) gets quota x mul (+ escaped carry), spawn rate x mul, maxEnemies +
 // min(3, round(2 (mul - 1))), plate speed x (1 + 0.15 (mul - 1)) and, from paceMul 1.35, an empty-field top-up to 2 alive.
 // Stakes (D3, lead ruling Z5): a wave's cap is computed from its quota and stream (>= delivery x 1.25 + 4 s, never below
@@ -44,6 +48,7 @@ const PACE = {
   timeoutCalloutS: 1.6,       // WAVE TIMED OUT callout duration
   capDeliveryMul: 1.25,       // Z5: wave cap >= stream delivery of the quota x 1.25 + 4 s, never below the table cap
   capMarginS: 4,
+  acqDefaultMs: 300,          // Z12: the acquisition time (ms) when MEASURE's typistAcquireMs is absent
   paceTagMin: 1.1,            // results tag "PACE xN.N" when the sector's mean paceMul is at least this
   pinMin: 0.5                 // pacePin (probes) lower bound; the normaliser accepts the same range
 };
@@ -106,6 +111,35 @@ function paceWaveCap(cfg, wave, quota, spawnMul) {
   return Math.ceil(100 * Math.max(cfg.cap, PACE.capDeliveryMul * paceDeliveryS(cfg, wave, quota, spawnMul) + PACE.capMarginS)) / 100;
 }
 
+// Z12: the sector's mean target length in characters (letters 1, a two-word plate counts its gap): the quota-weighted
+// mean of what WORDS' word / letter / phrase mix delivers per spawn in its three waves (waveCharsPerEnemy), cached per
+// LEVELS row (the mix is attached at load).
+const PACE_LEN_CACHE = new WeakMap();
+function paceMeanLen(cfg) {
+  if (!cfg || typeof cfg !== "object") return 1;
+  let L = PACE_LEN_CACHE.get(cfg);
+  if (L === undefined) {
+    let n = 0, chars = 0;
+    for (let w = 0; w < 3; w++) {
+      const q = Math.max(1, (cfg.quota && cfg.quota[w]) | 0);
+      n += q;
+      chars += q * waveCharsPerEnemy(cfg, w);
+    }
+    L = Number.isFinite(chars) && chars > 0 ? Math.max(1, chars / n) : 1;
+    PACE_LEN_CACHE.set(cfg, L);
+  }
+  return L;
+}
+
+// Z12: the pilot's effective speed in cps, L / (L / handCps + acqMs / 1000): a target of L characters takes L / handCps
+// at hand speed plus the acquisition. 0 when the hand speed is unknown; acqMs 0 gives the hand speed itself.
+function paceEffCps(handCps, meanLen, acqMs) {
+  if (!(handCps > 0)) return 0;
+  const L = meanLen > 0 ? meanLen : 1;
+  const a = Number.isFinite(acqMs) && acqMs > 0 ? acqMs / 1000 : 0;
+  return a > 0 ? L / (L / handCps + a) : handCps;
+}
+
 // Writes the wave tuning the scaffold spawner reads (40-combat.js tickSpawner / spawnEnemy / tickWaves, 60-hud.js).
 function paceApplyTuning(t, cfg, wave, mul, carry) {
   const w = clamp(wave | 0, 0, 2);
@@ -129,7 +163,7 @@ function paceHullAfterClear(hp, m0, m1) {
 }
 
 function paceFreshState() {
-  return { v: 1, mul: 1, cpMul: 1, applied: null, carry: 0, carryTo: null, waveMuls: [], cadetLevel: 0, usedCadet: false,
+  return { v: 1, mul: 1, cpMul: 1, applied: null, carry: 0, carryTo: null, backoffTo: null, waveMuls: [], cadetLevel: 0, usedCadet: false,
     deaths: { level: 0, n: 0 }, hullNote: null };
 }
 
@@ -150,6 +184,8 @@ function paceNormalizeState(s) {
   const ct = s.carryTo;
   if (obj(ct) && int(ct.level, 1, 10) && int(ct.wave, 1, 2)) f.carryTo = { level: ct.level, wave: ct.wave };
   if (!f.carryTo) f.carry = 0;
+  const bo = s.backoffTo;
+  if (obj(bo) && int(bo.level, 1, 10) && int(bo.wave, 1, 2)) f.backoffTo = { level: bo.level, wave: bo.wave };
   if (Array.isArray(s.waveMuls)) f.waveMuls = s.waveMuls.filter((m) => num(m, PACE.pinMin, PACE.mulMax)).slice(0, 3);
   if (int(s.cadetLevel, 0, 10)) f.cadetLevel = s.cadetLevel;
   if (typeof s.usedCadet === "boolean") f.usedCadet = s.usedCadet;
@@ -181,6 +217,7 @@ function paceNormalizeState(s) {
   on("levelCompleteWillShow", "paceOnLevelCompleteWillShow");
   on("sectorCardWillShow", "paceOnSectorCardWillShow");
   on("modesRunStart", "paceOnModesRunStart");
+  on("leak", "paceOnLeak");
 })();
 
 Object.assign(Game.prototype, {
@@ -213,7 +250,7 @@ Object.assign(Game.prototype, {
   },
 
   paceStats() {
-    return this._paceStats || (this._paceStats = { timeouts: 0, escaped: 0, carried: 0, offers: 0, accepted: 0 });
+    return this._paceStats || (this._paceStats = { timeouts: 0, escaped: 0, carried: 0, offers: 0, accepted: 0, backoffs: 0 });
   },
 
   // ------------------------- D2: pilotCps -------------------------
@@ -250,27 +287,45 @@ Object.assign(Game.prototype, {
     return n;
   },
 
+  // Z12: MEASURE's acquisition time in ms (typistAcquireMs: run EMA, else lifetime, else 300, clamped there), else 300.
+  paceAcquireMs() {
+    if (typeof this.typistAcquireMs === "function") {
+      const v = Number(this.typistAcquireMs());
+      if (Number.isFinite(v) && v >= 0) return v;
+    }
+    return PACE.acqDefaultMs;
+  },
+
   // ------------------------- D2: per-wave pace (waveWillStart) -------------------------
   paceOnWaveWillStart(evt) {
     if (!evt.tuning || !evt.cfg || !this.paceApplies()) return;
     const ps = this.paceState(), cfg = evt.cfg, L = cfg.level, w = clamp(evt.wave | 0, 0, 2), t = evt.tuning;
+    this._paceWaveLeaks = 0;   // Z12: leaks of the wave starting now (paceOnLeak)
     const pinned = Number.isFinite(this._pacePin);
     const a = ps.applied;
     if (!pinned && a && a.level === L && a.wave === w) {
-      // Continue / a wave replayed after a reload: the same tuning, no new step; the replay makes its own carry.
+      // Continue / a wave replayed after a reload: the same tuning, no new step; the replay makes its own carry and back-off.
       paceApplyTuning(t, cfg, w, a.mul, 0);
       t.quota = a.quota;
       t.cap = paceWaveCap(cfg, w, t.quota, a.mul);
       if (ps.carryTo && ps.carryTo.level === L && ps.carryTo.wave === w + 1) { ps.carry = 0; ps.carryTo = null; }
-      this._paceLast = { level: L, wave: w, mul: a.mul, target: null, source: "replay", cps: null, wpm: null, n: null, carry: 0, quota: t.quota };
+      if (ps.backoffTo && ps.backoffTo.level === L && ps.backoffTo.wave === w + 1) ps.backoffTo = null;
+      this._paceLast = { level: L, wave: w, mul: a.mul, target: null, source: "replay", cps: null, wpm: null, n: null, acq: null, len: null, eff: null, backoff: false, carry: 0, quota: t.quota };
       return;
     }
-    let mul, src = null, target = null, source;
+    // Z12 safety net: the previous wave of this sector timed out with no leak, so this wave's target drops by stepMax.
+    const backoff = !!(ps.backoffTo && ps.backoffTo.level === L && ps.backoffTo.wave === w);
+    ps.backoffTo = null;
+    let mul, src = null, target = null, source, acq = null, len = null, eff = null;
     if (pinned) { mul = this._pacePin; ps.mul = mul; source = "pin"; }
     else if (this.paceCadetActive()) { mul = PACE.cadetMul; source = "cadet"; }
     else {
       src = this.pacePilot(cfg);
-      target = paceTargetMul(src.cps, cfg.targetCps);
+      acq = this.paceAcquireMs();
+      len = paceMeanLen(cfg);
+      eff = paceEffCps(src.cps, len, acq);
+      target = paceTargetMul(eff, cfg.targetCps);
+      if (backoff) { target = Math.max(PACE.mulMin, target - PACE.stepMax); this.paceStats().backoffs++; }
       mul = paceStepMul(ps.mul, target);
       ps.mul = mul;
       source = src.source;
@@ -283,7 +338,14 @@ Object.assign(Game.prototype, {
     if (ps.waveMuls.length > w) ps.waveMuls.length = w;
     ps.waveMuls.push(mul);
     this._paceLast = { level: L, wave: w, mul, target: target === null ? null : paceRound2(target), source,
-      cps: src ? paceRound2(src.cps) : null, wpm: src ? Math.round(src.wpm) : null, n: src ? src.n : null, carry, quota: t.quota };
+      cps: src ? paceRound2(src.cps) : null, wpm: src ? Math.round(src.wpm) : null, n: src ? src.n : null,
+      acq: acq === null ? null : Math.round(acq), len: len === null ? null : paceRound2(len), eff: eff === null ? null : paceRound2(eff), backoff, carry, quota: t.quota };
+  },
+
+  // Z12: wave leaks (not boss minions) since the wave started; a timeout with none sets the next wave's back-off.
+  paceOnLeak(evt) {
+    if (this.inBoss || evt.kind === "bossMinion" || this.paceInCheck()) return;
+    this._paceWaveLeaks = (this._paceWaveLeaks | 0) + 1;
   },
 
   // ------------------------- D3: perfect wave by quota, timed-out waves -------------------------
@@ -293,6 +355,10 @@ Object.assign(Game.prototype, {
     evt.clearSfx = false;    // and plays no clear sting
     // Z5: the plates still alive at the cap leave the field now (no explosion); they are the N that escaped.
     this._paceTimeout = { level: evt.level | 0, wave: evt.wave | 0, n: this.paceEscapeLeftovers() };
+    // Z12 safety net: a timeout with no leak in the wave (the pilot missed nothing; the stream outran the clearing)
+    // lowers the next wave's target inside the sector. Wave 3 has no next wave in the sector.
+    const w = evt.wave | 0;
+    if (w < 2 && !(this._paceWaveLeaks > 0) && this.paceApplies()) this.paceState().backoffTo = { level: evt.level | 0, wave: w + 1 };
   },
 
   // Z5: every wave plate still alive leaves (alive false, the "escape" ceremony of 70-render.js): no damage, no score,
@@ -363,6 +429,7 @@ Object.assign(Game.prototype, {
       ps.cpMul = ps.mul;
       ps.carry = 0;
       ps.carryTo = null;
+      ps.backoffTo = null;
       ps.applied = null;
       ps.waveMuls = [];
       if (ps.deaths.level !== L) ps.deaths = { level: L, n: 0 };
@@ -380,6 +447,7 @@ Object.assign(Game.prototype, {
     ps.applied = null;
     ps.carry = 0;
     ps.carryTo = null;
+    ps.backoffTo = null;
     ps.waveMuls = [];
     ps.hullNote = null;
     this._paceTimeout = null;
@@ -593,12 +661,13 @@ Object.assign(Game.prototype, {
     return v;
   },
 
-  // Pure preview: { target, mul, tuning } for a sector / wave / pilot speed / previous paceMul.
-  pacePlan(levelIndex, wave, pilotCps, prev = PACE.mulMin) {
+  // Pure preview: { target, mul, tuning } for a sector / wave / hand speed (cps) / previous paceMul / acquisition time
+  // (ms; Z12, 0 = hand speed alone).
+  pacePlan(levelIndex, wave, pilotCps, prev = PACE.mulMin, acqMs = 0) {
     const i = clamp(levelIndex | 0, 0, 9);
     const cfg = LEVELS[i];
     const w = clamp(wave | 0, 0, 2);
-    const target = paceTargetMul(pilotCps, cfg.targetCps);
+    const target = paceTargetMul(paceEffCps(pilotCps, paceMeanLen(cfg), acqMs), cfg.targetCps);
     const mul = paceStepMul(prev, target);
     const tuning = paceApplyTuning({ levelIndex: i, wave: w, quota: 1, spawnMul: 1, maxEnemiesAdd: 0, speedMul: 1,
       hungryMinAlive: HUNGRY_MIN_ALIVE, cap: cfg.cap, pressureCap: pressureCap(cfg) }, cfg, w, mul, 0);

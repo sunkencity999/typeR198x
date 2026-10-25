@@ -5,7 +5,9 @@
 // once (they warp off to the right, no explosion, no damage) and at the drain end "WAVE TIMED OUT · N ESCAPED"
 // (announced) counts them into the next wave's quota inside the sector, never past wave 3; Retry clears a pending
 // carry; the sector clock cutting a wave-3 drain still gets the callout; reduced motion fades the callout without the
-// slam and fades the leaving plates in place. ~90 s. PASS = the stakes behave as D3 / Z5.
+// slam and fades the leaving plates in place. Lead ruling Z12's safety net: a timeout with no leak in the wave lowers
+// the next wave's target by stepMax (floor 1.0); a timeout with a leak does not; wave 3 sets nothing; a Retry
+// (checkpoint restore) and a sector entry clear a pending back-off. ~100 s. PASS = the stakes behave as D3 / Z5 / Z12.
 // Usage: node tools/playtest/probes/t-pace-stakes.mjs
 import { openProbe, sleep, waitFor, startFresh, jumpTo, errorsCheck } from "./pace_lib.mjs";
 
@@ -175,9 +177,9 @@ await waitFor(P, () => window.game.wave === 2 && window.game.wavePhase === "spaw
 // ---- 4. wave-3 timeout: callout, approach, no carry ----
 await scriptTimeout(["neon", "grid"]);
 await waitFor(P, () => window.game.wavePhase !== "drain", 8000);
-const w3to = await P.g(() => { const g = window.game; const s = g.paceSnapshot(); return { phase: g.wavePhase, titles: [g.callout, ...(g.calloutQueue || [])].filter(Boolean).map((c) => c.title), banner: g.banner && g.banner.eyebrow, carry: s.state.carry, carryTo: s.state.carryTo, modes: { ...window.__stkRec.modes } }; });
-P.check("4. wave 3 times out with 2 alive: they leave, 'WAVE TIMED OUT · 2 ESCAPED' over the WARNING approach banner, the approach starts, nothing carries",
-  w3to.phase === "approach" && w3to.titles.includes("WAVE TIMED OUT · 2 ESCAPED") && w3to.banner === "WARNING" && w3to.carry === 0 && w3to.carryTo === null && w3to.modes.escape === 2 && !w3to.modes.detonate, w3to);
+const w3to = await P.g(() => { const g = window.game; const s = g.paceSnapshot(); return { phase: g.wavePhase, titles: [g.callout, ...(g.calloutQueue || [])].filter(Boolean).map((c) => c.title), banner: g.banner && g.banner.eyebrow, carry: s.state.carry, carryTo: s.state.carryTo, backoffTo: s.state.backoffTo, modes: { ...window.__stkRec.modes } }; });
+P.check("4. wave 3 times out with 2 alive: they leave, 'WAVE TIMED OUT · 2 ESCAPED' over the WARNING approach banner, the approach starts, nothing carries (and no Z12 back-off: no next wave in the sector)",
+  w3to.phase === "approach" && w3to.titles.includes("WAVE TIMED OUT · 2 ESCAPED") && w3to.banner === "WARNING" && w3to.carry === 0 && w3to.carryTo === null && w3to.backoffTo === null && w3to.modes.escape === 2 && !w3to.modes.detonate, w3to);
 
 // ---- 4b. the sector clock cuts a wave-3 drain: the callout still comes (bossWillApproach) with the plates that left ----
 await jumpTo(P, 3);
@@ -202,6 +204,66 @@ const retry = await P.g(() => { const g = window.game; const s = g.paceSnapshot(
 P.check("5. S2: a pending carry of 3 for wave 2, then Retry sector: carry 0, pace back to the checkpoint (cpMul), W1 quota round(10 x paceMul) with no carry",
   pending.carry === 3 && pending.carryTo && pending.carryTo.wave === 1 && retry.carry === 0 && retry.carryTo === null && retry.wave === 0 && retry.cpMul === pending.cpMul &&
   Math.abs(retry.mul - retry.cpMul) <= 0.35 + 1e-9 && retry.quota === Math.round(10 * retry.mul), { pending, retry });
+
+// ---- 7. Z12 safety net: a timeout with no leak lowers the next wave's target by stepMax; cleared by Retry / sector entry ----
+// A stubbed pilot (run speed 110 WPM, acquisition 300 ms) on S4: W1 steps 1.0 -> 1.35 and W2's own target is ~1.58, so the
+// back-off (target - 0.35 ~ 1.23) is visible under the step rule.
+// (the sector's W1 already started at the table pace: applied is dropped so the probe's beginWave(0) is a fresh step from 1.0)
+const stubPilot = () => P.g(() => { const g = window.game; g.speedFor = () => ({ wpm: 110, n: 40 }); g.typistAcquireMs = () => 300; const ps = g.paceState(); ps.applied = null; ps.mul = 1; });
+const unstubPilot = () => P.g(() => { const g = window.game; delete g.speedFor; delete g.typistAcquireMs; });
+const targetS4 = await P.g(() => paceTargetMul(paceEffCps(110 / 12, paceMeanLen(LEVELS[3]), 300), LEVELS[3].targetCps));
+await P.page.emulateMedia({ reducedMotion: "no-preference" });
+await jumpTo(P, 3);
+await stubPilot();
+await scriptTimeout(["neon", "grid", "volt"], 0);   // 2 kills, 0 leaks at the cap
+const bo1 = await P.g(() => { const s = window.game.paceSnapshot(); return { w1: s.last, backoffTo: s.state.backoffTo, stats: s.stats.backoffs }; });
+await waitFor(P, () => window.game.wave === 1 && window.game.wavePhase === "spawn", 8000);
+const bo2 = await P.g(() => { const s = window.game.paceSnapshot(); return { w2: s.last, backoffTo: s.state.backoffTo, stats: s.stats.backoffs }; });
+const want2 = Math.round(Math.min(bo1.w1.mul + 0.35, Math.max(bo1.w1.mul - 0.35, Math.max(1, targetS4 - 0.35))) * 100) / 100;
+P.check("7a. Z12: S4 W1 (1.35) times out with 2 kills and no leak -> backoffTo wave 2; W2 runs from target - 0.35 (floor 1.0) under the step rule, below its own target; the back-off is spent",
+  bo1.w1.mul === 1.35 && bo1.backoffTo && bo1.backoffTo.level === 4 && bo1.backoffTo.wave === 1 && bo2.w2.backoff === true && Math.abs(bo2.w2.target - Math.round(Math.max(1, targetS4 - 0.35) * 100) / 100) < 0.011 &&
+  bo2.w2.mul === want2 && bo2.w2.mul < Math.round(Math.min(1.7, targetS4) * 100) / 100 && bo2.backoffTo === null && bo2.stats === bo1.stats + 1, { targetS4, want2, bo1, bo2 });
+// a timeout with a leak in the wave sets nothing
+await jumpTo(P, 3);
+await stubPilot();
+await resetRec();
+const leakTo = await P.g(() => {
+  const g = window.game;
+  g.beginWave(0);
+  g.enemies.length = 0; g.powerups.length = 0; g.lock = null;
+  g.wavePhase = "spawn"; g.spawnAcc = -1e9; g.hungryT = -1e9; g.waveKills = 2; g.powerAcc = -1e9;
+  const xs = [700, 900, 1100];
+  const plates = ["neon", "grid", "volt"].map((w, i) => { const en = new Enemy({ text: w, x: xs[i], y: LANE_YS[i + 1], speed: 0, lane: i + 1 }); g.enemies.push(en); return en; });
+  g.player.shield = 0; g.invulnT = 0;
+  g.leakEnemy(plates[0]);   // one leak before the cap
+  g.clearBanners();
+  g.waveT = g.waveTuningNow().cap;
+  return { hp: g.player.hp };
+});
+await waitFor(P, () => window.game.wavePhase === "drain", 3000);
+const bo3 = await P.g(() => { const s = window.game.paceSnapshot(); return { backoffTo: s.state.backoffTo, timeout: s.timeout, leaks: window.game._paceWaveLeaks }; });
+await waitFor(P, () => window.game.wave === 1 && window.game.wavePhase === "spawn", 8000);
+const bo4 = await P.g(() => window.game.paceSnapshot().last);
+P.check("7b. Z12: a timeout with a leak in the wave (1 leaked, 2 escaped) sets no back-off; W2 steps toward its own target",
+  bo3.backoffTo === null && bo3.leaks === 1 && bo3.timeout && bo3.timeout.n === 2 && bo4.backoff === false && Math.abs(bo4.target - Math.round(targetS4 * 100) / 100) < 0.011, { bo3, bo4, targetS4 });
+// Retry (checkpoint restore) clears a pending back-off; so does a sector entry
+await jumpTo(P, 3);
+await stubPilot();
+await scriptTimeout(["neon", "grid"], 0);
+const bo5 = await P.g(() => ({ ...window.game.paceSnapshot().state.backoffTo }));
+await P.g(() => window.game.restartLevel());
+await waitFor(P, () => !window.game.levelIntro && window.game.wavePhase === "spawn", 6000);
+const bo6 = await P.g(() => { const s = window.game.paceSnapshot(); return { backoffTo: s.state.backoffTo, w1: s.last }; });
+const bo7 = await P.g(() => {
+  const g = window.game;
+  g.paceState().backoffTo = { level: 4, wave: 1 };
+  g.startLevel(4, { fromMenu: true, fresh: true });   // sector 5 entry
+  const s = g.paceSnapshot();
+  return { backoffTo: s.state.backoffTo, level: g.levelIndex + 1 };
+});
+await unstubPilot();
+P.check("7c. Z12: a pending back-off (S4 W1 clean timeout) is cleared by Retry sector (W1 starts without it) and by a sector entry (S5)",
+  bo5.level === 4 && bo5.wave === 1 && bo6.backoffTo === null && bo6.w1.backoff === false && bo7.backoffTo === null && bo7.level === 5, { bo5, bo6, bo7 });
 
 // ---- 6. reduced motion ----
 await P.page.emulateMedia({ reducedMotion: "reduce" });
