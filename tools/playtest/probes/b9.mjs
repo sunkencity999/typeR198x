@@ -14,7 +14,8 @@ await waitFor(P, () => !window.game.levelIntro, 6000);
 let polledMax = 0;
 const typedKeys = { n: 0 };
 const tStart = Date.now();
-const typed = await typeFor(P, 40, { wpm: 60, accuracy: 0.995, onTick: async (st) => { polledMax = Math.max(polledMax, st.combo || 0); } });
+// PACE (D2) shortens sector 1 (S1 boss at ~30-45 s): stop typing at the approach so the window stays inside the waves.
+const typed = await typeFor(P, 40, { wpm: 60, accuracy: 0.995, onTick: async (st) => { polledMax = Math.max(polledMax, st.combo || 0); }, until: (st) => st.inBoss || st.wavePhase === "approach" });
 const typedS = (Date.now() - tStart) / 1000;
 const hudWpm = await P.g(() => { const s = window.game.typistSpeed("live"); return { hud: document.getElementById("hudWpm").textContent, live: s.wpm == null ? null : Math.round(s.wpm), n: s.n, stats: { chars: window.game.stats.chars, timeMs: window.game.stats.timeMs, correct: window.game.stats.correct, total: window.game.stats.total, maxCombo: window.game.stats.maxCombo } }; });
 // MEASURE (D1): the HUD shows live hand speed (typistSpeed("live"), last 30 intervals); it commits at 5 Hz, so allow the one-commit drift.
