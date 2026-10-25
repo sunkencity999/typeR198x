@@ -70,14 +70,14 @@ the play-test harness has its own [tools/playtest/README.md](./tools/playtest/RE
   of `COMET` with `Space` and take the nearer `LASER`. Nothing can hit you, nothing scores and nothing reaches the
   records; `Esc` or **Skip** goes straight to the sector, and returning pilots never see it. The mission briefing
   opens on three lines (lock, fire, let go) with the full story behind *Read the full briefing*.
-- **Pace follows you.** At every wave the game compares your measured hand speed (this run, else your profile) with
-  the sector's stream and scales it up to 2.5x: more plates at once, a little faster, a bigger quota. It never drops
-  below the table on its own. A wave's time cap always leaves room for its whole stream, and it times the wave out only
-  while plates are still flying: they warp away without damage, the wave pays no perfect-wave bonus and the callout
-  reads `WAVE TIMED OUT · N ESCAPED`; after wave 1 or 2 those N join the next wave. From Sector 4 a clear repairs half
-  of the missing hull and the rest carries (`HULL 72% · REPAIRED +28%` on the next sector card). Two deaths in one
-  sector add **Fly at Cadet pace** to Game Over: 75 % stream and damage, 80 % score, tagged CADET, until that sector
-  is cleared.
+- **Pace follows you.** At every wave the game compares your measured hand speed (this run, else your profile), plus
+  the time you take to find each new target, with the sector's stream and scales it up to 2.5x: more plates at once, a
+  little faster, a bigger quota. It never drops below the table on its own. A wave's time cap always leaves room for
+  its whole stream, and it times the wave out only while plates are still flying: they warp away without damage, the
+  wave pays no perfect-wave bonus and the callout reads `WAVE TIMED OUT · N ESCAPED`; after wave 1 or 2 those N join
+  the next wave. From Sector 4 a clear repairs half of the missing hull and the rest carries
+  (`HULL 72% · REPAIRED +28%` on the next sector card). Two deaths in one sector add **Fly at Cadet pace** to Game
+  Over: 75 % stream and damage, 80 % score, tagged CADET, until that sector is cleared.
 - **Daily sortie, drill, endless drift.** Under Start, the **Daily sortie** flies one sector a day (picked from your
   top three unlocked by the local date), three waves and no boss. Your first finished or failed attempt of the day
   counts; later ones are practice. Its rating is speed x (accuracy / 100)^2 and the medal compares it with the median
@@ -137,13 +137,16 @@ speed (run, else lifetime, else 30 WPM; `surgeWindow`, lead ruling Z6). Boss par
 so the time bonus is a tie-breaker that follows the sector's pace. Word kills use a smaller explosion (the medium
 frames at .55) whose smoke sits under the plates.
 
-The table is the floor: `assets/js/game/42-pacing.js` multiplies each wave's spawn rate and quota by `paceMul =
-clamp(0.85 x pilotCps / targetCps, 1.0, 2.5)` (moving at most 0.35 per wave; pilotCps = this run's hand speed after
-20 intervals, else the profile's after 60, else the table), adds `min(3, round(2 (paceMul - 1)))` to the alive cap and
-`0.15 (paceMul - 1)` to plate speed, and from paceMul 1.35 tops an emptying field up to two plates. An empty field
-spawns after 0.1 s (`HUNGRY_SPAWN_S`) and new plates roll in 10-30 px off-screen (`SPAWN_ROLLIN_PX`). A wave's cap is
-`max(table cap, 1.25 x the stream's delivery time for the paced quota + 4 s)` (`paceWaveCap`, lead ruling Z5) and ends
-the wave only while plates are alive; an empty field lifts it and the wave ends by quota.
+The table is the floor: `assets/js/game/42-pacing.js` multiplies each wave's spawn rate and quota by
+`paceMul = clamp(0.85 x pilotCpsEff / targetCps, 1.0, 2.5)` (moving at most 0.35 per wave; pilotCps = this run's hand
+speed after 20 intervals, else the profile's after 60, else the table; `pilotCpsEff = L / (L / pilotCps + acq / 1000)`
+with L the sector's mean target length and acq MEASURE's `typistAcquireMs()`, lead ruling Z12, see the changelog; a
+wave that times out with no leak in it lowers the next wave's target by 0.35), adds `min(3, round(2 (paceMul - 1)))`
+to the alive cap and `0.15 (paceMul - 1)` to plate speed, and from paceMul 1.35 tops an emptying field up to two
+plates. An empty field spawns after 0.1 s (`HUNGRY_SPAWN_S`) and new plates roll in 10-30 px off-screen
+(`SPAWN_ROLLIN_PX`). A wave's cap is `max(table cap, 1.25 x the stream's delivery time for the paced quota + 4 s)`
+(`paceWaveCap`, lead ruling Z5) and ends the wave only while plates are alive; an empty field lifts it and the wave
+ends by quota.
 
 Every results card stamps a rank from `rankFor(accPct, wpm, hpPts, level)`: accuracy 50 %, speed 30 %, hull 20 %
 (`RANK` in 20-constants.js, thresholds S 0.90 / A 0.75 / B 0.55 / C 0.35, D below). Speed is hand speed (below) and
@@ -424,12 +427,13 @@ flight check was passed or skipped, 0 = not yet; written once, never on quit-to-
 `levelStats`, `spd`, `pace`).
 
 Schema 3 adds `profile` (created on the first key): `keys` (`a`..`z` -> `{n, err, ms}`, attempts, miss EMA .05,
-latency EMA .15), `bigrams` (top 200 by attempts), `speedEma` / `thrEma` / `speedN`, `sessions` (last 100 as rows
+latency EMA .15), `bigrams` (top 200 by attempts), `speedEma` / `thrEma` / `speedN`, `acqEma` (the lifetime
+acquisition EMA in ms, absent until a run reaches 10 samples), `sessions` (last 100 as rows
 `[t, mode, sector, speed, acc, rank, score, misses, steady, weak]`, read through `typistSessions()`; one per campaign
 sector cleared or lost and one per finished daily sortie, drill or endless drift, `speed` 0 under 10 intervals, `acc`
 null under 10 keys), `sectorBest` (campaign clears only), `bests` (`speed`, the campaign Best WPM; `ceiling`, the best
 endless ceiling; `drill`, the best-rated drill `{speed, acc}`) and `days`. The profile is capped at 16,384 B of JSON
-(oldest sessions dropped first; worst case measured 13,088 B). Run records carry `run.spd` and
+(oldest sessions dropped first; worst case measured 13,102 B). Run records carry `run.spd` and
 `levelStats.spdN/spdMs/spdSq/hits`.
 
 `modes` (MODES, created by the first finished mode run, at most 8 KB; 7,129 B measured after 61 days): `daily`
@@ -439,7 +443,8 @@ keyed `YYYYMMDD`, `flown` = counted sorties, `streak {n, last}`), `endless {best
 ends; its session (mode `daily` / `endless` / `drill`) and the ceiling / drill bests go into `profile` through MEASURE.
 
 `run.pace` (PACE, < 400 B, normalised on first read): `{v, mul, cpMul, applied {level, wave, mul, quota} | null,
-carry, carryTo {level, wave} | null, waveMuls[<=3], cadetLevel, usedCadet, deaths {level, n}, hullNote {level, pct,
+carry, carryTo {level, wave} | null, backoffTo {level, wave} | null, waveMuls[<=3], cadetLevel, usedCadet,
+deaths {level, n}, hullNote {level, pct,
 rep, shown} | null}`; `run.hp` after a clear of sectors 4-9 is the repaired hull. Records rows of a run that flew
 Cadet pace carry `difficulty: "cadet"` and `tags: ["CADET"]`; a sector best set at Cadet pace keeps its `tags`.
 ARCADE adds `overdriveMs`, `csCountered` and `csFired` to the run stats and `overdriveMs` / `surgesFired` to the level
@@ -601,6 +606,19 @@ If you stream, teach or hack on typing games, fork the project and share improve
 remixes are welcome.
 
 ## Changelog
+
+### Pace and target acquisition (follow-up to `20261024b`, to ship as `20261025a`)
+
+**Pace counts how quickly you find the next target.** Hand speed only times the keys inside a word, so a pilot who
+also takes a moment to spot each new plate was sent a stream faster than they could clear: waves ran out of time
+with nothing missed and the sector clock cut them short. The game now also measures your acquisition time, from the
+moment a target ends (kill, release, leak) while another one is on screen to the first correct key of your next lock
+(up to 1.5 s, never in boss fights or the flight check; this run's average after ten targets, else your Flight log's,
+else 300 ms, held between 120 and 900 ms; `32-typist.js`, `profile.acqEma`), and paces on `L / (L / hand speed +
+acquisition)` with L the sector's mean target length in characters, about 2 in Sector 1 to 8 in Sector 10
+(`42-pacing.js`, lead ruling Z12). As a safety net, a wave that times out although nothing leaked lowers the next
+wave's pace by one step. With a 300 ms acquisition the harness typists at 55 and 80 WPM now finish Sectors 2-3 with
+no sector-clock cut and every PERFECT WAVE, as on `20261016a`; numbers in `tools/playtest/balance.md`.
 
 ### 2026-10 training update (release token `20261024b`, art token unchanged)
 

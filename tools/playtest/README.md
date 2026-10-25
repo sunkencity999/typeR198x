@@ -326,8 +326,21 @@ Extra one-off scripts live in `probes/` (shipped) or `out/` (ignored). They can 
   [--set knob=value,rollin=a-b] [--acquire-ms N]` / `--matrix [--parallel 2]` — the R26 balance targets (idle share
   S1-3, deaths, damage, rank, time to the S1 boss, min hull, longest idle gap) with a play-clock-paced typist; prints
   per sector idle / deaths / hull in / min hull / per-wave paceMul, quota, carry, timeouts and escaped plates; JSON
-  under `out/t-pace-balance/`. `--acquire-ms` is the Z7 latency (as b10); the latency matrix reports idle share only
-  and keeps the death and damage targets.
+  under `out/t-pace-balance/`. `--acquire-ms` is the Z7 latency (as b10); with it the p55 / p80 runs judge lead
+  ruling Z12's targets (below), S1 idle and the 2 s gap line are reported only, and the death and damage targets stay.
+- **Pace and target acquisition (lead ruling Z12).** The pace now accounts for how quickly the pilot finds the next
+  target, so the balance probes measure it: `t-pace-balance` and `b10` record per wave the acquisition time PACE
+  used (`acq`, from MEASURE's `typistAcquireMs()`), the sector's mean target length, the effective speed, whether
+  the clean-timeout back-off lowered it and the wave's leaks, and per sector whether the sector clock cut the waves
+  (the boss approach began before wave 3's drain) and its PERFECT WAVE count; `b10.mjs` takes `--seed-profile
+  auto|WPM` (a returning pilot, as t-pace-balance). With `--acquire-ms` the p55 / p80 runs of `t-pace-balance` check
+  that no S2 / S3 wave times out with 0 leaks, S2-3 idle <= 15 % and 0 deaths, and `--matrix` prints the S2 / S3
+  clock-cut share and PERFECT WAVE counts of its 55 / 80 runs (Z12: cuts <= 15 % of those sectors over >= 4 runs per
+  profile, PERFECT WAVE no worse than live `a0a3845` with the same typist; the live runs use these probes from an
+  export, `probes-t/`). `t-measure-api` 9-11 cover the acquisition gap itself (samples, EMAs, fallbacks, clamp,
+  release / lost lock / leak / pause, boss fights and a real Flight Check never feeding it), `t-measure-profile` 1b
+  / 5 / 14 the `profile.acqEma` field, `t-pace-math` 7b / 10-12 the formula (35 / 55 / 80 WPM x 120 / 300 / 600 ms x
+  L 1 / 5 / 7), the mean length and the wave start, and `t-pace-stakes` 7a-7c the back-off and its clearing.
 - `probes/pace_lib.mjs` — helpers: the b10 typist on the play clock (optional acquisition latency), forced clears,
   deaths, the in-place reload, canvas budget counters.
 - `probes/t-modes-rng.mjs`, `t-modes-daily.mjs`, `t-modes-endless.mjs [--dpr 2]`, `t-modes-drill.mjs`,
