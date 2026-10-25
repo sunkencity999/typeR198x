@@ -411,11 +411,15 @@ Object.assign(Game.prototype, {
     const txt = (el) => (el ? el.textContent : "");
     const tile = (id) => { const v = $(id), l = v && v.previousElementSibling; return { v, l, orig: txt(l) }; };
     const lvl = $("hudLevel"), score = $("hudScore"), stop = this.btnStop, quit = $("btnPauseQuit");
+    // The Flight Check (ONBOARD fcQuitLabels, release CT-05) relabels both quit buttons while it runs and parks their
+    // markup text in dataset.fcText / fcTitle: a first capture during the check reads those, not "Quit to menu".
+    const parked = (el, key) => (el && el.dataset && el.dataset[key] != null ? el.dataset[key] : null);
     return (this._modesChrome = {
       levelLabel: lvl && lvl.previousElementSibling, levelOrig: txt(lvl && lvl.previousElementSibling) || "Sector",
       scoreCell: score && score.closest(".hudCell"), mult: $("hudMult"),
-      stopOrig: txt(stop && (stop.querySelector(".btnLabel") || stop)) || "Save & quit", stopTitle: (stop && stop.getAttribute("title")) || "",
-      restartOrig: txt(this.btnRestart) || "Restart sector", quit, quitOrig: txt(quit) || "Save & quit",
+      stopOrig: (parked(stop, "fcText") ?? txt(stop && (stop.querySelector(".btnLabel") || stop))) || "Save & quit",
+      stopTitle: (parked(stop, "fcTitle") ?? (stop && stop.getAttribute("title"))) || "",
+      restartOrig: txt(this.btnRestart) || "Restart sector", quit, quitOrig: (parked(quit, "fcText") ?? txt(quit)) || "Save & quit",
       tiles: [tile("pauseSector"), tile("pauseWave"), tile("pauseScore")], eyebrow: $("pauseEyebrow")
     });
   },
@@ -460,7 +464,8 @@ Object.assign(Game.prototype, {
     const [t1, t2, t3] = E.tiles;
     for (const t of E.tiles) set(t.l, t.orig);
     set(this.btnRestart, M ? `Restart ${{ daily: "sortie", endless: "drift", drill: "drill" }[M.mode]}` : E.restartOrig);
-    set(E.quit, M ? "Quit to menu" : E.quitOrig);
+    // W4: outside a mode run the Flight Check owns the pause card's quit label while it is active ("Quit to menu").
+    if (M || !(typeof this.isFlightCheckActive === "function" && this.isFlightCheckActive())) set(E.quit, M ? "Quit to menu" : E.quitOrig);
     if (!M) return;
     if (M.mode === "daily") set(E.eyebrow, `Paused // Daily sortie · Sector ${modesPad2(M.sector)}`);
     else if (M.mode === "endless") {
