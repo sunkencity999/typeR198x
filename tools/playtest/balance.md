@@ -9,6 +9,131 @@ sector-10 clear) as the end of the sector and idled there until its wall cap whi
 itself ran at 60 fps / 0.97 during those runs (checked separately: sector 10 with an 80 WPM typist, `out/fpstype`). The
 final probe stops on `victory` and paces the typist by `game.playClock`, so its WPM is honest at any frame rate.
 
+## Training update follow-up: pace counts target acquisition (lead ruling Z12, `wt/pace-acq`)
+
+Measured on 2026-10-25 on `wt/pace-acq` (training `fa540d0` = release `20261024b` plus the Z12 commits), headless
+Chrome, DPR 1, 1440 x 900, two to six harness browsers at once (every typist paced by `game.playClock`; play / wall
+clock 0.93-0.97 in every run below). The comparison rows ran the same probes (this branch's `b10.mjs`, copied into
+`probes-t/` of an export) on `fa540d0` (release `20261024b`, "B-") and on live `a0a3845` (release `20261016a`,
+"L-") in the same session. JSON: `out/b10/T-*.json` (this branch), `out/t-pace-balance/*-p1.json`, `*-p2.json`
+(matrix rounds), `*-acq300-p1.json`, `*-acq300-p2.json` (latency matrix rounds); logs `out/acqlogs/`.
+
+**What changed (BAL-2).** D2 paced from hand speed alone (intervals inside a target), so a typist that also spends
+~330 ms finding each new target got a stream faster than it could clear: on `20261024b` the 300 ms typists at 55 / 80
+WPM ran S2 at paceMul 1.35-2.5 and S3 at 1.5-2.3, the field filled to its caps and the sector clock cut the waves.
+Z12: MEASURE (`32-typist.js`) measures the acquisition gap (from the moment the pilot's target ends by a kill, a
+manual / lost release or a leak, while another lockable target is on the field, to the first correct key of the next
+lock; 10 ms to 1.5 s; never in boss fights or the Flight Check), keeps a run EMA (alpha .1) and a lifetime EMA
+(`profile.acqEma`, from the first run with 10 samples) and serves `typistAcquireMs()` = run EMA from 10 samples, else
+lifetime, else 300 ms, clamped 120-900 ms. PACE (`42-pacing.js`) targets `clamp(0.85 x pilotCpsEff / targetCps, 1.0,
+2.5)` with `pilotCpsEff = L / (L / pilotCps + acq / 1000)`, L = the sector's mean target length (`paceMeanLen`: the
+quota-weighted chars per spawn of WORDS' mix, letters 1): S1 2.13, S2 2.56, S3 3.27, S4 4.25, S5 5.13, S6 5.51,
+S7 6.57, S8 7.01, S9 7.92, S10 8.28. Safety net: a wave that times out with no leak lowers the next wave's target by
+0.35 (floor 1.0; cleared at sector entry and on a checkpoint restore). **No Z12 number changed**: alpha .1, 10
+samples, default 300 ms and clamp 120-900 ms ship as ruled, because every Z12 target below held with them.
+
+What the harness typists measure as acquisition (the gap includes the typist's own key interval, so a typist with no
+latency still reads one interval plus the loop's few ms): no latency 196-218 ms at 80 WPM, 255-350 ms at 55, 400-455
+ms at 35; with `--acquire-ms 300` (300 ms, 600 ms with probability .1, mean ~330) 510-590 ms at 80, 585-675 ms at 55,
+690-860 ms at 35. A fresh pilot keeps the 300 ms default through most of S1 (the field is often empty when a plate
+dies there, so samples are few: 7 in 45 s at 80 WPM) and reaches 10 samples early in S2.
+
+### Z12 targets with `--acquire-ms 300` (55 / 80, fresh and seeded): b10 x 4 + latency matrix x 2 = 6 runs per profile
+
+| profile | runs | S2-3 clock cuts | S2-3 waves timed out with 0 leaks | S2-3 idle (matrix) | deaths | PERFECT WAVE S2-3 | vs `20261024b` (B-, 2 runs) | vs live `a0a3845` (L-, 4 runs) |
+|---|---|---|---|---|---|---|---|---|
+| 55 / .93 fresh | 6 | 0 of 12 | 0 | 9 / 7 %, 7 / 1 % | 0 | 12 x 3 | cuts 2 of 4, 0-leak timeouts 2, PW 2 2 2 2 | cuts 0 of 8, PW 8 x 3 |
+| 55 / .93 seeded | 6 | 0 of 12 | 0 | 11 / 6 %, 9 / 6 % | 0 | 12 x 3 | cuts 2 of 4, 0-leak timeouts 1, PW 1 3 2 3 | (live has no profile: the fresh runs) |
+| 80 / .97 fresh | 6 | 0 of 12 | 0 | 3 / 6 %, 7 / 8 % | 0 | 12 x 3 | cuts 2 of 4, 0-leak timeouts 2, PW 3 1 3 1 | cuts 0 of 8, PW 8 x 3 |
+| 80 / .97 seeded | 6 | 0 of 12 | 0 | 2 / 9 %, 9 / 7 % | 0 | 12 x 3 | cuts 3 of 4, 0-leak timeouts 0, PW 3 2 2 2 | (live: the fresh runs) |
+
+Every Z12 target holds: no S2 / S3 wave timed out with 0 leaks (20261024b: 5 in 16 sectors), clock cuts 0 % of the 48
+S2 / S3 sectors (target <= 15 %; 20261024b 9 of 16 = 56 %), S2-3 idle 1-11 % (<= 15 %), 0 deaths, and PERFECT WAVE 3 in
+every S2 / S3 sector, the same as live (whose waves end at the table cap and, before D3, paid PERFECT WAVE on a timeout
+too). The 300 ms typists now run S2 at paceMul 1.0-1.47 and S3 at 1.0-1.17 (they reach the S2 / S3 boss 10-30 s sooner
+than on 20261024b, whose waves ran to the sector clock, and 5-20 s sooner than on live).
+
+b10 with the latency (this branch "T-", 20261024b "B-", live "L-"; live's ranks come from its own gross-WPM rank):
+
+| run set | runs | paceMul S2 | paceMul S3 | acq ms S2-3 | to boss S1 / S2 / S3 s | clock cuts S2-3 | timeouts S2-3 (0 leaks) | PERFECT WAVE S2-3 | deaths | damage per run | ranks S1-S3 per run | play / wall |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| T-w55-acq | 4 | 1.01-1.35 | 1 | 300-668 | 35-39 / 45-49 / 53-66 | 0 of 8 | 0 (0) | 3 3 3 3 3 3 3 3 | 0 | 0 0 0 0 | SAASSAAAAAAA | 0.96 |
+| T-w55-seed-acq | 4 | 1-1.06 | 1 | 583-675 | 36-43 / 47-49 / 51-56 | 0 of 8 | 0 (0) | 3 3 3 3 3 3 3 3 | 0 | 0 0 0 0 | ASASAAASSASS | 0.95-0.96 |
+| T-w80-acq | 4 | 1.31-1.39 | 1.09-1.16 | 300-574 | 33-37 / 41-51 / 52-55 | 0 of 8 | 0 (0) | 3 3 3 3 3 3 3 3 | 0 | 0 0 0 0 | SSSSSSSSSSSS | 0.95-0.96 |
+| T-w80-seed-acq | 4 | 1.28-1.47 | 1.11-1.16 | 513-590 | 36-41 / 44-51 / 50-56 | 0 of 8 | 0 (0) | 3 3 3 3 3 3 3 3 | 0 | 0 0 0 0 | SSSSSSSSSSSS | 0.95 |
+| B-w55-acq | 2 | 1.35-2.05 | 1.48-1.7 | - | 37-38 / 69-73 / 83 | 2 of 4 | 2 (2) | 2 2 2 2 | 0 | 0 0 | SASAAA | 0.96 |
+| B-w55-seed-acq | 2 | 2.03-2.1 | 1.5-1.71 | - | 50-51 / 77 / 77-80 | 2 of 4 | 1 (1) | 1 3 2 3 | 0 | 0 0 | AASAAS | 0.95-0.96 |
+| B-w80-acq | 2 | 1.35-2.4 | 2.21-2.34 | - | 31-39 / 50-68 / 83 | 2 of 4 | 2 (2) | 3 1 3 1 | 0 | 0 0 | SSSASS | 0.95-0.96 |
+| B-w80-seed-acq | 2 | 2.4-2.5 | 2.19-2.3 | - | 45-46 / 76-77 / 83 | 3 of 4 | 0 (0) | 3 2 2 2 | 0 | 0 0 | SSSSSS | 0.95 |
+| L-w55-acq | 4 | 1 | 1 | - | 53-58 / 59-63 / 70-73 | 0 of 8 | 0 (0) | 3 3 3 3 3 3 3 3 | 0 | 0 0 0 0 | AAAAABABBAAA | 0.97 |
+| L-w80-acq | 4 | 1 | 1 | - | 53-58 / 59-61 / 67-69 | 0 of 8 | 0 (0) | 3 3 3 3 3 3 3 3 | 0 | 0 0 0 0 | ASASSASSASAA | 0.97 |
+
+### 35 / .90 with `--acquire-ms 300` (Z12: 0 damage S1-3, not harder than live)
+
+| run set | runs | paceMul S2 | paceMul S3 | acq ms S2-3 | to boss S1 / S2 / S3 s | clock cuts S2-3 | timeouts S2-3 (0 leaks) | PERFECT WAVE S2-3 | deaths | damage per run | ranks S1-S3 per run | play / wall |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| T-w35-acq | 4 | 1 | 1 | 693-853 | 40-47 / 48-65 / 67-82 | 0 of 8 | 1 (1) | 3 2 3 3 3 3 3 3 | 0 | 0 0 0 0 | BABAAAAABABA | 0.97 |
+| T-w35-seed-acq | 4 | 1 | 1 | 688-856 | 41-44 / 50-57 / 72-76 | 0 of 8 | 0 (0) | 3 3 3 3 3 3 3 3 | 0 | 0 0 0 0 | AABABBABABAB | 0.96-0.97 |
+| B-w35-acq | 2 | 1.27-1.34 | 1 | - | 45 / 71-76 / 75-83 | 1 of 4 | 0 (0) | 3 2 3 3 | 0 | 0 0 | AAAAAA | 0.97 |
+| L-w35-acq | 4 | 1 | 1 | - | 57-61 / 60-70 / 80-83 | 0 of 8 | 0 (0) | 3 3 3 3 3 3 3 3 | 0 | 0 14 14 0 | BBCBBCBCCABB | 0.97-0.98 |
+
+Latency matrix 35 / .90 fresh: round 1 **22 damage** (S3: W2 timed out with 1 escaped and no leak, W3 took it as +1
+and leaked one word, then the sector clock cut W3; paceMul 1.0 in every wave), round 2 0 damage. Over this branch's 10
+latency runs of the profile (8 b10, 2 matrix): 0 damage in 9, 22 in 1, 0 deaths, ranks A / B. Live took damage in 2
+of 4 runs (14, in the S3 boss), `20261024b` 0 in 2 (with its S2 at paceMul 1.27-1.34). With the latency this typist's
+effective speed is 1.4-1.66 cps against S3's 2.3 (target 0.85 x 1.6 / 2.3 = 0.6): its pace sits at the 1.0 floor in
+S2-3 on this branch, as on live, so no Z12 number reaches it (D2 never paces below 1.0). What differs from live there is
+D3 / Z5 (a wave that runs out with plates up pays no PERFECT WAVE and carries its escapes; the Z5 cap is longer than
+live's table cap), not the pace. Not harder than live: the S1 boss ~15 s sooner and S2 / S3 up to 15 s sooner, damage
+in 1 of 10 runs vs 2 of 4, two 0-leak timeouts in 20 S2 / S3 sectors (b10 r1 and matrix p1, S3 W2, 1 escaped each)
+where live's waves end silently at the table cap. Reported for the lead: the "0 damage" line missed once in 10.
+
+### R26 / Q1 targets without latency (`t-pace-balance --matrix --parallel 2`, rounds p1 / p2, 20 pass / 0 fail each)
+
+| profile | S1 idle p1 / p2 (target) | S2 idle | S3 idle | longest idle gap | to S1 boss | deaths / damage S1-3 | ranks S1-S3 p1; p2 | paceMul S1 · S2 · S3 (p1) | 20261024b g1 / g2 (S1 · S2 · S3 idle) |
+|---|---|---|---|---|---|---|---|---|---|
+| 35 / .90 fresh | 10 / 11 % (not harder) | 14 / 9 % | 3 / 3 % | <= 0.54 s | 40 / 41 s | 0 / 0 | A B B; A A B | 1/1/1.35 · 1/1/1 · 1/1/1 | 18 / 12 · 8 / 8 · 5 / 2 % |
+| 55 / .93 fresh | 26 / 25 % (<= 30) | 4 / 4 % | 13 / 7 % | <= 0.55 s | 33 / 32 s | 0 / 0 | S A S; S A A | 1/1/1 · 1.35/1.45/1.44 · 1.11/1.12/1.14 | 28 / 24 · 6 / 2 · 1 / 3 % |
+| 80 / .97 fresh | 29 / 26 % (<= 30) | 9 / 6 % | 2 / 5 % | <= 0.52 s | 26 / 29 s | 0 / 0 | S S S; S S S | 1/1/1 · 1.35/1.7/2.05 · 1.7/1.65/1.67 | 28 / 27 · 13 / 6 · 4 / 1 % |
+| 55 / .93 seeded (51) | 7 / 7 % (<= 15) | 3 / 2 % | 13 / 8 % | <= 0.50 s | 43 / 40 s | 0 / 0 | A S S; A A A | 1.35/1.7/1.98 · 1.63/1.41/1.45 · 1.15/1.17/1.18 | 6 / 7 · 2 / 2 · 2 / 1 % |
+| 80 / .97 seeded (78) | 6 / 13 % (<= 15) | 8 / 5 % | 4 / 5 % | <= 0.48 s | 41 / 33 s | 0 / 0 | S A S; S S S | 1.35/1.7/2.05 · 2.06/2.08/2.02 · 1.67/1.6/1.62 | 11 / 11 · 4 / 4 · 4 / 2 % |
+
+Both rounds hold every R26 target with no timeout in any of the 30 sectors. The cost of Z12 for the no-latency
+typists: S3 paceMul drops (55: 1.5-1.7 -> 1.1-1.18; 80: 2.2 -> 1.6-1.7) and **55 / .93 S3 idle rises to 7-13 %**
+(20261024b 1-3 %), inside the 15 % target but the thinnest margin of the matrix. The formula counts one key interval
+twice for a typist with no latency (its measured gap is one interval, and L / pilotCps already counts L of them for a
+target that has L - 1), so pilotCpsEff reads the 55 WPM harness typist ~23 % below its real S3 throughput. None of the
+Z12 numbers moves that (the gap is above the 120 ms clamp; alpha and the default do not change a converged EMA); if a
+round misses, the lever is the formula (acq = gap - one interval), a lead decision. 35 / .90 runs S2 at 1.0 (was
+1.23-1.35): easier than 20261024b. The 80 fresh S1 margin (26-29 % vs 30) is unchanged (paceMul 1.0 until the
+20-interval run gate).
+
+b10 without latency (fresh and seeded, `--expect` on the fresh runs: 35 / .90 4 pass / 0 fail, 55 / .93 7 / 0, 80 / .97
+6 / 0):
+
+| run set | runs | paceMul S2 | paceMul S3 | acq ms S2-3 | to boss S1 / S2 / S3 s | clock cuts S2-3 | timeouts S2-3 (0 leaks) | PERFECT WAVE S2-3 | deaths | damage per run | ranks S1-S3 per run | play / wall |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| T-w35-nolat | 1 | 1-1.03 | 1 | 300-440 | 35 / 44 / 61 | 0 of 2 | 0 (0) | 3 3 | 0 | 0 | AAA | 0.96 |
+| T-w35-seed-nolat | 1 | 1 | 1 | 417-453 | 38 / 43 / 59 | 0 of 2 | 0 (0) | 3 3 | 0 | 0 | ASA | 0.96 |
+| T-w55-nolat | 1 | 1.41-1.46 | 1.12-1.14 | 269-299 | 33 / 37 / 56 | 0 of 2 | 0 (0) | 3 3 | 0 | 0 | ASS | 0.95 |
+| T-w55-seed-nolat | 1 | 1.4-1.51 | 1.11-1.14 | 282-350 | 33 / 38 / 55 | 0 of 2 | 0 (0) | 3 3 | 0 | 0 | AAA | 0.94-0.96 |
+| T-w80-nolat | 1 | 1.35-2.03 | 1.62-1.68 | 207-300 | 26 / 38 / 42 | 0 of 2 | 0 (0) | 3 3 | 0 | 0 | ASS | 0.93-0.95 |
+| T-w80-seed-nolat | 1 | 2.04-2.08 | 1.64-1.69 | 196-208 | 28 / 46 / 47 | 0 of 2 | 0 (0) | 3 3 | 0 | 0 | SSS | 0.93 |
+
+### Other balance probes on this branch
+
+- `b3`: 14 pass / 0 fail (55 / .93 reaches the S1 boss at 29.2 s; L5 W2 incomingCps at a pinned 1.0 = 1.37 x 3.7, inside
+  -15 % / +50 %; alive never 0 for > 1.7 s in a spawn phase).
+- `t-arcade-balance --parallel 2`: 16 pass / 0 fail (35 / .90 0 surge damage in S1-3, S2 / S3 windows 5.2 / 4.27 s vs
+  table 2.88 / 2.38; 55 / .93 S10 jump victory, min hull 28.9 %, 7 / 7 surges countered; 80 / .97 S8-10 2 / 3 / 4 surges
+  started, all countered, S10 time bonus 0 <= accuracy 4,000). In those S8-10 jumps the 55 / 80 profiles were already at
+  the 1.0 floor before Z12 (0.85 x pilotCps under the table) and stay there; the 25 / 35 / 55 stakes runs of the rulings
+  section flew every wave at 1.0 too, so neither moves. The 80 WPM pilot in S4-7 was above the floor (S5 ~1.4 before)
+  and now reads lower: `b10 --wpm 80 --accuracy .97 --jump 4 --sectors 3` (fresh save) runs S4 1 / 1.23 / 1.39, S5
+  1.12-1.14, S6 1.0-1.01 (acquisition 181-217 ms), every wave by quota, PERFECT WAVE 3 / 3 / 3, 0 damage, rank S x3;
+  with `--acquire-ms 300` every wave at 1.0 (acquisition 523-604 ms), the same 3 / 3 / 3, 0 damage, rank S x3, no
+  clock cut (`out/b10/T-w80-j4*.json`).
+
 ## Training update: lead rulings Z1-Z9 (`wt/rulings`), re-pass on the rulings tree
 
 Release `20261024b` ships exactly these constants: training merges `wt/rulings` at `1068fd6` and nothing after it
@@ -152,7 +277,8 @@ target x paceMul; not a Q1 target). What the latency shows:
 - **paceMul overshoots a latency-bound pilot**: pace follows hand speed (intervals inside a target), so at paceMul
   1.5-2.4 the stream outruns a typist that also spends ~330 ms per target: the field fills to its caps (delivery 0.6-0.9
   x the paced target from S2) and waves 2-3 sometimes time out (1-4 escaped), with no damage. If human playtests confirm
-  it, D2's pilotCps could subtract a per-target acquisition time (lead decision; not changed).
+  it, D2's pilotCps could subtract a per-target acquisition time (lead decision; not changed here: lead ruling Z12 did
+  it, see the follow-up section at the top).
 
 ### Stakes (D3 + Z5) on the final tree, seeded profile, sector jump then consecutive sectors, one retry allowed (none used)
 
