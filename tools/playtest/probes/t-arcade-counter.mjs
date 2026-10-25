@@ -121,11 +121,16 @@ const t5a = await P.g(() => {
 });
 await P.shot("surge-telegraph");
 await sleep(500);
-const t5b = await P.g(() => ({ glow: window.game._csGlowDraws | 0, border: window.game._csBorderDraws | 0, alpha: window.game._csGlowAlpha }));
+const t5b = await P.g(() => { const g = window.game, s = g.boss.surge; return { glow: g._csGlowDraws | 0, border: g._csBorderDraws | 0, alpha: g._csGlowAlpha, st: s ? s.t : 0, sdur: s ? s.dur : 1 }; });
 const want5 = (t5a.t + 0.2) / t5a.dur;
-P.check("5. telegraph 0.6 s in: #bossCharge.isCharging, fill scaleX within +-.15 of (t+.2)/dur, #bossMeter.isCharging, art glow and slab outline drawn >= 20 times in 0.5 s",
-  /isCharging/.test(t5a.bar) && Math.abs(t5a.fill - want5) <= 0.15 && t5a.meter && t5a.art && t5b.glow - t5a.glow >= 20 && t5b.border - t5a.border >= 20 && t5b.alpha >= 0.25,
-  { ...t5a, want: Math.round(want5 * 1000) / 1000, glowDraws: t5b.glow - t5a.glow, borderDraws: t5b.border - t5a.border, glowAlpha: t5b.alpha });
+// Glow alpha (spec-arcade): (.25 + .35 k)(.85 + .15 sin 4 pi t), k = t / dur. The floor is the 2 Hz pulse's trough at the
+// sampled moment (.7 x the ramp); a fixed .25 failed whenever the sample fell near a trough once Z6 lengthened the
+// window (dur 5.4 s, k ~ .22 at 1.3 s: trough ~ .23; release review REG-B-1). update() and drawFrame() share the rAF,
+// so s.t read here is the s.t of the last draw.
+const floor5 = 0.7 * (0.25 + 0.35 * Math.min(1, t5b.st / t5b.sdur));
+P.check("5. telegraph 0.6 s in: #bossCharge.isCharging, fill scaleX within +-.15 of (t+.2)/dur, #bossMeter.isCharging, art glow and slab outline drawn >= 20 times in 0.5 s, glow alpha at or above the pulse trough .7 x (.25 + .35 k) at the sampled t",
+  /isCharging/.test(t5a.bar) && Math.abs(t5a.fill - want5) <= 0.15 && t5a.meter && t5a.art && t5b.glow - t5a.glow >= 20 && t5b.border - t5a.border >= 20 && t5b.alpha >= floor5 - 1e-9,
+  { ...t5a, want: Math.round(want5 * 1000) / 1000, glowDraws: t5b.glow - t5a.glow, borderDraws: t5b.border - t5a.border, glowAlpha: t5b.alpha, atT: t5b.st, floor: floor5 });
 
 // 6. Fail: shield 0, progress 2, the window runs out
 const t6pre = await P.g(() => { const g = window.game, b = g.boss; g.player.shield = 0; g.invulnT = 0; b.progress = 2; b.surge.t = b.surge.dur - 0.01; window.__cs.resets = 0; return { hp: g.player.hp, fired: g.levelStats.surgesFired | 0, annN: window.__cs.ann.length }; });
