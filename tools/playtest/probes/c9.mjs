@@ -86,8 +86,37 @@ P.check("@supports fallback for missing backdrop-filter exists", /@supports not 
 
 // Secondary pages link back and the footer points at the privacy policy.
 const foot = await g(() => Array.from(document.querySelectorAll(".footer a")).map((a) => a.getAttribute("href")));
-P.check("footer links: privacy-policy + support", foot.includes("./privacy-policy.html") && foot.includes("./support.html"), JSON.stringify(foot));
+const AV = head.assetVersion;
+P.check("footer links: privacy-policy + support, each carrying ?v=<asset-version> (release 20261024a, CT-02: the host caches *.html 180 days)",
+  foot.includes(`./privacy-policy.html?v=${AV}`) && foot.includes(`./support.html?v=${AV}`), JSON.stringify({ foot, AV }));
 const pp = await status("./privacy-policy.html");
 P.check("privacy-policy.html returns 200", pp.status === 200, JSON.stringify(pp));
+// Every in-site page link (and the privacy.html meta refresh) in the five pages carries the shell token (R2 / CT-02;
+// tools/bump-version.sh keeps them in step).
+const pageLinks = {};
+for (const f of ["index.html", "info.html", "support.html", "privacy-policy.html", "privacy.html"]) {
+  const src = fs.readFileSync(path.join(ROOT, f), "utf8");
+  pageLinks[f] = [...src.matchAll(/(?:<a\b[^>]*\bhref|\burl)=["']?(\.\/[a-z-]+\.html[^"' >]*)/gi)].map((m) => m[1]);
+}
+const untokened = Object.entries(pageLinks).flatMap(([f, ls]) => ls.filter((u) => !u.endsWith(`?v=${AV}`)).map((u) => `${f}: ${u}`));
+P.check("in-site page links in the five pages end in ?v=<asset-version> (back links, Play now, privacy.html refresh)",
+  Object.values(pageLinks).flat().length >= 12 && untokened.length === 0, JSON.stringify({ untokened, counts: Object.fromEntries(Object.entries(pageLinks).map(([f, l]) => [f, l.length])) }));
+
+// RET-1: the shell revalidates the long-lived documents after load for a returning browser (a save exists), and a first
+// visit fetches none of them.
+const docFetches = async () => {
+  const seen = [];
+  const on = (r) => { if (r.resourceType() === "fetch" && /\.html(\?|$)/.test(r.url())) seen.push(new URL(r.url()).pathname); };
+  page.on("request", on);
+  await page.reload({ waitUntil: "load" });
+  await page.waitForTimeout(6000);   // the guard waits 2 s after load, then for idle (at most 3 s)
+  page.off("request", on);
+  return seen.sort();
+};
+const fresh = await docFetches();
+await P.goto("legacy-midwave");
+const returning = await docFetches();
+P.check("returning browser (save present): /index.html, privacy-policy.html, support.html, info.html revalidated once after load (2 s, then idle); a fresh save fetches none (RET-1)",
+  fresh.length === 0 && JSON.stringify(returning) === JSON.stringify(["/index.html", "/info.html", "/privacy-policy.html", "/support.html"]), JSON.stringify({ fresh, returning }));
 
 await P.finish();

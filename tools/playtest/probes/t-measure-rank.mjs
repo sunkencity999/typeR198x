@@ -96,6 +96,7 @@ const card = await P.g(() => {
     rank: r.rank, rankWhy: r.rankWhy, whyText: why.textContent, whyHidden: why.classList.contains("hidden"), whyKind: why.dataset.kind,
     caption: cap.textContent, capHidden: cap.classList.contains("hidden"), misses: g.levelStats.total - g.levelStats.correct,
     chips: [...c.querySelectorAll(".weakSignal .wsChip")].map((x) => x.textContent), stripHidden: c.querySelector(".weakSignal").classList.contains("hidden"),
+    chipTitles: [...c.querySelectorAll(".weakSignal .wsChip")].map((x) => [x.dataset.kind, x.title]),
     speech: r.speech, acc: r.acc
   };
 });
@@ -104,6 +105,8 @@ const capWant = card.misses === 0 ? "NO MISSES" : card.misses === 1 ? "1 MISS" :
 P.check("3. Level Complete card: .rankWhy === results.rankWhy (hidden only for S), caption === 'N MISSES' from levelStats, 1-3 chips in the WEAK SIGNAL formats",
   (card.rank === "S" ? card.whyHidden : (!card.whyHidden && card.whyText === card.rankWhy && card.rankWhy.length > 0 && card.whyKind === "shortfall")) &&
   card.caption === capWant && !card.capHidden && card.misses > 1 && chipOk && !card.stripHidden, card);
+P.check("3b. WEAK SIGNAL chips carry a title per kind (release 20261024a, J5)",
+  card.chipTitles.length >= 1 && card.chipTitles.every(([k, t]) => ({ key: "The key you missed most", bigram: "Your slowest letter pair and its average time", steady: "How even your key rhythm was (higher is steadier)" })[k] === t), card.chipTitles);
 P.check("4. announcement: #srAnnounce carries the rank-line speech and the misses sentence",
   (card.rank === "S" || ann.includes(card.speech[0])) && /miss/i.test(ann) && card.speech.every((s) => ann.includes(s)), { ann, speech: card.speech });
 
@@ -250,6 +253,25 @@ const vic = await P.g((ann) => {
 await P.shot("victory-card");
 P.check("8. Victory: '#resultsRun .rankWhy' present unless S (results.rankWhy), the onVictory announcement carries the speech",
   vic.mode === "victory" && !vic.cardHidden && (vic.rank === "S" ? vic.hidden : (!vic.hidden && !vic.pending && vic.text === vic.rankWhy && vic.rankWhy.length > 0)) && Array.isArray(vic.speech) && vic.speech.every((s) => vic.ann.includes(s)), vic);
+
+// ---- 11. copy truth on the cards and in the help (release 20261024a: CT-03, CT-07, CT-08, J5) ----
+const copy = await P.g(() => {
+  const g = window.game, r = g.lastResults, c = document.getElementById("resultsRun"), badge = c.querySelector(".newWpm");
+  const real = { newWpm: !!(r && r.newWpm), badge: badge.textContent, speech: (r && r.speech) || [] };
+  g.typistOnResultsRender({ cardEl: c, results: Object.assign({}, r, { newWpm: true, newWpmValue: 129, scope: "run" }) });
+  const synthRun = badge.textContent;
+  g.typistOnResultsRender({ cardEl: c, results: Object.assign({}, r, { newWpm: true, newWpmValue: 61, scope: "level" }) });
+  const synthLevel = badge.textContent;
+  const help = [...document.querySelectorAll("#helpModal li")].map((li) => li.textContent);
+  return { real, synthRun, synthLevel,
+    titles: [g.resultsTitleFor({ scope: "level", level: 1, rank: "S", misses: 4 }), g.resultsTitleFor({ scope: "level", level: 1, rank: "S", misses: 0 }), g.resultsTitleFor({ scope: "level", level: 1, rank: "A", misses: 4 })],
+    rankHelp: help.find((t) => /^Your rank/.test(t)) || "", weakHelp: help.find((t) => /^Weak signal/.test(t)) || "" };
+});
+P.check("11. run card Best WPM badge names Sector 10 ('BEST WPM 129 · S10', speech 'in Sector 10'), a sector card keeps 'BEST WPM 61'; S title FLAWLESS SIGNAL only with 0 misses (S-CLASS SIGNAL otherwise); help: Game Over rank line and the Weak signal item",
+  copy.synthRun === "BEST WPM 129 · S10" && copy.synthLevel === "BEST WPM 61" &&
+  (!copy.real.newWpm || (/^BEST WPM \d+ · S10$/.test(copy.real.badge) && copy.real.speech.some((t) => /^New best speed in Sector 10: \d+ words per minute\.$/.test(t)))) &&
+  JSON.stringify(copy.titles) === JSON.stringify(["S-CLASS SIGNAL", "FLAWLESS SIGNAL", "CLEAN SWEEP"]) &&
+  /names the one that held you back \(on Game Over, what ended the run\)\.$/.test(copy.rankHelp) && /^Weak signal, under the tiles of each results card: /.test(copy.weakHelp), copy);
 
 P.check("zero page errors", P.errors.pageErrors.length === 0, P.errors.pageErrors);
 await P.finish();

@@ -66,9 +66,11 @@ for (const f of TOP_FILES) if (fs.existsSync(path.join(ROOT, f))) local.push(pat
 for (const d of ASSET_DIRS) if (fs.existsSync(path.join(ROOT, d))) walk(path.join(ROOT, d), local);
 const rel = (p) => path.relative(ROOT, p).split(path.sep).join("/");
 const isText = (p) => /\.(html|js|mjs|css|json|svg|txt|xml|webmanifest|md)$/i.test(p);
-// upload order: assets (new files first), then css/js, then assets/opt/manifest.js, then index.html last.
+// upload order: assets (new files first), then css/js, then the other pages, then assets/opt/manifest.js, then index.html last.
 // manifest.js is served no-cache and read by the old shell, so it must not name files that are still uploading (review R42).
-const order = (p) => p.endsWith("index.html") ? 4 : p.endsWith("/assets/opt/manifest.js") ? 3 : /\.(css|js)$/.test(p) && !p.includes("/assets/opt/") ? 2 : 1;
+// The other pages reference ?v=<new token> CSS and the host ignores the query with max-age=31536000: uploaded before the
+// CSS, a visit in between would cache the old style.css under the new URL for a year (release finding R3).
+const order = (p) => p.endsWith("index.html") ? 4 : p.endsWith("/assets/opt/manifest.js") ? 3 : /\.html$/.test(p) ? 2.5 : /\.(css|js)$/.test(p) && !p.includes("/assets/opt/") ? 2 : 1;
 local.sort((a, b) => order(a) - order(b) || a.localeCompare(b));
 const totalBytes = local.reduce((n, p) => n + fs.statSync(p).size, 0);
 console.log(`local set: ${local.length} files, ${(totalBytes / 1048576).toFixed(1)} MB (root ${ROOT})`);

@@ -2823,7 +2823,7 @@ body[data-flight-check="on"] .tapToType:not(.hidden) ~ .fcPanel .fcStep { visibi
 .wsChip[data-kind="steady"] { border-color: var(--c-ui); color: var(--c-ui); }
 
 /* Records (D1 legacy rows) and the menu goal line (D6). */
-.hsLegacy { opacity: 0.5; }
+.hsLegacy { opacity: 0.56; }   /* 0.5 gave 12 px text 4.26:1; 0.56 measures 5.12:1 (PERF-A11Y-2) */
 .hsLegacyNote { margin: var(--sp-2) 0 0; opacity: 0.7; }
 .statGoal { margin: var(--sp-1) 0 0; font-size: var(--fs-sm); color: var(--c-ui); letter-spacing: 0.06em; }
 
@@ -2847,6 +2847,9 @@ body[data-flight-check="on"] .tapToType:not(.hidden) ~ .fcPanel .fcStep { visibi
 }
 .recordsTab[aria-selected="true"] { opacity: 1; color: var(--c-ui); border-bottom-color: var(--c-ui); }
 .recordsTab:focus-visible { outline: 2px solid var(--c-ui); outline-offset: 2px; }
+@media (pointer: coarse) { .recordsTab { min-height: 44px; } }   /* the 44 px touch convention (PERF-A11Y-6) */
+/* The panels are Tab stops inside .modalBody's overflow: an outside ring is clipped to a 2 px sliver (PERF-A11Y-4). */
+#panelHall:focus-visible, #panelLog:focus-visible { outline-offset: -2px; }
 
 /* Flight log (D6). */
 .flightLog { display: grid; gap: var(--sp-3); min-width: 0; }
@@ -2890,7 +2893,7 @@ body[data-flight-check="on"] .tapToType:not(.hidden) ~ .fcPanel .fcStep { visibi
 .flKey[data-err="hi"] { background: color-mix(in srgb, var(--c-danger) 35%, transparent); border-color: var(--c-danger); }
 .flKey[data-err="mid"] { background: color-mix(in srgb, var(--c-score) 30%, transparent); border-color: var(--c-score); }
 .flKey[data-err="lo"] { border-color: var(--c-ui); }
-.flKey[data-err="none"] { border-style: dashed; opacity: 0.4; }
+.flKey[data-err="none"] { border-style: dashed; opacity: 0.55; }   /* 0.4 measured 3.6:1; 0.55 5.9:1 (PERF-A11Y-3) */
 .flKey i {
   position: absolute;
   left: 0;
@@ -2900,6 +2903,13 @@ body[data-flight-check="on"] .tapToType:not(.hidden) ~ .fcPanel .fcStep { visibi
   background: var(--c-ui);
   transform-origin: left center;
   transform: scaleX(var(--lat, 0));
+}
+.flightLog .flKeys__legend { margin-top: -6px; text-align: center; font-family: var(--font-mono); font-size: var(--fs-2xs); letter-spacing: 0.12em;
+  text-transform: uppercase; opacity: 0.75; text-wrap: balance; }
+/* 320 px (and a 1280 px window at 400 % zoom): the 10-key row needs 296 px, so the panel scrolled sideways (WCAG 1.4.10). */
+@media (max-width: 359px) {
+  .flKeys__row { gap: 3px; }
+  .flKey { min-width: 22px; }
 }
 .flLists { display: grid; gap: 4px; }
 .flList { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
@@ -2915,13 +2925,37 @@ body[data-flight-check="on"] .tapToType:not(.hidden) ~ .fcPanel .fcStep { visibi
 .flSpark__key--speed { color: var(--c-ui); }
 .flSpark__key--acc { color: var(--c-score); }
 .flSectors caption { text-align: left; padding-bottom: 4px; }
-.flSectors tr.is-locked td { opacity: 0.4; }
+.flSectors tr.is-locked td { opacity: 0.55; }   /* 0.4 measured 3.1:1; 0.55 5.0:1 (PERF-A11Y-3) */
 
 /* Phone landscape: chips stay on one line without their label. */
 @media (max-height: 480px) {
   .weakSignal__label { display: none; }
   .weakSignal, .weakSignal__chips { flex-wrap: nowrap; }
   .weakSignal__chips { overflow: hidden; }
+}
+/* Results screens (release 20261024a, J1): the rank line, ACC caption and WEAK SIGNAL strip make the cards taller, so on
+   a 720 px window or a phone the actions would sit below the fold of the .screen scroller (scrollTop stays 0). They
+   stick to its bottom edge instead; the negative inset and margin cancel the bar's own bottom padding, so the layout at
+   the end of the scroll is unchanged and nothing shows under the bar. Phones: an opaque fill (bonus rows show through). */
+.screen--clear .screenActions,
+.screen--over .screenActions,
+.screen--victory .endingActions {
+  position: sticky;
+  bottom: calc(-1 * var(--sp-5));
+  z-index: 1;
+  padding: var(--sp-3) 0 var(--sp-5);
+  margin-bottom: calc(-1 * var(--sp-5));
+  background: linear-gradient(180deg, rgba(10,16,32,0), rgba(10,16,32,0.94) var(--sp-3));
+}
+@media (max-width: 640px) {
+  .screen--clear .screenActions,
+  .screen--over .screenActions,
+  .screen--victory .endingActions {
+    bottom: -12px;
+    padding-bottom: 12px;
+    margin-bottom: -12px;
+    background: linear-gradient(180deg, rgba(5,6,11,0), rgb(5,6,11) var(--sp-3));
+  }
 }
 /* ===== end track:MEASURE ===== */
 

@@ -6,6 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { openProbe, sleep } from "./measure_lib.mjs";
+import { harnessFlags } from "./_lib.mjs";
 
 const OUT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../out/t-measure-flightlog");
 fs.mkdirSync(OUT, { recursive: true });
@@ -37,7 +38,7 @@ await P.g(() => document.getElementById("tabLog").click());
 await sleep(150);
 const empty = await P.g(() => ({ text: document.getElementById("panelLog").textContent, keys: document.querySelectorAll("#panelLog .flKey").length, goal: (document.querySelector("#panelLog .flGoal") || {}).textContent, want: window.game.typistGoal().text }));
 P.check("4. fresh save: the Flight Log shows the empty state (no keyboard) and the goal line",
-  /No flights logged yet\./.test(empty.text) && /on this device only/.test(empty.text) && empty.keys === 0 && empty.goal === empty.want, empty);
+  /No flights logged yet\. Fly a sector and /.test(empty.text) && /on this device only/.test(empty.text) && empty.keys === 0 && empty.goal === empty.want, empty);
 
 // ---- 1. tabs by pointer ----
 const s1 = await tabState();
@@ -201,6 +202,77 @@ await page.setViewportSize({ width: 1440, height: 900 });
 P.check("7. 390 x 844, 844 x 390 and 1440 x 900: no horizontal overflow in the Records modal or the Flight Log, keys >= 26 px wide, every stat label (THROUGHPUT, DAYS FLOWN ...) ends inside its own tile, untruncated",
   Object.values(phone).every((p) => p.inner <= 1 && p.scroll <= 1 && p.log <= 1 && p.doc <= 1 && p.keyW >= 26 && p.labels === 5 && p.badLabels.length === 0), phone);
 
+// ---- 11. switching to the Flight Log recomputes the scroll cue (release 20261024a, J3) ----
+await page.setViewportSize({ width: 1280, height: 720 });
+await sleep(300);
+await openRecords();
+await P.g(() => document.getElementById("tabHall").click());
+await sleep(150);
+await P.g(() => { document.querySelector("#recordsModal .modalBody").scrollTop = 0; document.getElementById("tabLog").click(); });
+await sleep(450);
+const cue = await P.g(() => {
+  const wrap = document.querySelector("#recordsModal .modalScroll"), body = wrap.querySelector(".modalBody"), pill = wrap.querySelector(".modalScrollHint");
+  return { overflow: body.scrollHeight - body.clientHeight, scrollTop: body.scrollTop, cls: wrap.className, fade: getComputedStyle(wrap, "::after").opacity,
+    pill: pill ? getComputedStyle(pill).opacity : null };
+});
+await P.shot("flightlog-cue-1280x720");
+await closeRecords();
+await page.setViewportSize({ width: 1440, height: 900 });
+await sleep(200);
+P.check("11. 1280 x 720: Hall -> Flight log tab switch, the overflowing panel shows the scroll cue (is-scrollable, not at-bottom, fade and 'scroll' pill visible)",
+  cue.overflow > 2 && cue.scrollTop === 0 && /is-scrollable/.test(cue.cls) && !/at-bottom/.test(cue.cls) && Number(cue.fade) > 0.5 && Number(cue.pill) > 0.5, cue);
+
+// ---- 12. key-map legend and Flight Log accessibility (release 20261024a: J4, PERF-A11Y-1/3/4/6) ----
+await openRecords();
+await P.g(() => document.getElementById("tabLog").click());
+await sleep(200);
+const a11y = await P.g(() => {
+  const leg = document.querySelector("#panelLog .flKeys__legend");
+  const keys = [...document.querySelectorAll("#panelLog .flKey")];
+  const none = document.querySelector('#panelLog .flKey[data-err="none"]');
+  const locked = document.querySelector("#panelLog .flSectors tr.is-locked td");
+  return { legend: leg ? leg.textContent : null, legendShown: !!(leg && leg.getBoundingClientRect().height > 0), legendHidden: leg && leg.getAttribute("aria-hidden"),
+    titled: keys.filter((k) => /^[A-Z] · /.test(k.title)).length, keys: keys.length, aTitle: (keys.find((k) => k.dataset.key === "a") || {}).title,
+    noneOpacity: none ? Number(getComputedStyle(none).opacity) : null, lockedOpacity: locked ? Number(getComputedStyle(locked).opacity) : null };
+});
+await P.g(() => document.getElementById("tabLog").focus());
+await page.keyboard.press("Tab");
+await page.keyboard.press("Tab");
+a11y.focus = await P.g(() => { const el = document.activeElement; return { id: el && el.id, offset: el ? getComputedStyle(el).outlineOffset : null, visible: el ? el.matches(":focus-visible") : false }; });
+await closeRecords();
+await page.setViewportSize({ width: 320, height: 640 });
+await sleep(300);
+await openRecords();
+await P.g(() => document.getElementById("tabLog").click());
+await sleep(200);
+a11y.reflow320 = await P.g(() => {
+  const body = document.querySelector("#recordsModal .modalBody"), log = document.getElementById("panelLog");
+  const keyRight = Math.max(...[...log.querySelectorAll(".flKey")].map((k) => k.getBoundingClientRect().right));
+  return { body: body.scrollWidth - body.clientWidth, log: log.scrollWidth - log.clientWidth, keyRight: Math.round(keyRight), bodyRight: Math.round(body.getBoundingClientRect().right) };
+});
+await P.shot("flightlog-320x640");
+await closeRecords();
+await page.setViewportSize({ width: 1440, height: 900 });
+await sleep(200);
+{
+  const ctx = await P.browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  await harnessFlags(ctx);
+  const pg = await ctx.newPage();
+  await pg.goto(P.base, { waitUntil: "load" });
+  await pg.waitForFunction(() => { const el = document.getElementById("loadingOverlay"); return !el || el.classList.contains("hidden") || getComputedStyle(el).visibility === "hidden"; }, null, { timeout: 120000 });
+  await pg.evaluate(() => document.getElementById("btnRecords").click());
+  await sleep(500);
+  a11y.touchTabs = await pg.evaluate(() => ({ coarse: matchMedia("(pointer: coarse)").matches,
+    hall: Math.round(document.getElementById("tabHall").getBoundingClientRect().height), log: Math.round(document.getElementById("tabLog").getBoundingClientRect().height) }));
+  await ctx.close();
+}
+P.check("12. key map: a visible legend names the border colours, the dashed state and the bar, every key has a title; 'none' keys and locked sector rows at opacity >= 0.55; the Flight Log panel's focus ring sits inside the scroller (offset -2px); 320 px: no sideways scroll; touch: Records tabs >= 44 px",
+  a11y.legendShown && a11y.legendHidden === "true" && /^Border: misses · red many · amber some · cyan few · dashed under 15 tries · Bar: slower$/.test(a11y.legend || "") &&
+  a11y.keys === 26 && a11y.titled === 26 && a11y.aTitle === "A · under 15 tries" && a11y.noneOpacity >= 0.55 && a11y.lockedOpacity >= 0.55 &&
+  a11y.focus.id === "panelLog" && a11y.focus.visible && a11y.focus.offset === "-2px" &&
+  a11y.reflow320.body <= 1 && a11y.reflow320.log <= 1 && a11y.reflow320.keyRight <= a11y.reflow320.bodyRight &&
+  a11y.touchTabs.coarse && a11y.touchTabs.hall >= 44 && a11y.touchTabs.log >= 44, a11y);
+
 // ---- 9. sparkline: legend with the latest values, a dot for a lone point, gaps at speed 0 / acc null, one accessible text ----
 const sparkOf = async (sessions) => {
   await P.g((sessions) => {
@@ -257,6 +329,27 @@ P.check("9. sparkline: a legend names cyan SPEED / amber ACC with the latest val
   [one, gap].every((r) => r.role === "img" && r.aria === null && r.srCopies === 0 && r.titleCount === 1 && r.title.length > 10) && /latest 96\.1 percent/.test(gap.title) && !/100 percent/.test(gap.title),
   { one, gap });
 
+// ---- 10. Best WPM explains its 60-interval rule (release 20261024a, CT-01 / J2) ----
+await P.g(() => {
+  const g = window.game;
+  g.save.profile = { v: 1, keys: {}, bigrams: {}, speedEma: 34, thrEma: 20, speedN: 55, sectorBest: { "1": { speed: 0, acc: 89.5, t: 1790000000 } },
+    sessions: [[1790000000, "campaign", 1, 34, 89.5, "B", 4000, 9, 70, ""]], bests: { speed: 0, ceiling: 0, drill: { speed: 0, acc: 0 } }, days: { n: 1, last: 20261024 } };
+  g._ty.saveRef = null;
+  g.typistState();
+  if (typeof g.refreshMenu === "function") g.refreshMenu(); else g.renderMenuScreens();
+});
+await sleep(150);
+const rule = await P.g(() => ({ wpm: document.getElementById("statWpm").textContent, title: document.querySelector('[data-typist="bestWpm"]').title,
+  help: [...document.querySelectorAll("#helpModal li")].map((li) => li.textContent).find((t) => /^WPM is your hand speed/.test(t)) || "" }));
+await openRecords();
+await P.g(() => document.getElementById("tabLog").click());
+await sleep(150);
+rule.tile = await P.g(() => { const t = [...document.querySelectorAll("#panelLog .flStat")].find((el) => /best wpm/i.test(el.querySelector(".flStat__label").textContent)); return t ? { value: t.querySelector(".flStat__value").textContent, cap: (t.querySelector(".flStat__cap") || {}).textContent || "" } : null; });
+await closeRecords();
+P.check("10. a measured speed with no Best WPM yet: the menu row reads 'not set yet' with the rule as its title, the Flight Log tile '--' captions 'needs a clear with 60 timed keys', the help WPM item states the rule",
+  rule.wpm === "not set yet" && rule.title === "Best WPM counts a cleared sector with at least 60 timed keys." && rule.tile && rule.tile.value === "--" &&
+  rule.tile.cap === "needs a clear with 60 timed keys" && rule.help.includes("Best WPM counts a cleared sector with at least 60 timed keys."), rule);
+
 // ---- 5. legacy rows and the old best ----
 const SAVE2 = {
   schema: 2, playerName: "LEGACY", selectedShip: "sofrito", highScore: 1234, lastUnlockedLevel: 4, storySeen: true, keyboardHintSeen: true,
@@ -269,13 +362,14 @@ const SAVE2 = {
 await P.goto(SAVE2);
 await sleep(300);
 await openRecords();
-const leg = await P.g(() => ({ legacyCells: document.querySelectorAll("#highScoreTable td.hsLegacy").length, note: !document.getElementById("hsLegacyNote").classList.contains("hidden") }));
+const leg = await P.g(() => ({ legacyCells: document.querySelectorAll("#highScoreTable td.hsLegacy").length, note: !document.getElementById("hsLegacyNote").classList.contains("hidden"),
+  noteText: document.getElementById("hsLegacyNote").textContent, opacity: Number(getComputedStyle(document.querySelector("#highScoreTable td.hsLegacy")).opacity) }));
 await P.g(() => document.getElementById("tabLog").click());
 await sleep(150);
 const legLog = await P.g(() => (document.querySelector("#panelLog .flLegacy") || {}).textContent || "");
 await closeRecords();
-P.check("5. legacy: migrated rows' WPM cells carry .hsLegacy, #hsLegacyNote is shown, the Flight Log shows 'OLD BEST 44 · MEASURED BEFORE HONEST SPEED'",
-  leg.legacyCells === 2 && leg.note && legLog === "OLD BEST 44 · MEASURED BEFORE HONEST SPEED", { leg, legLog });
+P.check("5. legacy: migrated rows' WPM cells carry .hsLegacy (opacity >= 0.56, PERF-A11Y-2), #hsLegacyNote says 'the old measure', the Flight Log shows 'OLD BEST 44 · OLD MEASURE' (CT-11)",
+  leg.legacyCells === 2 && leg.note && leg.opacity >= 0.56 && leg.noteText === "Dimmed WPM used the old measure, from before hand speed." && legLog === "OLD BEST 44 · OLD MEASURE", { leg, legLog });
 
 P.check("zero page errors", P.errors.pageErrors.length === 0, P.errors.pageErrors);
 await P.finish();

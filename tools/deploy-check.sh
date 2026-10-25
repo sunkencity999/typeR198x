@@ -230,7 +230,7 @@ NODE
     if [[ "$st" == "200" ]]; then
       pass "footer privacy link $PRIVACY 200"
       grep -q 'typesmup198x\.save\.v1' "$TMP/pl.html" && pass "privacy target names the save key typesmup198x.save.v1" || fail "privacy target $PRIVACY does not mention typesmup198x.save.v1"
-      grep -qE 'href="(\./)?index\.html"|href="\./?"' "$TMP/pl.html" && pass "privacy target links back to the game" || fail "privacy target $PRIVACY has no back link to index.html"
+      grep -qE 'href="(\./)?index\.html(\?v=[^"]*)?"|href="\./?"' "$TMP/pl.html" && pass "privacy target links back to the game" || fail "privacy target $PRIVACY has no back link to index.html"
     else fail "footer privacy link $PRIVACY status $st"; fi
   else warn "served index.html has no footer privacy link"; fi
   st="$(fetch "$URL/privacy.html" "$TMP/pstub.html")"
@@ -282,7 +282,7 @@ if [[ $LOCAL -eq 1 ]]; then
       if [[ -f "$pf" ]]; then
         pass "footer privacy link $src_privacy resolves to a local file"
         grep -q 'typesmup198x\.save\.v1' "$pf" && pass "$(basename "$pf") names the save key typesmup198x.save.v1" || fail "$(basename "$pf") does not mention typesmup198x.save.v1"
-        grep -qE 'href="(\./)?index\.html"' "$pf" && pass "$(basename "$pf") links back to the game" || fail "$(basename "$pf") has no back link to index.html"
+        grep -qE 'href="(\./)?index\.html(\?v=[^"]*)?"' "$pf" && pass "$(basename "$pf") links back to the game" || fail "$(basename "$pf") has no back link to index.html"
       else fail "footer privacy link $src_privacy -> $pf does not exist"; fi
     fi
     if [[ -f "$ROOT/privacy.html" ]]; then
@@ -290,7 +290,7 @@ if [[ $LOCAL -eq 1 ]]; then
     else warn "privacy.html missing (old links to it would 404)"; fi
     for page in info.html support.html privacy-policy.html; do
       [[ -f "$ROOT/$page" ]] || { warn "$page missing"; continue; }
-      grep -qE 'href="(\./)?index\.html"' "$ROOT/$page" && pass "$page links back to the game" || fail "$page has no back link to index.html"
+      grep -qE 'href="(\./)?index\.html(\?v=[^"]*)?"' "$ROOT/$page" && pass "$page links back to the game" || fail "$page has no back link to index.html"
     done
   fi
   # unreferenced assets (report, never a gate)

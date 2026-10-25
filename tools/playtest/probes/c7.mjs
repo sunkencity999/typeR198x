@@ -1,13 +1,14 @@
 // C7 acceptance: mobile play path (hidden #typeInput, tap-to-type pill, keyboard evidence) and the phone profile.
 // Usage: cd tools/playtest && node probes/c7.mjs
 import { devices } from "playwright";
-import { openProbe, sleep } from "./_lib.mjs";
+import { openProbe, sleep, harnessFlags } from "./_lib.mjs";
 
 const P = await openProbe("c7");
 const overlayGone = (pg) => pg.waitForFunction(() => { const el = document.getElementById("loadingOverlay"); return !el || el.classList.contains("hidden") || getComputedStyle(el).visibility === "hidden"; }, null, { timeout: 60000 });
 
 async function open(opts) {
   const ctx = await P.browser.newContext(opts);
+  await harnessFlags(ctx);   // ONBOARD: a fresh-save Start skips the Flight Check (harness default; release finding R1)
   await ctx.addInitScript((k) => { try { localStorage.removeItem(k); } catch {} }, "typesmup198x.save.v1");
   const pg = await ctx.newPage();
   const errs = [];

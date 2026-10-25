@@ -41,22 +41,64 @@
 //
 // native/sync-web.sh patches the withAssetVersion return line below by sed; keep it byte-identical.
 
-const ASSET_VERSION = "20261016a";
-// Stale-shell guard. A host or CDN page cache can keep serving a previous index.html after a deploy (SiteGround's
-// dynamic cache did exactly that for "/" on 2026-10-17): that shell loads only this file and cannot boot the split
-// build, so the loading screen never ends. When the page that loaded this file has none of the assets/js/ scripts in
-// its markup, it is reloaded once with the current token in the query string, a URL no cache has seen. The current
-// shell (web and native) lists assets/js/core/*.js before this file, so it never takes this path; the v= check stops a
-// second reload if the stale copy somehow comes back.
+const ASSET_VERSION = "20261024a";
+// Stale-shell guard. A cache can keep serving a previous index.html after a deploy, and the server ignores ?v= when it
+// resolves a file, so the old shell's versioned URLs come back with this release's code:
+//   * a host page cache (SiteGround's dynamic cache did it for "/" on 2026-10-17) or a browser that cached a
+//     pre-overhaul shell: it loads only this file (no assets/js/ scripts) and cannot boot the split build;
+//   * a browser that kept an older modular /index.html (served max-age=15552000, 180 days): its assets/js/ tags carry
+//     an older ?v= token, so it boots this release's code without the scripts and markup the release added.
+// Either way the page is reloaded once with the current token in the query string, a URL no cache has seen. The
+// current shell carries ?v=ASSET_VERSION on every tag (tools/bump-version.sh writes both), so it never takes this
+// path; the v= check stops a second reload if a stale copy somehow comes back. Never on file: or in the native
+// wrappers (their bundled shell is synced with this file by native/sync-web.sh and its URLs are bare).
+// What it cannot reach: a browser that cached the whole older build at /index.html (shell and scripts, the normal
+// state after the footer pages' "Back to the game" links) runs that build with zero requests, so this file never
+// loads there (release finding RET-1). Once that browser runs this shell (it loads "/", served no-cache),
+// revalidateDocs refreshes its long-lived copies of /index.html and the secondary pages, and the in-site links carry
+// ?v=<token> (bump-version.sh), so the next /index.html visit is this release. A browser that never sends a request
+// keeps its copy until it expires; only the host can stop new 180-day entries (DEPLOY.md step 6).
 (function staleShellGuard() {
   try {
     if (typeof document === "undefined" || typeof location === "undefined" || location.protocol === "file:") return;
-    if (document.querySelector('script[src*="assets/js/"]')) return;
-    if (new URLSearchParams(location.search).get("v") === ASSET_VERSION) return;
+    if (typeof IS_NATIVE_SHELL !== "undefined" ? IS_NATIVE_SHELL : /TypeR198X-(macOS|iOS)/i.test(navigator.userAgent || "")) return;
+    if (new URLSearchParams(location.search).get("v") === ASSET_VERSION) {
+      // Arrived here through the reload or a tokenized in-site link: refresh the bare document URLs so the browser's
+      // 180-day copy of the old shell is replaced and the next visit to /index.html needs no reload ("/" is no-cache).
+      revalidateDocs(true);
+      return;
+    }
+    const tags = document.querySelectorAll('script[src*="assets/js/"]');
+    let stale = tags.length === 0;
+    for (const s of tags) {
+      const v = new URL(s.src, location.href).searchParams.get("v");
+      if (v && v !== ASSET_VERSION) { stale = true; break; }
+    }
+    if (!stale) { revalidateDocs(false); return; }
     const u = new URL(location.href);
     u.searchParams.set("v", ASSET_VERSION);
     location.replace(u.toString());
   } catch (_) { /* never let the guard itself break a boot */ }
+
+  // After load, revalidate the documents the host serves with max-age=15552000: cache "no-cache" sends a conditional
+  // request (a 304 without a body while the copy is current) and stores a changed copy. Only for a returning browser
+  // (the page arrived through ?v=, or a save exists; nothing new is stored): a first visit holds no stale copy.
+  function revalidateDocs(arrived) {
+    if (typeof fetch !== "function" || typeof addEventListener !== "function") return;
+    let returning = arrived;
+    if (!returning) { try { returning = typeof LS_KEY === "string" && localStorage.getItem(LS_KEY) !== null; } catch (_) { returning = false; } }
+    if (!returning) return;
+    const run = () => {
+      for (const page of ["index.html", "privacy-policy.html", "support.html", "info.html"]) {
+        // The body is read so the cache entry is written out whole (an unread body may stay pending).
+        try { fetch(new URL(page, location.href).toString(), { cache: "no-cache" }).then((r) => r.arrayBuffer()).catch(() => {}); } catch (_) { /* offline / blocked */ }
+      }
+    };
+    // 2 s after load, then at idle: out of the way of the boot's own requests (the links do not depend on it).
+    const later = () => setTimeout(() => (typeof requestIdleCallback === "function" ? requestIdleCallback(run, { timeout: 3000 }) : run()), 2000);
+    if (document.readyState === "complete") later();
+    else addEventListener("load", later, { once: true });
+  }
 })();
 const withAssetVersion = (path) => {
   if (!path) return path;
