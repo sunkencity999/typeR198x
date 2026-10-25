@@ -46,7 +46,7 @@ const DAMAGE = {
   leakCap: 24,
   leak: (len) => DAMAGE.leakBase + Math.min(DAMAGE.leakCap, DAMAGE.leakPerChar * len),
   minion: 10,                                  // boss minion leak
-  surge: (level) => 8 + 2 * level,             // Signal Surge that was not countered (L3 14 ... L10 28)
+  surge: (level) => 8 + 2 * level,             // Counter-Signal surge that was not countered (surges from L2: L2 12 ... L10 28)
   shieldHitCost: 3,                            // seconds of shield removed per absorbed hit
   shieldCap: 15,                               // seconds, when stacking pickups / phase bonuses
   phaseClearShield: 3,                         // seconds granted at a boss phase boundary

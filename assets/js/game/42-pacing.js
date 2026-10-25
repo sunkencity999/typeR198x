@@ -1,7 +1,7 @@
 // Type-R 198X — PACE track (D2 / D3): pace follows the pilot (paceMul per wave into this.waveTuning), PERFECT WAVE by
 // quota only, WAVE TIMED OUT with quota carry, hull carry from sector 4, the Cadet assist and the diff() row. Loads after
 // 40-combat.js. Hooks consumed: waveWillStart, waveWillEnd, waveDrained, levelWillStart, checkpointRestored,
-// clearWillRepair, results, recordWillSave, gameOverWillShow, levelCompleteWillShow, sectorCardWillShow (plus
+// clearWillRepair, results, recordWillSave, gameOverWillShow, levelCompleteWillShow, sectorCardWillShow, modesRunStart (plus
 // bossWillApproach: a wave-3 timeout whose drain the sector clock cuts short still gets its callout). Top-level names
 // PACE* / pace*. No per-frame code, no canvas drawing, no save writes of its own (run.pace rides the existing save points).
 //
@@ -180,6 +180,7 @@ function paceNormalizeState(s) {
   on("gameOverWillShow", "paceOnGameOverWillShow");
   on("levelCompleteWillShow", "paceOnLevelCompleteWillShow");
   on("sectorCardWillShow", "paceOnSectorCardWillShow");
+  on("modesRunStart", "paceOnModesRunStart");
 })();
 
 Object.assign(Game.prototype, {
@@ -487,6 +488,14 @@ Object.assign(Game.prototype, {
     if (ctl.btn) ctl.btn.classList.remove("hidden");
     if (ctl.note) { ctl.note.textContent = PACE_COPY.cadetOffer(L); ctl.note.classList.remove("hidden"); }
     if (Array.isArray(evt.notes)) evt.notes.push(PACE_COPY.cadetOfferSay);
+  },
+
+  // Z9: a mode run starts with no campaign Cadet offer: the button and its note are hidden again, the offer dropped.
+  paceOnModesRunStart() {
+    this._paceOffer = null;
+    const btn = document.getElementById("btnCadetPace"), note = document.getElementById("cadetNote");
+    if (btn) btn.classList.add("hidden");
+    if (note) { note.classList.add("hidden"); note.textContent = ""; }
   },
 
   // #btnCadetPace / #cadetNote (index.html, scaffold); created after Retry boss / #retryNote when missing. Bound once.

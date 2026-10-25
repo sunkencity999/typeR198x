@@ -152,10 +152,15 @@ if (modesLoaded) {
     return !!b && !b.classList.contains("hidden") && !!s && s.classList.contains("is-active") && getComputedStyle(b).visibility === "visible";
   });
   const offers0 = await P.g(() => window.game.paceStats().offers);
+  const cadetUi = () => P.g(() => { const b = document.getElementById("btnCadetPace"), n = document.getElementById("cadetNote");
+    return { btnHidden: !!b && b.classList.contains("hidden"), noteHidden: !!n && n.classList.contains("hidden"), noteText: n ? n.textContent : null, offer: window.game._paceOffer || null }; });
+  let z9 = null;
   for (const mode of ["daily", "daily", "endless"]) {
     await P.g(() => { const g = window.game; if (g.mode !== "menu") g.stopToMenu(true); });
+    const before = z9 ? null : await cadetUi();
     const ok = await P.g(async (m) => { try { return !!(await window.game.startModeRun(m)); } catch (e) { return String(e); } }, mode);
     if (ok !== true) { res.push({ mode, started: ok }); continue; }
+    if (!z9) z9 = { before, after: await cadetUi() };
     await waitFor(P, () => window.game.mode === "playing" && !window.game.levelIntro, 8000);
     await P.g(() => { const g = window.game; g.player.shield = 0; g.invulnT = 0; g.player.hp = 1; g.takeDamage(40, "leak"); });
     await sleep(800);
@@ -167,6 +172,8 @@ if (modesLoaded) {
   else P.check("8. MODES runs (two daily sorties ending in death, an endless hit): no Game Over screen, so the Cadet button never shows; no offer is made and no death is counted for Cadet",
     started.every((r) => r.mode !== "gameOver" && !r.shown && r.applies === false && r.offers === 0 && r.deaths.n === 0),
     res.map((r) => ({ mode: r.mode, runMode: r.runMode, shown: r.shown, btnClassUnhidden: r.btn, offers: r.offers, started: r.started, deaths: r.deaths })));
+  if (z9) P.check("8b. lead ruling Z9: check 7's offer leaves #btnCadetPace / #cadetNote un-hidden; starting a mode run hides both again (note emptied) and drops the offer",
+    !z9.before.btnHidden && !z9.before.noteHidden && z9.after.btnHidden && z9.after.noteHidden && z9.after.noteText === "" && z9.after.offer === null && started.every((r) => !r.btn), z9);
 } else {
   for (const mode of ["daily", "endless"]) {
     await jumpTo(P, 1);
