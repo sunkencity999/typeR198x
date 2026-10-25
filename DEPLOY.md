@@ -1,20 +1,23 @@
 # Type-R 198X release procedure (web build)
 
-Run from the repo root on the release branch (for 20261024a: `release/20261024a`, or its merge into `main`).
+Run from the repo root on the release branch (for 20261024b: `training`, or its merge into `main`; the partial
+release 20261024a was `release/20261024a`).
 Every step is a command the owner runs by hand; nothing here is automated end to end on purpose. The FTP password is only ever
 passed through the `TYPER_FTP_PASSWORD` environment variable (or `--password-file`); never paste it into a
 file, a commit or a shell history you keep.
 
-Background: the live site serves release `20261016a`. Its `/` answers `no-cache` (the `.htaccess` policy works
+Background: the live site serves release `20261016a`, or `20261024a` (the first part of the training update) if
+the owner deployed that one first; 20261024b follows either. Its `/` answers `no-cache` (the `.htaccess` policy works
 there), but the host's NGINX direct delivery still answers `/index.html` and the other pages with
 `Cache-Control: max-age=15552000` and every other static file with `max-age=31536000`, and ignores the query string
 when it resolves a file (audit G025; checked 2026-10-24). Steps 1, 4 and 6 exist to make sure returning players
 actually receive this release. The stale-shell guard in `game.js` reloads an older shell once into the new one only
-when that shell's `game.js` is no longer cached. A browser that cached the whole 20261016a build at `/index.html`
+when that shell's `game.js` is no longer cached. A browser that cached the whole previous build at `/index.html`
 (shell and scripts, the usual state after the footer pages' "Back to the game" links) runs it with zero requests
-and never loads the new `game.js`: it stays on 20261016a until the player reloads, opens `/` or the cache expires.
+and never loads the new `game.js`: it stays on that build until the player reloads, opens `/` or the cache expires.
 On its first visit to `/` the new shell revalidates `/index.html`, `privacy-policy.html`, `support.html` and
-`info.html`, and the in-site links carry `?v=20261024a`, so from then on it gets this release.
+`info.html` (after the first keystroke, or 30 s after load), and the in-site links carry `?v=20261024b`, so from then
+on it gets this release.
 
 ## 0. Preconditions
 
@@ -28,8 +31,8 @@ node --version                          # 18+
 ## 1. Bump the shell token
 
 ```bash
-tools/bump-version.sh 20261024a         # YYYYMMDDx; omit the argument for today + next letter
-tools/bump-version.sh 20261024a --dry-run   # same token again: must report "no changes"
+tools/bump-version.sh 20261024b         # YYYYMMDDx; omit the argument for today + next letter
+tools/bump-version.sh 20261024b --dry-run   # same token again: must report "no changes"
 git diff --stat                         # index/info/support/privacy pages + game.js only
 ```
 
@@ -59,7 +62,7 @@ the change, 2.34 after).
 node tools/deploy/deploy.mjs --dry-run --user <ftp-user>
 ```
 
-Prints the local set in upload order (about 200 files, 199 for 20261024a, ~370 MB listed; on a real run the
+Prints the local set in upload order (about 200 files, 199 for 20261024b as for 20261024a, ~370 MB listed; on a real run the
 ~341 MB of PNG/WAV masters are skipped when the remote size matches) and exits without connecting, so no password
 is needed. Check that `index.html` is last, `assets/opt/manifest.js` just before it, the other pages (`info.html`,
 `privacy-policy.html`, `privacy.html`, `support.html`) just before that and after `style.css`, and that
@@ -100,8 +103,8 @@ Right after the upload, flush the dynamic cache in Site Tools (Speed → Caching
 dynamic cache stores 404 responses keyed by the full URL (measured 2026-10-24: a GET of a missing `?v=` URL answered
 404 MISS, then 404 HIT), so a GET of a new release URL before its file was uploaded can leave a cached 404 behind.
 Existing files are served from disk by direct delivery and are not affected, so this is a precaution; step 5
-fetches every script the served shell references and fails on a 404. Verifiers: do not GET `?v=20261024a` URLs on
-the live host before the deploy.
+fetches every script the served shell references and fails on a 404. Verifiers: do not GET `?v=20261024b` URLs on
+the live host before the deploy (nor `?v=20261024a` ones while that release has not been deployed).
 
 ## 5. Go/no-go
 

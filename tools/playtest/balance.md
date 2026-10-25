@@ -11,6 +11,9 @@ final probe stops on `victory` and paces the typist by `game.playClock`, so its 
 
 ## Training update: lead rulings Z1-Z9 (`wt/rulings`), re-pass on the rulings tree
 
+Release `20261024b` ships exactly these constants: training merges `wt/rulings` at `1068fd6` and nothing after it
+changes a balance number (the Z11 prefetch deferral and the copy pass touch no tuning).
+
 Measured on 2026-10-24 on `wt/rulings` (training `f02b983` + the ruling commits; the constants are final from `5d111f6`),
 headless Chrome, DPR 1, 1440 x 900, two to eight harness browsers at once plus other agents' browsers (load average
 4-17 on 16 cores; every typist is paced by `game.playClock`, b10 play / wall clock 0.93-0.97). These are the reference

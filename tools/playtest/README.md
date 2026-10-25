@@ -207,7 +207,16 @@ Extra one-off scripts live in `probes/` (shipped) or `out/` (ignored). They can 
 - `probes/b-run.mjs --root ../.. [--wpm N] [--accuracy A] [--sectors 1-3]` — the typist-profile runs behind
   the balance pass (PLAN B10): time to the sector-1 boss, deaths per sector, `incomingCps` vs `targetCps` per wave,
   boss-phase `leaksPerMin`, rank reached. The measured numbers and the knobs they drove live in
-  [`balance.md`](./balance.md).
+  [`balance.md`](./balance.md) (its first sections are the training update's re-passes: the lead rulings tree, then
+  the merged tree and PACE's own pass).
+- `probes/b10.mjs --wpm W --accuracy A [--sectors N] [--jump L] [--minions danger|never|always] [--expect p35|p55|p80]
+  [--acquire-ms N]` — one typist profile through consecutive sectors on the play clock (deaths, min HP, leaks, incoming
+  cps, damage by source, surges fired / countered, rank, idle gaps); `b10-report.mjs` renders `out/b10/*.json`. It
+  records the paceMul / quota PACE applied per wave, timeouts and the plates that escaped (alive at the cap, lead ruling
+  Z5), the carried hull on each sector card, the surge windows (Z6) and the throughput; its band is delivery >= 0.85
+  and stream <= 1.35 x targetCps x paceMul. `--acquire-ms N` (lead ruling Z7, off by default) waits N ms of play clock
+  before the first key of every new target, 2N with probability .1 (`--acquire-slow-ms`, `--acquire-slow-p`), so the
+  typist is not a machine that never looks for the next plate.
 - `probes/d8.mjs [--dpr 2]` — attract-mode acceptance (PLAN D8, `assets/js/game/85-attract.js`): attract active
   on the title screen, canvas changes, save blob byte-identical over 15 s on the legacy-midwave menu, no
   `game.enemies` on the menu, frameCount ≥ 58/s fresh and ≤ 22/s after `attract.idleT > 90`, no
@@ -235,8 +244,9 @@ Extra one-off scripts live in `probes/` (shipped) or `out/` (ignored). They can 
 - `probes/t-measure-profile.mjs` — D6 data: migration fixed point and legacy flags, lazy profile and Reset save,
   key / bigram EMAs, the 200-bigram cap, the 16 KB budget, no extra storage writes while typing, weak key / bigram
   formulas, sessions / speedEma / days (acc null under 10 keys), sector bests, practice sessions and mode bests
-  through the `typistEndSession` API (no mode calls it in this release), goal, blocked storage, a static allocation
-  scan of the per-key / per-frame functions.
+  through the `typistEndSession` API (the daily, drill and endless runs call it), goal, blocked storage, a static
+  allocation scan of the per-key / per-frame functions. Check 6 counts autosave writes only (an existing tutorial-flag
+  save point on the first typed word is not a per-key write).
 - `probes/t-measure-flightlog.mjs` — D6 UI: Records tabs by pointer and keyboard, the Flight Log from an injected
   profile, empty state, legacy rows, menu Best WPM / goal, phone portrait / landscape / desktop (stat labels inside
   their tiles), the sparkline legend / lone-point dots / gaps, colour-vision luminance of the key buckets
@@ -252,6 +262,86 @@ Extra one-off scripts live in `probes/` (shipped) or `out/` (ignored). They can 
   summary and disclosure, the FINISH fix, the phone layout (the tap pill and the toasts never overprint Skip or the
   step count at 390x844, 844x390 and 320x568), the step-3 toast following the lock, and the harness default /
   `--flight-check` (runs play.mjs twice into `out/t-onboard-harness/`).
+- `probes/t-words-content.mjs [--root ../..] [--dict /usr/share/dict/words]` — WORDS content, no browser (node vm over
+  00-util / 20-constants / 25-lexicon / 30-content, plus a context without 25-lexicon for today's pools): list shapes,
+  inventions out of the wave pools (C3: `japan` is one, lead ruling Z4), per-wave pools and shares, >= 95 % dictionary
+  words, top-100 / bigram / letter coverage of a simulated stream, the cps estimate, the weak-bias formulas and the
+  anti-repeat ring for a one- or two-word weak pool (C16), seeded determinism, tuning, copy.
+- `probes/t-words-space.mjs` — Space types the gap of a locked two-word plate and releases otherwise, Backspace, a
+  letter at the gap, auto-repeat, pause, sector card, boss, the b_lib typist, touch `insertText`, a plate PIERCE or
+  RAPID left at its gap (S13), and MEASURE counting the gap as a speed interval but never as a key or bigram.
+- `probes/t-words-render.mjs [--dpr 2] [--reduced-motion]` — the gap dot (pixels only inside the gap cell; idle /
+  locked / typed), plate width, the warm cache up to `cfg.maxTextLen` (plain and typo-widened), the dots following
+  MEASURE's typo pair, a 14-plate frame budget. Screenshot `NN-warp-core-*.png`.
+- `probes/t-words-spawn.mjs` — in-page spawn mix per sector-wave, no inventions, the weak bias and THREAT INTEL line +
+  speech from a seeded profile through MEASURE's real API, the one-time two-word tip (and again after Reset save), the
+  seeded Daily stream, tuning and the endless no-op, live S7 phrases typed by the harness typist, help copy, and WORDS
+  staying inert during the real Flight Check.
+- `probes/t-arcade-counter.mjs` — D10 Counter-Signal (~2.5 min): table / window / par numbers, the Z6 window floor
+  (`surgeWindow` = max(table, 2.25 x the segment's time at the pilot's speed), 1b / 3), sector 1 never surging, the first
+  sector-2 surge at 6.0 s at a segment start (whole segment, slow widen), the pending start, the telegraph (charge bar,
+  meter, glow and outline draw counters; the bar's position and zero HUD growth at 1440 x 900, 390 x 844 and 844 x
+  390), fail and counter (exact damage / bonus, bolts at the aim point, scramble), the per-phase cap, pause, Retry boss,
+  par, the card-note scopes (sector / Game Over / run), reduced motion, a DPR 2 budget context and `legacy-inboss`.
+- `probes/t-arcade-overdrive.mjs` — D11 Overdrive (~2 min, controlled in-page typist on `performance.now()`):
+  thresholds (2c: a fresh pilot's provisional 25 WPM threshold refreshes in Overdrive and the first Overdrive ends by
+  the slow rule, lead ruling Z2), activation at 100 WPM, the score kinds, beams / floaters / plume / arc, vents (miss,
+  leak, slow), holds (pause, empty field), the charge reset, the boss kill, the card note, setItem count, scripted
+  input, a real drill blocking it with a daily sortie as the control (15), the Flight Check blocking it, the first
+  Overdrive tip stacking beside an S1 tutorial tip, 13b at the 25 WPM floor, heap, reduced motion.
+- `probes/t-arcade-readability.mjs` (DPR 2) — D12: the kill explosion set and mapping, draw order (smoke < plates <
+  flash), a neighbour plate's text pixels after a kill, rail alpha, ring / hit-stop, a 6 s kill burst budget.
+- `probes/t-arcade-budget.mjs` (DPR 2, CRT on; run alone) — sector-10 boss + 4 minions + a charging surge +
+  Overdrive: fps, render ms, composite sets, shadowBlur, full-frame fills, layouts, heap.
+- `probes/t-arcade-balance.mjs [--reuse] [--only <profile>] [--parallel n]` (~25 min) — runs b10.mjs for 35/.90,
+  55/.93, 80/.97 (sectors 1-3), 55/.93 and 80/.97 (sector 10 jump) and 80/.97 (sectors 8-10), asserts the Counter-Signal
+  targets (every S2-3 fight surges, S1 never; the Z6 targets: no surge damage for 35/.90 in S1-3, the 55/.93 S10 min
+  hull, 80/.97 still meeting real surges in S8-10) and writes `out/t-arcade-balance/summary.json` (surges, surge
+  damage, windows, tally per sector).
+- `probes/t-pace-math.mjs` — D2 numbers (~15 s, no typing): `PACE` constants, target / step functions, the tuning
+  table on S5 W2, the three pilot sources with and without MEASURE's accessors (the 60-interval profile floor), a fresh
+  pilot's S1 W1 at 1.0 / quota 8, the 73 WPM ramp across a sector boundary, the `diff()` rows, the hull formula.
+- `probes/t-pace-spawner.mjs [--dpr 2]` — the 10-30 px roll-in, the 0.1 s empty-field spawn, a pinned paceMul 2.0
+  (alive cap, plate speeds, quota 36, stage bar), the 2-alive top-up just above `PACE.hungryMin2AtMul` and off just
+  below it, the stream at a pinned 1.5 under an 80 WPM typist, a fresh S1 W1 at 1.0 with MEASURE.
+- `probes/t-pace-stakes.mjs` — perfect wave by quota only; the Z5 wave caps (computed, >= the table, a pilot who
+  keeps the field clear is never timed out, an empty field lifts the cap); a timeout with plates alive: they leave at
+  once as escaping plates (no detonation, no damage, warping off to the right; a fade under reduced motion) and the
+  drain end calls `WAVE TIMED OUT · N ESCAPED` (no sting, no bonus, announced), the quota carry and its limits, the
+  sector-clock cut of a wave-3 drain, Retry clearing a carry.
+- `probes/t-pace-hull.mjs` — S1-3 refill, S4 220/500 -> S5 432/600 with the card / Level Complete copy, flawless
+  stays full, Retry refills, quit at Level Complete + Continue keeps the carried hull and shows the line once, legacy
+  fixtures, and the `PACE x2.0` results chip with its announcement (none at the table pace).
+- `probes/t-pace-cadet.mjs [--dpr 2]` — the second-death offer (focus, Tab order, note, announce), accept (stream /
+  damage / score, tags, the results row, records), the next sector standard, the boss path, the count across a
+  reload, no Cadet in daily / endless (real MODES runs), the offer hidden again when a mode run starts (8b, lead
+  ruling Z9), a phone tap, the stays-on note on a death under Cadet, and the phone records row keeping its CADET chip
+  in view.
+- `probes/t-pace-save.mjs` — `run.pace` keys / types / < 400 B, a garbage blob normalised, no extra storage writes
+  while typing, node --check + check-globals.
+- `probes/t-pace-perf.mjs [--dpr 2]` — S10 W3 and S1 W3 pinned at 2.5 with an 80 WPM typist, and S10 with an idle
+  pilot: fps, maxRenderMs, shadowBlur, full-frame fills, composite sets, max alive. Run it alone.
+- `probes/t-pace-balance.mjs --wpm W --accuracy A [--seed-profile auto|WPM] [--jump L --sectors N --retry N]
+  [--set knob=value,rollin=a-b] [--acquire-ms N]` / `--matrix [--parallel 2]` — the R26 balance targets (idle share
+  S1-3, deaths, damage, rank, time to the S1 boss, min hull, longest idle gap) with a play-clock-paced typist; prints
+  per sector idle / deaths / hull in / min hull / per-wave paceMul, quota, carry, timeouts and escaped plates; JSON
+  under `out/t-pace-balance/`. `--acquire-ms` is the Z7 latency (as b10); the latency matrix reports idle share only
+  and keeps the death and damage targets.
+- `probes/pace_lib.mjs` — helpers: the b10 typist on the play clock (optional acquisition latency), forced clears,
+  deaths, the in-place reload, canvas budget counters.
+- `probes/t-modes-rng.mjs`, `t-modes-daily.mjs`, `t-modes-endless.mjs [--dpr 2]`, `t-modes-drill.mjs`,
+  `t-modes-title.mjs` — the D9 acceptance (~4 min together): seed vectors, the 2026 sector spread, picks routed
+  through `game._rng` in a daily run and never in the campaign, identical wave openings on one date; the daily tile,
+  start, pause copy and restart confirm, three waves and no boss, card / rating / medal (incl. the SILVER cap on a
+  death and the accuracy rounded down), the save record (counted, practice, death, streak copy, midnight, 60-day prune
+  <= 8 KB), share line and clipboard copy, quit keeping the campaign run, a campaign start inside a mode run banking
+  the stored run, post-victory sectors, the locked fresh deck; the endless start rate, stream tuning, steps,
+  delivered-rate calibration, pressure cap, bests, powerups, no damage / boss, 6 cps frame budget; the drill clamp,
+  weighting, clock and pause, leaks, no score / powerups, lines vs the profile, bigram line, bests; deck placement, Tab
+  order, four layouts, the untouched menu blob, card keys, reduced motion, no tutorial toast, campaign chrome restored
+  after a paused drill. Every one checks the campaign fields stay byte-identical. `probes/modes_lib.mjs` holds the
+  fixtures (F5, F5P), `startMode`, `isolation`, `card` and a scripted static-plate typist (`typeWords`). Probe hooks:
+  `game.modesDebug()` = `{ setNow, advance, state, plan, finish }`.
 - `probes/review-runtime.mjs` — regression checks for the review-fix runtime track (~25 s): explosion sheet factor through a DPR 1 -> 2 flip and back (R1), `PALETTE.rgba` alpha quantisation (R12), dying plates under source-over (R13), the full 450 ms loading fade (R27), plate-cache re-warm after a mid-sector resize (R30), bounded spawn/leak telemetry logs and their reset on a new run (R31).
 
 ## Music loop points (`tools/measure-loops.sh`)

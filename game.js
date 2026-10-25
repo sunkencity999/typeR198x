@@ -25,7 +25,7 @@
 //   assets/js/game/40-combat.js      Game.prototype: spawning, waves, kills, powerups, damage, update(dt)
 //   assets/js/game/42-pacing.js      Game.prototype: pace controller, stakes, Cadet assist (PACE)
 //   assets/js/game/45-feedback.js    Game.prototype: banner system (bossIntro/bossClear/sector/wave/callout), floaters
-//   assets/js/game/50-boss.js        Game.prototype: boss fight (phases, minions, Signal Surge, intro/outro, finale tally)
+//   assets/js/game/50-boss.js        Game.prototype: boss fight (phases, minions, Counter-Signal, intro/outro, finale tally)
 //   assets/js/game/52-modes.js       Game.prototype: Daily Sortie, Endless Drift, Drill (MODES)
 //   assets/js/game/60-hud.js         Game.prototype: DOM HUD (diffed writes on a 5 Hz commit cadence), chips, boss bar, live WPM
 //   assets/js/game/70-render.js      Game.prototype: resizeCanvas, plates/capsules/rails, boss art + slab, parallax, stars, render() layer order

@@ -7,9 +7,11 @@ target to lock on, finish the word to fire, and clear ten sectors of word-bosses
 (plain HTML, CSS and classic JavaScript, no bundler, no runtime dependencies) that plays at
 **[https://typer198x.com](https://typer198x.com)** and can be served from any static host.
 
-This README describes the web build after the 2026 overhaul and the first part of the training update (release
-`20261024a`: hand-speed WPM, typo feedback, rank lines, the pilot profile and Flight log, and the first-run flight
-check). Release steps live in [DEPLOY.md](./DEPLOY.md);
+This README describes the web build after the 2026 overhaul and the training update (release `20261024b`: hand-speed
+WPM, typo feedback, rank lines, the pilot profile and Flight log, the first-run flight check, everyday words and
+two-word targets aimed at weak keys, the Counter-Signal boss attack and Overdrive, a stream that follows the pilot's
+speed with timed-out waves, hull carry and Cadet pace, and the daily sortie, drill and endless drift). Release steps
+live in [DEPLOY.md](./DEPLOY.md);
 the play-test harness has its own [tools/playtest/README.md](./tools/playtest/README.md).
 
 ## Contents
@@ -39,9 +41,22 @@ the play-test harness has its own [tools/playtest/README.md](./tools/playtest/RE
 - **Lock and fire.** Every enemy is a word on a plate. Typing its first letter locks the nearest matching
   plate; each further correct letter fires a shot, and the last one destroys it. Lime means "type this";
   violet is a pickup, magenta is hostile, amber is score, red is damage, cyan is chrome.
-- **Waves and bosses.** Each sector runs three announced waves, an approach, then a three-phase word-boss
-  with typable minions and a telegraphed *Signal Surge* you cancel by finishing the segment in time.
+- **Words.** Half the word targets in Sectors 1-5 (30 % from Sector 6) are everyday English from a 500-word list
+  (`COMMON_WORDS`, `assets/js/core/25-lexicon.js`); the rest are real neon, space and retro words (the invented words
+  stay with the bosses, callouts and capsules). From Sector 4, 15 % of word targets are two-word phrases (20 % from
+  Sector 7); the gap shows as a dim dot and Space types it. Once your Flight log knows your weak keys, 35 % of letters
+  and words lean on them and the sector card says `THREAT INTEL · HOSTILES PROBING K · P · TH`.
+- **Waves and bosses.** Every sector is three announced, quota-boxed waves, an approach and a three-phase word boss
+  (four in sector 10) with typable minions. From sector 2 the boss fires a telegraphed **Counter-Signal**: it glows
+  red, a red bar fills under its hull meter and the word's frame pulses; finish the whole word before the bar fills to
+  counter it (bonus, the bolt bounces back), miss it and it hits for 8 + 2 x sector and the word starts over. The bar
+  never gives less than 2.25 x the time the word takes at your measured hand speed, and at most two land per phase.
   Clearing a phase grants a short shield and writes a checkpoint.
+- **Overdrive.** Type faster than your own speed (1.05 x this run's hand speed, else your profile's; at least 25 WPM)
+  with no misses and a white arc fills around the ship; full after 2 s, the beams run white-hot and kills, boss
+  letters and boss segments pay +25 % (pickups and bonuses excluded). A hard miss, a leak, a surge hit or 1 s below
+  90 % of the threshold vents it. Off in Drill and the Flight Check. Before any speed is measured the threshold is a
+  provisional 25 WPM that refreshes every second, so a new pilot's first Overdrive ends by the same rule.
 - **Powerups.** `SHIELD`, `MULTI`, `SPREAD`, `PIERCE`, `RAPID` and `HEAL` capsules drift in; type the
   label to grab one. Combo tiers lift the score multiplier up to x5 (x7 under `MULTI`); a hard miss or
   hull damage breaks the combo. Wrong keys never cost points.
@@ -55,15 +70,37 @@ the play-test harness has its own [tools/playtest/README.md](./tools/playtest/RE
   of `COMET` with `Space` and take the nearer `LASER`. Nothing can hit you, nothing scores and nothing reaches the
   records; `Esc` or **Skip** goes straight to the sector, and returning pilots never see it. The mission briefing
   opens on three lines (lock, fire, let go) with the full story behind *Read the full briefing*.
+- **Pace follows you.** At every wave the game compares your measured hand speed (this run, else your profile) with
+  the sector's stream and scales it up to 2.5x: more plates at once, a little faster, a bigger quota. It never drops
+  below the table on its own. A wave's time cap always leaves room for its whole stream, and it times the wave out only
+  while plates are still flying: they warp away without damage, the wave pays no perfect-wave bonus and the callout
+  reads `WAVE TIMED OUT · N ESCAPED`; after wave 1 or 2 those N join the next wave. From Sector 4 a clear repairs half
+  of the missing hull and the rest carries (`HULL 72% · REPAIRED +28%` on the next sector card). Two deaths in one
+  sector add **Fly at Cadet pace** to Game Over: 75 % stream and damage, 80 % score, tagged CADET, until that sector
+  is cleared.
+- **Daily sortie, drill, endless drift.** Under Start, the **Daily sortie** flies one sector a day (picked from your
+  top three unlocked by the local date), three waves and no boss. Your first finished or failed attempt of the day
+  counts; later ones are practice. Its rating is speed x (accuracy / 100)^2 and the medal compares it with the median
+  of your own rated sorties from the previous seven days (gold at 110 %, silver at 95 %; by accuracy, 97 / 93 %,
+  until there are three; a sortie that ends in death earns silver at most). The card shows accuracy rounded down, so it
+  never reads above the value the medal used. The tile shows today's sector, the medal, your counted sorties and the streak, and the card
+  has a one-line result to copy. **Drill** is 60 s with no hull and no score at 1.1 x your speed, 60 % of it built
+  from the keys and letter pair you miss or type slowest (common words when there are none yet); the card compares
+  this drill's miss rate per key with your profile. **Endless drift** starts at 70 % of your speed and rises 0.3
+  characters per second every 20 s until the first target gets through; your ceiling is the stream's WPM at that
+  moment, with the peak 10-second speed beside it. None of them touch your saved run, high score, records, sector
+  bests, Best WPM or unlocks (they do add to the Flight log); the deck unlocks once a new pilot has flown (or skipped)
+  the flight check or any run.
 
 ## Controls
 
 | Input | Effect |
 | --- | --- |
 | Letters | First letter locks the nearest matching target; keep typing to fire |
-| `Space` or `Backspace` | Release the current lock |
+| `Backspace` | Release the current lock |
+| `Space` | Type the gap when the locked target's next character is a space (two-word targets, Sector 4 on); otherwise release the lock |
 | Three wrong keys on a locked target | The lock drops on its own ("lock lost") |
-| `Esc` | Pause / resume during play; skips the first-run flight check; back out of a modal or screen |
+| `Esc` | Pause / resume during play; skips the first-run flight check; back out of a modal or screen; on a daily / drill / endless result card, back to the menu |
 | `Enter` (or `Space` on result screens) | Advance screens; `Enter` in the pilot-name field starts the run; skips the boss intro when you have already cleared that sector, and the rest of the finale once its skip window opens (2 s) |
 | Any letter during the sector card | Skips the card once you have already cleared that sector (returning players); keys are never counted there |
 | `?` or `F1` | Open the help manual (title and pause screens) |
@@ -91,6 +128,23 @@ finale gets the crystal city. Each sector's quota, cap, target characters per se
 letter/word ratio, word-length window, surge cadence and minion rate come from `LEVEL_TABLE` in
 `assets/js/core/20-constants.js`.
 
+Counter-Signal cadence (`LEVEL_TABLE` `surgeEvery`, ARCADE D10): none in sector 1, every 20 s in sectors 2-3, then 14 /
+13 / 12 / 11 / 10 / 9 / 8 s; the first surge of a fight arms min(6 s, surgeEvery) after the intro and the cadence runs
+across phases (a phase that fired two restarts it). A surge starts at a segment start and covers the whole segment:
+window `0.6 s + chars x perChar` (`perChar` .30 s at S2 down to .12 s at S10), 20 % wider when the pilot's live speed is
+under 35 WPM, and never shorter than `COUNTER_SIGNAL.fairMul` (2.25) x the time the segment takes at the pilot's hand
+speed (run, else lifetime, else 30 WPM; `surgeWindow`, lead ruling Z6). Boss par is `totalChars / (0.9 x targetCps)`,
+so the time bonus is a tie-breaker that follows the sector's pace. Word kills use a smaller explosion (the medium
+frames at .55) whose smoke sits under the plates.
+
+The table is the floor: `assets/js/game/42-pacing.js` multiplies each wave's spawn rate and quota by `paceMul =
+clamp(0.85 x pilotCps / targetCps, 1.0, 2.5)` (moving at most 0.35 per wave; pilotCps = this run's hand speed after
+20 intervals, else the profile's after 60, else the table), adds `min(3, round(2 (paceMul - 1)))` to the alive cap and
+`0.15 (paceMul - 1)` to plate speed, and from paceMul 1.35 tops an emptying field up to two plates. An empty field
+spawns after 0.1 s (`HUNGRY_SPAWN_S`) and new plates roll in 10-30 px off-screen (`SPAWN_ROLLIN_PX`). A wave's cap is
+`max(table cap, 1.25 x the stream's delivery time for the paced quota + 4 s)` (`paceWaveCap`, lead ruling Z5) and ends
+the wave only while plates are alive; an empty field lifts it and the wave ends by quota.
+
 Every results card stamps a rank from `rankFor(accPct, wpm, hpPts, level)`: accuracy 50 %, speed 30 %, hull 20 %
 (`RANK` in 20-constants.js, thresholds S 0.90 / A 0.75 / B 0.55 / C 0.35, D below). Speed is hand speed (below) and
 every sector measures it against its own stream rate (`targetCps x 12`): the speed term runs from 0.5 x nominal to
@@ -111,8 +165,8 @@ THROUGHPUT in the Flight log. The HUD ACC cell reads `--` until 10 keys, turns a
 and pulses on each hard miss. A wrong key while locked shows the typed glyph struck through inside the plate; a
 wrong key with nothing locked pops the glyph off the gun and pulses the nearest plate's lead letter. Records ->
 Flight log shows per-key misses and latency on a keyboard, slowest keys, weak keys, a speed / accuracy sparkline of
-the last 20 sessions, per-sector best speed and accuracy, days flown and a goal line built from the last five
-sessions (also on the title screen, under Best WPM).
+the last 20 sessions, per-sector best speed and accuracy, mode bests (the best endless ceiling and the best drill),
+days flown and a goal line built from the last five sessions (also on the title screen, under Best WPM).
 
 ## Settings, reduced motion and touch play
 
@@ -162,30 +216,30 @@ Module map, in `index.html` load order:
 | `assets/js/core/00-util.js` | `clamp/lerp/rand/...`, `normalizeKey/foldLatin`, `IS_FILE_ORIGIN`, `IS_NATIVE_SHELL`, the `GAME_HOOKS` registry (`onGameHook` / `runGameHooks`) the training-update files listen on |
 | `assets/js/core/10-tokens.js` | `PALETTE` / `FONT` / `MOTION` / easings / `SHAKE_PAD`: the CSS design tokens mirrored into JS |
 | `assets/js/core/20-constants.js` | Timing and balance constants, `LEVEL_TABLE` -> `LEVELS`, `RANK`/`rankFor`, powerups, `buildBossSegments` |
-| `assets/js/core/25-lexicon.js` | Header only in this release (reserved for the WORDS track); no code runs |
+| `assets/js/core/25-lexicon.js` | `COMMON_WORDS`, `PHRASES`, the wave-pool mix (`lexiconAttachLevel`: common / two-word shares, `waveTextLen` for the spawner's cps), two-word plates (Space types the gap, the gap dot), weak-key bias from MEASURE's profile, THREAT INTEL; GAME_HOOKS listeners only (WORDS) |
 | `assets/js/core/30-content.js` | Word pools and letter sets, boss tables, ship configs, `LEVEL_THEMES`, explosion sheet, victory script |
 | `assets/js/core/40-save.js` | `LS_KEY`, schema 3 `defaultSave`, `loadSave`/`storeSave`, `migrateSave`, checkpoints and resume helpers |
 | `assets/js/core/50-assets.js` | `Assets` IIFE (`window.TypeRAssets`): manifest-driven image loader, variants, prepare, prefetch, gc |
 | `assets/js/core/60-entities.js` | `Enemy`, `Powerup`, `Bullet`, `ExplosionSprite`, `Particle`, `Boss` |
 | `assets/js/core/70-canvas.js` | Stateless canvas helpers: `roundRect`, `bracketRect`, `drawSplitText`, `fitText`, `drawTracked` |
 | `game.js` | `ASSET_VERSION`, the stale-shell guard, `withAssetVersion` (literal line kept for the native sed), `class Game { constructor, loop }`, `hook` / `runMode` / `rand` |
-| `assets/js/game/05-boot.js` | Boot sequence, loading overlay and watchdog, per-sector asset gate, prefetch of the next sector |
+| `assets/js/game/05-boot.js` | Boot sequence, loading overlay and watchdog, per-sector asset gate, prefetch of the next sector (from the page's first typed key) |
 | `assets/js/game/10-ui.js` | Shell: `setMode` state machine, focus routing, announcer, modals and confirms, settings + `resolveMotion`, fullscreen, top bar, mobile input |
 | `assets/js/game/15-screens.js` | Title cabinet (sector grid, resume card), records and help modals, results cards, tutorial toasts, CRT overlay and the typewriter ending |
 | `assets/js/game/17-onboarding.js` | First-run Flight check (ONBOARD): eligibility, the three drills, Skip / `Esc`, pause relabel, the briefing summary and disclosure, the `TypeRHarness.flightCheck` flag |
 | `assets/js/game/20-run.js` | Run and sector lifecycle, checkpoints, `saveRun`, level complete / game over / victory |
 | `assets/js/game/30-input.js` | Keydown routing, `handleTyped`, lock rules (release, three-miss loss), scoring hooks |
 | `assets/js/game/32-typist.js` | Hand speed (qualifying intervals, live / window / sector / run / lifetime), per-key and bigram profile (`save.profile`), weak keys, sessions and bests, the typo pair / gun pop, HUD ACC / WPM providers, rank line / WEAK SIGNAL / Game Over cause, Flight log, goal line (MEASURE) |
-| `assets/js/game/40-combat.js` | Spawning, lanes, waves and approach, kills, powerups, damage, `update(dt)` |
-| `assets/js/game/42-pacing.js` | Header only in this release (reserved for the PACE track) |
+| `assets/js/game/40-combat.js` | Spawning, lanes, waves (a wave's cap ends it only with plates alive) and approach, kills, powerups, damage, `update(dt)` |
+| `assets/js/game/42-pacing.js` | Pace controller (`paceMul` per wave from MEASURE's speed into `waveTuning`), perfect wave by quota, computed wave caps, timed-out waves (the escaping plates) and their quota carry, hull carry from sector 4, the Cadet assist and the `diff()` row (PACE) |
 | `assets/js/game/45-feedback.js` | Banner system (sector, wave, boss intro/clear, callouts) and score floaters |
-| `assets/js/game/50-boss.js` | Boss v2: phases, surge, minions, intro and finale |
-| `assets/js/game/52-modes.js` | Header only in this release (reserved for the MODES track) |
+| `assets/js/game/50-boss.js` | Boss v2: phases, minions, intro and finale; Counter-Signal (surge cadence, `surgeWindow` from the pilot's speed, telegraph, fail reset, counter, DOM charge bar) (ARCADE) |
+| `assets/js/game/52-modes.js` | Daily Sortie (date seed, per-wave mulberry32 through `this.rand()`, medal, streak, share line), Endless Drift and Drill streams (`waveTuning`, own text picker), the title deck, the mode results screen, `save.modes` (MODES) |
 | `assets/js/game/60-hud.js` | DOM HUD with write-on-change diffing: score, combo and multiplier, HP meter, chips, boss meter |
-| `assets/js/game/70-render.js` | `resizeCanvas`/`renderScale`, plates, capsules and rails, boss art and console slab, warp-in, storms, parallax, stars, `render()` in layer order |
+| `assets/js/game/70-render.js` | `resizeCanvas`/`renderScale`, plates, capsules and rails, dying and escaping plates, boss art (Counter-Signal glow) and console slab, warp-in, storms, parallax, stars, `render()` in layer order |
 | `assets/js/game/75-fx-draw.js` | Ship, beams, rings/bolts/debris, particles, overlays, vignette, active-target redraw |
 | `assets/js/game/80-fx.js` | Effects clock: trauma camera and `shakeOffset`, hit-stop/slow-mo, flash channels, `onKeyFx`/`onKillFx`, ambient step |
-| `assets/js/game/82-overdrive.js` | Header only in this release (reserved for the ARCADE track) |
+| `assets/js/game/82-overdrive.js` | Overdrive: burst meter relative to the pilot's speed (MEASURE's intervals), the shield-ring arc, white-hot beams / plume, +25 % on kill / boss-letter / segment score, vent / slow exit, card note, `pilotWpm()` (ARCADE) |
 | `assets/js/game/85-attract.js` | Attract mode on the title screen: ghost plates from `LEVELS[0].words`, selected-ship cruise, 20 fps drift after 90 s idle (`startAttract`/`stopAttract`/`updateAttract`/`drawAttract`) |
 | `assets/js/99-boot.js` | `const game = new Game(); window.game = game; window.TypeRDebug / TypeRAssets` |
 
@@ -205,7 +259,7 @@ come from `PALETTE` / CSS variables rather than literals.
    is its only writer:
 
    ```bash
-   tools/bump-version.sh 20261024a            # rewrite every shell token (index, info, support, privacy pages, game.js)
+   tools/bump-version.sh 20261024b            # rewrite every shell token (index, info, support, privacy pages, game.js)
    tools/bump-version.sh                      # today's date + next letter
    tools/bump-version.sh --dry-run            # report only
    tools/bump-version.sh --add-missing        # also stamp script/stylesheet tags that have no ?v= yet (never the font preload)
@@ -267,7 +321,8 @@ SKIP_OG=1 tools/build-web-assets.sh        # skip the og-card step
 **`Assets` loader** (`assets/js/core/50-assets.js`, also `window.TypeRAssets`): reads the manifest and
 loads images on demand. The loading screen waits only for the critical set (four ships, `bg/first`,
 `fg/first`, `fx/explosions`); each sector's background, foreground and boss load when the sector starts
-and the next sector is prefetched at a quarter of the way through and during the finale; images are
+and the next sector is prefetched a quarter of the way through (once the pilot has typed in this page session, so a
+run resumed past that point does not fetch it before the first keystroke) and during the finale; images are
 decoded off the main thread into bitmaps at the size they are drawn (`x2` files above `renderScale` 1.25,
 `x1` otherwise; `Save-Data` forces `x1`); a WebP that fails to load falls back to its PNG master and a key
 that still fails is reported once so the loading screen can offer *Retry* and *Continue* (procedural
@@ -314,22 +369,23 @@ pause applies -6 dB and a low-pass, hidden tabs pause the transport. Defaults: m
 ## Budgets (measured)
 
 Numbers from the harness at a 1440x900 viewport. The byte, frame-rate and render rows were re-measured for release
-`20261024a` with `play.mjs --scenario all` at DPR 1 and 2; the art rows are unchanged because this release adds no
-art:
+`20261024b` with `play.mjs --scenario all` at DPR 1 and 2 (training at the copy pass, `e15b279`); the art rows are
+unchanged because the training update adds no art:
 
 | Metric | Measured | Budget |
 | --- | --- | --- |
-| Non-media bytes finished before the first keystroke | 1.94 MB at DPR 1, 2.39 MB at DPR 2 | <= 2.5 MB |
+| Non-media bytes finished before the first keystroke | 2.11 MB at DPR 1, 2.57 MB at DPR 2 (1.94 / 2.39 for `20261024a`); 2.34 MB for the `fixture-legacy-inboss` matrix row, which loads a boss before its first keystroke | <= 2.5 MB at DPR 1, <= 2.75 MB at DPR 2 and for `fixture-legacy-inboss` (CONTRACT 8.y W2, 8.z Z11) |
 | `assets/opt` (everything the web build can download) | 29 MB | <= 35 MB whole game |
 | Frame rate (menu, gameplay, boss, finale windows) | 60 fps at DPR 1 and DPR 2 | >= 58 |
-| `render()` wall time | 2.1 ms max at DPR 1, 6.9 ms at DPR 2 | <= 16 ms |
+| `render()` wall time | 3.7 ms max at DPR 1, 8.1 ms at DPR 2 | <= 16 ms |
 | `shadowBlur` sets per frame in steady state | 0 | <= 2 |
 | Translucent full-frame fill alpha | .12 (storm tint .22 multiply is the documented exception) | <= .12 |
 | Decoded bitmap pixels at DPR 2, sector 1 | ~10.9 Mpx (~19 Mpx with the next sector prefetched) | <= 12 Mpx resident |
 
-Known and tracked: `layoutCountPer5s` while typing reads 15-30 with the probe run alone (14.9 at DPR 1 and 25.7 at
-DPR 2 for `20261024a`; target <= 40 per 5 s: the 5 Hz HUD commits plus event-driven writes, see
-`probes/e2-layout.mjs`); idle play is about 4 (`layoutCountPer5sIdle` 3.9 / 3.5); the
+Known and tracked: `layoutCountPer5s` while typing reads 15-35 with the probe run alone (34.2 at DPR 1 and 30.8 at
+DPR 2 for `20261024b`, 14.9 / 25.7 for `20261024a`; the window tracks how many keys and callouts land in it; target
+<= 40 per 5 s: the 5 Hz HUD commits plus event-driven writes, see `probes/e2-layout.mjs`); idle play is about 4
+(`layoutCountPer5sIdle` 3.9 / 3.5); the
 first frame of a sector entered by a direct `startLevel(i)` jump costs 45-80 ms at DPR 2 (GPU upload;
 `advanceLevel` is pre-warmed and does not hitch).
 
@@ -355,18 +411,35 @@ One `localStorage` key, **`typesmup198x.save.v1`**, schema 3 (`assets/js/core/40
 `playerName`, `selectedShip`, `highScore`, `lastUnlockedLevel` (1..10), `storySeen`, `settings`
 (`muted`, `crt`, `musicVolume`, `sfxVolume`, `crtIntensity`, `reduceMotion`, `renderScaleCap`),
 `highScores` (top 10), `sectorBests` ("1".."10" -> score, rank, wpm, acc, maxCombo, date), `bestWpm`,
-`victories`, `tutorialSeen`, `onboardingDone` (ms epoch when the first-run flight check was passed or skipped,
-0 = not yet; written once, never on quit-to-menu; `migrateSave` keeps it), `profile`, `modes` (reserved for a
-later release, stays `null`) and `run` (the live run with `checkpoint`, `boss`, `bossCheckpoint`, `stats`,
-`levelStats`).
+`victories`, `tutorialSeen` (the overhaul's tips plus `phrase`, the first two-word tip, one write per save lifetime,
+and `surge` / `overdrive`, the first Counter-Signal and Overdrive tips), `onboardingDone` (ms epoch when the first-run
+flight check was passed or skipped, 0 = not yet; written once, never on quit-to-menu; `migrateSave` keeps it),
+`profile`, `modes` and `run` (the live campaign run with `checkpoint`, `boss`, `bossCheckpoint`, `stats`,
+`levelStats`, `spd`, `pace`).
 
 Schema 3 adds `profile` (created on the first key): `keys` (`a`..`z` -> `{n, err, ms}`, attempts, miss EMA .05,
 latency EMA .15), `bigrams` (top 200 by attempts), `speedEma` / `thrEma` / `speedN`, `sessions` (last 100 as rows
 `[t, mode, sector, speed, acc, rank, score, misses, steady, weak]`, read through `typistSessions()`; one per campaign
-sector cleared or lost, `speed` 0 under 10 intervals, `acc` null under 10 keys), `sectorBest`, `bests` (`speed`;
-`ceiling` and `drill` are reserved for later modes and stay 0) and `days`. The profile is capped at 16,384 B of JSON
-(oldest sessions dropped first; worst case measured 13,088 B); with the run and everything else inside their 4 KB
-budgets the whole save stays within 24 KB. Run records carry `run.spd` and `levelStats.spdN/spdMs/spdSq/hits`.
+sector cleared or lost and one per finished daily sortie, drill or endless drift, `speed` 0 under 10 intervals, `acc`
+null under 10 keys), `sectorBest` (campaign clears only), `bests` (`speed`, the campaign Best WPM; `ceiling`, the best
+endless ceiling; `drill`, the best-rated drill `{speed, acc}`) and `days`. The profile is capped at 16,384 B of JSON
+(oldest sessions dropped first; worst case measured 13,088 B). Run records carry `run.spd` and
+`levelStats.spdN/spdMs/spdSq/hits`.
+
+`modes` (MODES, created by the first finished mode run, at most 8 KB; 7,129 B measured after 61 days): `daily`
+(`today {date, sector, attempts}`, `days` = the newest 60 counted days `{sector, rating, medal, speed, acc, result, t}`
+keyed `YYYYMMDD`, `flown` = counted sorties, `streak {n, last}`), `endless {best {ceiling, timeMs, peak, acc, t}, runs}`,
+`drill {best {speed, acc, t}, runs}`. A mode run is never stored as `run` and writes the save exactly once, when it
+ends; its session (mode `daily` / `endless` / `drill`) and the ceiling / drill bests go into `profile` through MEASURE.
+
+`run.pace` (PACE, < 400 B, normalised on first read): `{v, mul, cpMul, applied {level, wave, mul, quota} | null,
+carry, carryTo {level, wave} | null, waveMuls[<=3], cadetLevel, usedCadet, deaths {level, n}, hullNote {level, pct,
+rep, shown} | null}`; `run.hp` after a clear of sectors 4-9 is the repaired hull. Records rows of a run that flew
+Cadet pace carry `difficulty: "cadet"` and `tags: ["CADET"]`; a sector best set at Cadet pace keeps its `tags`.
+ARCADE adds `overdriveMs`, `csCountered` and `csFired` to the run stats and `overdriveMs` / `surgesFired` to the level
+stats (and their checkpoint copies). PACE and ARCADE write nothing themselves: their state rides the existing save
+points. With `profile` (<= 16 KB), `modes` (<= 8 KB), the run and everything else (4 KB each) the whole save stays
+within 32 KB.
 Migrating a schema < 3 blob flags every `highScores` row and `sectorBests` entry `wpmLegacy: true` (the records table
 dims them) and freezes `bestWpm` as a legacy number. The tables are folded into the save only inside `storeSave`;
 typing adds no write.
@@ -402,9 +475,14 @@ headlines: `pageErrors`, `fps.*`, `maxRenderMs`, `shadowBlurPerFrame`, `fullFram
 `reduceMotion`, `fixture.check`, `flightCheck`. Every run skips the first-run flight check
 (`window.TypeRHarness.flightCheck = "skip"`) unless `--flight-check` plays it. Per-task probes live in
 `tools/playtest/probes/` (loader, audio contract and lifecycle, gameplay `b*`, shell `c*`, presentation `d*`,
-`d8.mjs` for the attract mode, `b-run.mjs` typist profiles behind the balance pass, `t-measure-*` for hand speed,
-typos, ranks, the profile and the Flight log, `t-onboard-*` for the flight check and the briefing,
-`harness-report-check.mjs` for report shape and the byte budget). The balance numbers are recorded in
+`d8.mjs` for the attract mode, `b-run.mjs` / `b10.mjs` typist profiles behind the balance pass, `t-measure-*` for hand
+speed, typos, ranks, the profile and the Flight log, `t-onboard-*` for the flight check and the briefing, `t-words-*`
+for the lexicon, two-word plates and the weak-key bias, `t-arcade-*` for Counter-Signal, Overdrive, readability, the
+boss budget and the surge balance, `t-pace-*` for pace, stakes, hull carry, Cadet, the pace save, perf and the balance
+re-pass (`t-pace-balance --matrix`), `t-modes-*` for the daily sortie, endless drift, drill and the title deck,
+`harness-report-check.mjs` for report shape and the byte budget). `b10.mjs` and `t-pace-balance.mjs` take
+`--acquire-ms N` (lead ruling Z7: a target-acquisition pause before the first key of every new target, doubled one
+time in ten; off by default). The balance numbers are recorded in
 [tools/playtest/balance.md](./tools/playtest/balance.md).
 Full flag, field and fixture tables: [tools/playtest/README.md](./tools/playtest/README.md).
 
@@ -427,7 +505,7 @@ Full flag, field and fixture tables: [tools/playtest/README.md](./tools/playtest
 The full, ordered procedure is in [DEPLOY.md](./DEPLOY.md). In short:
 
 ```bash
-tools/bump-version.sh 20261024a                               # 1. new shell token (never deploy the old one)
+tools/bump-version.sh 20261024b                               # 1. new shell token (never deploy the old one)
 (cd tools/playtest && bash run-matrix.sh)                      # 2. matrix green
 node tools/deploy/deploy.mjs --dry-run --user <ftp-user>       # 3. what would upload (about 200 files, ~370 MB listed; unchanged binaries skipped by size)
 TYPER_FTP_PASSWORD=... node tools/deploy/deploy.mjs --user <ftp-user> --htaccess   # 4. backup, upload, cache policy, verify
@@ -494,8 +572,10 @@ folder reference, configure signing and bundle identifiers, test on hardware, ar
 
 Everything the game stores lives on the player's device under `typesmup198x.save.v1` (plus a one-session
 rotate-hint flag on phones), including the typing profile behind the Flight log (per-key speed and misses, timing for
-the up to 200 most-typed letter pairs, the count of days played with the last date, and a dated summary of each of the last 100 sector attempts,
-deaths included); it is never sent anywhere and Reset save erases it.
+the up to 200 most-typed letter pairs, the count of days played with the last date, a dated summary of each of the
+last 100 sessions: sector attempts, deaths included, daily sorties, drills and endless drifts), the daily sortie
+results of up to 60 days and the best drill and endless drift; it is never sent anywhere and Reset save erases it.
+The game uses that profile on the device to rate daily sorties and to aim words and drills at weak keys.
 [privacy-policy.html](./privacy-policy.html) says so, effective 24 October 2026. No accounts, analytics, telemetry or
 third-party scripts; the web build makes no network calls while playing beyond fetching its own code, art and music. The footer links
 [privacy-policy.html](./privacy-policy.html); `privacy.html` is a meta-refresh stub for old links.
@@ -512,6 +592,49 @@ If you stream, teach or hack on typing games, fork the project and share improve
 remixes are welcome.
 
 ## Changelog
+
+### 2026-10 training update (release token `20261024b`, art token unchanged)
+
+The complete training update: everything in `20261024a` below (hand-speed WPM, typo feedback, rank lines, the pilot
+profile and Flight log, the flight check) plus the parts that release left out. `20261024a` may or may not have been
+deployed before this one; this release follows either `20261016a` or `20261024a` with the same art token, keeps
+`20261024a`'s save schema 3 as it is and migrates a `20261016a` save on load (below).
+
+**Words people type.** Half the word targets in Sectors 1-5 (30 % from Sector 6) are everyday English from a
+500-word list; the rest are real neon, space and retro words (the invented ones stay with the bosses, callouts and
+capsules). From Sector 4 some targets are two-word phrases: the gap shows as a dim dot and Space types it (Backspace
+still releases). Once the Flight log knows your weak keys, about a third of the letters and words lean on them and
+the sector card says `THREAT INTEL · HOSTILES PROBING …`.
+
+**Counter-Signal.** From Sector 2 (the old Signal Surge started in Sector 3) the boss's surge is telegraphed: it glows
+red, a red bar fills under its hull meter and the word's frame pulses. Finish the whole word before the bar fills to
+counter it and bounce the bolt back; miss and it hits for 8 + 2 × sector and the word starts over. The bar always
+gives more than twice the time the word takes at your measured speed, at most two surges can hit you per phase, and
+the boss's par time follows the sector's pace.
+
+**Overdrive.** Type a clean burst 5 % above your usual speed and a white arc fills around the ship; full after 2 s,
+the beams run white-hot and kills, boss letters and boss segments pay +25 % until a miss, a leak, a surge hit or a
+slowdown vents it. Word kills use a smaller explosion whose smoke sits under the plates, and the lane rails are
+brighter.
+
+**Pace follows you.** At each wave the stream scales to your measured hand speed, up to 2.5 × as many plates and a
+little faster; it never drops below the standard pace on its own. A wave's time limit always leaves room for its
+whole stream: if it runs out with plates still flying they warp away (`WAVE TIMED OUT · N ESCAPED`), the wave pays no
+perfect-wave bonus and after wave 1 or 2 they join the next wave. A perfect wave needs its quota met without damage.
+From Sector 4 a clear repairs half of the missing hull and the rest carries over; two deaths in one sector offer
+**Fly at Cadet pace** (75 % stream and damage, 80 % score, tagged CADET) until that sector is cleared.
+
+**Daily sortie, drill, endless drift.** Under Start: a daily sortie (one sector a day from your top three, three
+waves, no boss, a rating and a medal measured against your own previous week, a streak and a result line to copy), a
+60-second drill aimed at your weak keys, and endless drift, a stream that rises every 20 seconds until the first
+target gets through, to find your ceiling. None of them touch your saved run, high score, records, sector bests,
+Best WPM or unlocks; the Flight log keeps their sessions and bests.
+
+**Under the hood.** The next sector's art prefetch and the shell's page revalidation wait for the first keystroke, so
+a run resumed inside a boss fetches nothing extra before you can type (`fixture-legacy-inboss` 2.78 -> 2.34 MB); the
+help manual, the info, support and privacy pages and this README describe this build (the privacy policy lists the
+daily, drill and endless records the save now keeps); the harness typists can model a target-acquisition pause
+(`--acquire-ms`), and the balance re-pass on the shipped constants is in `tools/playtest/balance.md`.
 
 ### 2026-10 training update, part 1 (release token `20261024a`, art token unchanged)
 
