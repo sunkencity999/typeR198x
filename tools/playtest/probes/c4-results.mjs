@@ -10,25 +10,39 @@ const { page } = P;
 // browser window (1920 x 1080 at 125 %) and a phone in portrait; the cards grew with the rank line, ACC caption and
 // WEAK SIGNAL strip, and the .screen scroller opens at scrollTop 0.
 const FOLD_SIZES = [{ width: 1280, height: 720 }, { width: 1536, height: 730 }, { width: 390, height: 844 }];
-async function foldCheck(label, screenId, btnIds) {
+async function foldCheck(label, screenId, btnIds, noteIds = []) {
   const res = [];
   for (const vp of FOLD_SIZES) {
     await page.setViewportSize(vp);
     await sleep(450);
-    res.push(await P.g(({ screenId, btnIds }) => {
+    res.push(await P.g(({ screenId, btnIds, noteIds }) => {
       const scr = document.getElementById(screenId), sr = scr.getBoundingClientRect();
       const top = Math.max(sr.top, 0), bottom = Math.min(sr.bottom, innerHeight);
       const btns = btnIds.map((id) => {
         const b = document.getElementById(id).getBoundingClientRect();
         return { id, top: Math.round(b.top), bottom: Math.round(b.bottom), inView: b.height > 0 && b.top >= top - 0.5 && b.bottom <= bottom + 0.5 };
       });
-      return { vp: `${innerWidth}x${innerHeight}`, scrollTop: scr.scrollTop, overflow: scr.scrollHeight - scr.clientHeight, top: Math.round(top), bottom: Math.round(bottom), btns };
-    }, { screenId, btnIds }));
+      // release review J2: a note (the checkpoint cost of Retry / Retry boss) is readable at the end of the scroll, not
+      // under the sticky actions: three points across it hit the note itself.
+      const st0 = scr.scrollTop;
+      scr.scrollTop = scr.scrollHeight;
+      const notes = noteIds.map((id) => {
+        const el = document.getElementById(id);
+        if (!el || el.classList.contains("hidden") || !el.textContent.trim()) return { id, shown: false, ok: true };
+        const b = el.getBoundingClientRect();
+        const hits = [0.2, 0.5, 0.8].map((fx) => document.elementFromPoint(b.left + b.width * fx, b.top + b.height / 2)).map((e) => (e === el ? "self" : e ? (e.id || e.className || e.tagName) : "none"));
+        return { id, shown: true, hits, ok: hits.every((h) => h === "self") };
+      });
+      scr.scrollTop = st0;
+      return { vp: `${innerWidth}x${innerHeight}`, scrollTop: scr.scrollTop, overflow: scr.scrollHeight - scr.clientHeight, top: Math.round(top), bottom: Math.round(bottom), btns, notes };
+    }, { screenId, btnIds, noteIds }));
     await P.shot(`fold-${label.replace(/\s+/g, "-")}-${vp.width}x${vp.height}`);
   }
   await page.setViewportSize({ width: 1440, height: 900 });
   await sleep(300);
   P.check(`${label}: the actions lie inside the screen's visible rect at 1280x720, 1536x730 and 390x844 (J1)`, res.every((r) => r.btns.every((b) => b.inView)), JSON.stringify(res));
+  if (noteIds.length) P.check(`${label}: ${noteIds.join(" / ")} shown and readable (not under the sticky actions) at the end of the scroll at 1280x720, 1536x730 and 390x844 (review J2)`,
+    res.every((r) => r.notes.every((n) => n.ok)) && res.some((r) => r.notes.some((n) => n.shown)), JSON.stringify(res.map((r) => ({ vp: r.vp, notes: r.notes }))));
 }
 
 await P.goto(null);
@@ -99,7 +113,7 @@ P.check("game over: 'Retry sector 2' and the checkpoint note with its score", go
 P.check("game over sub 'Sector 2 · wave k/3' or boss", /^Sector 2 · (wave [123]\/3|boss .+)$/.test(go.sub), go.sub);
 P.check("game over card: score tile = stats.score, rank letter, no bonus rows", go.scoreTile === Number(go.score).toLocaleString() && /^[SABCD]$/.test(go.rank) && go.bonusRows === 0, JSON.stringify({ scoreTile: go.scoreTile, score: go.score, rank: go.rank, title: go.title }));
 await P.shot("game-over");
-await foldCheck("game over", "screenGameOver", ["btnTryAgain", "btnBackToMenu2"]);
+await foldCheck("game over", "screenGameOver", ["btnTryAgain", "btnBackToMenu2"], ["retryNote", "cadetNote"]);
 await page.click("#btnTryAgain");
 await page.waitForFunction(() => window.game.mode === "playing", null, { timeout: 10000 });
 const afterRetry = await P.g(() => ({ score: window.game.stats.score, cp: window.game.run.checkpoint.score, level: window.game.levelIndex }));

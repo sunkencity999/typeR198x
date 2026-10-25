@@ -126,8 +126,10 @@ Object.assign(Game.prototype, {
       p.id = "retryNote";
       p.className = "small";
       p.textContent = "Score returns to sector start";
-      const host = (this.btnTryAgain && this.btnTryAgain.parentElement && this.btnTryAgain.parentElement.parentElement) || over;
-      host.appendChild(p);
+      // Above the actions, which stick to the screen's bottom edge and would cover a note after them (release review J2).
+      const actions = this.btnTryAgain && this.btnTryAgain.parentElement;
+      if (actions && actions.parentElement) actions.insertAdjacentElement("beforebegin", p);
+      else over.appendChild(p);
     }
   },
 
