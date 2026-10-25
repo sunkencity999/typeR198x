@@ -74,16 +74,21 @@ P.check("a letter kill before any word lock leaves tutorialSeen.finish false (no
   !afterLetter.log.some((s) => /FINISH/.test(s)) && !(afterLetter.blob && afterLetter.blob.finish), JSON.stringify({ letter: letterCh, ...afterLetter }));
 
 // First lock on a WORD target -> FINISH toast (marks tutorialSeen.finish when displayed), tutorialSeen.lock true.
+// CONTRACT 8.z Z8: the probe places its own word plate (a still plate whose first letter nothing else on screen
+// starts with). Waiting for the stream's first word took up to 12 s in a mostly-letter wave 1, and a natural powerup
+// in that window spent the one-time powerup tip the SHIELD check below needs (flake).
+const wordFirst = await P.g(() => {
+  const g = window.game;
+  const used = new Set([...g.enemies, ...g.powerups].filter((e) => e.alive && !e.dying).map((e) => e.nextChar()));
+  const word = ["vortex", "quartz", "zephyr", "jungle", "kayak", "wombat", "yonder", "beacon"].find((w) => !used.has(w[0])) || "vortex";
+  g.enemies.push(new Enemy({ text: word, x: 700, y: LANE_YS[2], speed: 0, lane: 2 }));
+  return word[0];
+});
 let locked = false;
-for (let i = 0; i < 150 && !locked; i++) {
-  const k = await P.g(() => {
-    const g = window.game;
-    const words = g.enemies.filter((e) => e.alive && !e.dying && e.text.length >= 3 && g.isTargetable(e)).sort((a, b) => a.x - b.x);
-    return words.length ? words[0].nextChar() : null;
-  });
-  if (k && /^[a-z]$/.test(k)) await page.keyboard.press(k);
+for (let i = 0; i < 10 && !locked; i++) {
+  if (i === 0) await page.keyboard.press(wordFirst);
   await sleep(80);
-  locked = await P.g(() => !!window.game.lock);
+  locked = await P.g(() => !!window.game.lock && window.game.lock.ref && window.game.lock.ref.text.length >= 3);
 }
 await sleep(150);
 const afterLock = await P.g(() => ({ lock: !!window.game.lock, seenLock: window.game.save.tutorialSeen.lock, log: window.__toastLog.slice(), blob: (JSON.parse(localStorage.getItem("typesmup198x.save.v1")) || {}).tutorialSeen }));
