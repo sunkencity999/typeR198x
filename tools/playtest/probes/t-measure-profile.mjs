@@ -133,6 +133,9 @@ await P.goto("fresh");
 await P.startRun("WRITES");
 await waitFor(P, () => !window.game.levelIntro, 6000);
 await P.g(() => {
+  // The first word lock on a fresh save writes the one-time LOCK and FINISH tips (markTutorial -> storeSave): mark them
+  // seen so the two windows count the autosave cadence only (release finding R6: 6 vs 4 in 2 of 3 runs).
+  Object.assign(window.game.save.tutorialSeen, { lock: true, finish: true });
   window.__writes = 0;
   const orig = Storage.prototype.setItem;
   Storage.prototype.setItem = function (k, v) { if (k === "typesmup198x.save.v1") window.__writes++; return orig.call(this, k, v); };
