@@ -2991,6 +2991,16 @@ body[data-flight-check="on"] .tapToType:not(.hidden) ~ .fcPanel .fcStep { visibi
    widening the table past a phone-width modal, where the second chip was clipped. */
 #highScoreTable td:last-child { white-space: normal; }
 #highScoreTable td:last-child .hsTag { margin: 1px 0; }
+/* Phones (release review CT-B9): at 390 px the table was wider than the modal body (WPM / Run behind an unannounced
+   sideways scroll, SECTOR cut). Tighter cell padding and a pilot name that wraps keep every column in view down to
+   320 px; no column is dropped. */
+@media (max-width: 420px) {
+  #highScoreTable th, #highScoreTable td { padding-left: 4px; padding-right: 4px; }
+  #highScoreTable th:first-child, #highScoreTable td:first-child { padding-left: 0; }
+  #highScoreTable th:last-child, #highScoreTable td:last-child { padding-right: 0; }
+  #highScoreTable th { letter-spacing: 0.04em; }
+  #highScoreTable td:nth-child(2) { white-space: normal; overflow-wrap: anywhere; }
+}
 /* ===== end track:PACE ===== */
 
 /* ===== track:WORDS (25-lexicon.js) ===== */

@@ -232,8 +232,21 @@ const t9c = await M.g(() => {
   const br = box.getBoundingClientRect(), cr = chip ? chip.getBoundingClientRect() : null;
   return { chip: !!chip, tableW: t.scrollWidth, boxW: box.clientWidth, chipRight: cr ? Math.round(cr.right) : null, boxRight: Math.round(br.right) };
 });
-P.check("9b. phone records (390 x 844): the Cadet run's row shows its CADET chip inside the modal (table no wider than its scroll box, chip not clipped)",
-  t9c.chip && t9c.tableW <= t9c.boxW && t9c.chipRight <= t9c.boxRight && p2errors.length === 0, { t9c, errors: p2errors.slice(0, 3) });
+// Review CT-B9: with 12- and 24-character pilot names on every row the table still fits (no sideways scroll in the
+// modal body) and every header ends inside it.
+t9c.long = {};
+for (const nm of ["ACEPILOTNAME", "ABCDEFGHIJKLMNOPQRSTUVWX"]) {
+  t9c.long[nm.length] = await M.g((nm) => {
+    const g = window.game;
+    g.save.highScores.forEach((h) => { h.name = nm; });
+    g.renderRecordsTable();
+    const t = document.getElementById("highScoreTable"), box = t.closest(".modalBody") || t.parentElement, br = box.getBoundingClientRect();
+    const right = Math.max(...[...t.querySelectorAll("th")].map((th) => { const r = document.createRange(); r.selectNodeContents(th); return r.getBoundingClientRect().right; }));
+    return { sw: box.scrollWidth, cw: box.clientWidth, thRight: Math.round(right), boxRight: Math.round(br.right) };
+  }, nm);
+}
+P.check("9b. phone records (390 x 844): the Cadet run's row shows its CADET chip inside the modal (table no wider than its scroll box, chip not clipped); with 12- and 24-character pilot names the body does not scroll sideways and every header is in view (review CT-B9)",
+  t9c.chip && t9c.tableW <= t9c.boxW && t9c.chipRight <= t9c.boxRight && Object.values(t9c.long).every((l) => l.sw <= l.cw && l.thRight <= l.boxRight) && p2errors.length === 0, { t9c, errors: p2errors.slice(0, 3) });
 await ctx2.close();
 
 errorsCheck(P);
