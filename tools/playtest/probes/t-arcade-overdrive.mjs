@@ -135,7 +135,8 @@ const pw = await P.g(() => {
   const g = window.game, O = window.__od;
   const on = g.overdriveOn === true;
   const n = O.score.length;
-  g.waveDmg = 0; g.waveKills = Math.max(1, g.waveKills | 0); g.wavePhase = "spawn";
+  // PACE (D3) pays PERFECT WAVE only when the wave ends by quota: force the end at the (paced) quota.
+  g.waveDmg = 0; g.waveKills = Math.max(1, g.waveKills | 0, g.waveQuota()); g.wavePhase = "spawn";
   g.endWave();
   window.__ty.hold();
   const b = O.score.slice(n).filter((s) => s.kind === "bonus");
