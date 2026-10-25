@@ -114,10 +114,25 @@ P.check("game over sub 'Sector 2 · wave k/3' or boss", /^Sector 2 · (wave [123
 P.check("game over card: score tile = stats.score, rank letter, no bonus rows", go.scoreTile === Number(go.score).toLocaleString() && /^[SABCD]$/.test(go.rank) && go.bonusRows === 0, JSON.stringify({ scoreTile: go.scoreTile, score: go.score, rank: go.rank, title: go.title }));
 await P.shot("game-over");
 await foldCheck("game over", "screenGameOver", ["btnTryAgain", "btnBackToMenu2"], ["retryNote", "cadetNote"]);
+// J4 (release review): the card overflows at 844 x 390; scroll it to the end before Retry, so the next Game Over
+// below must open at the top again.
+await page.setViewportSize({ width: 844, height: 390 });
+await sleep(400);
+const j4a = await P.g(() => { const s = document.getElementById("screenGameOver"); s.scrollTop = s.scrollHeight; return { scrollTop: Math.round(s.scrollTop), overflow: s.scrollHeight - s.clientHeight }; });
 await page.click("#btnTryAgain");
 await page.waitForFunction(() => window.game.mode === "playing", null, { timeout: 10000 });
 const afterRetry = await P.g(() => ({ score: window.game.stats.score, cp: window.game.run.checkpoint.score, level: window.game.levelIndex }));
 P.check("Retry sector -> stats.score === run.checkpoint.score", afterRetry.score === go.cpScore && afterRetry.score === afterRetry.cp && afterRetry.level === 1, JSON.stringify(afterRetry));
+await P.g(() => window.game.onGameOver());
+await page.waitForFunction(() => window.game.mode === "gameOver", null, { timeout: 10000 }).catch(() => {});
+await sleep(300);
+const j4b = await P.g(() => { const s = document.getElementById("screenGameOver"), t = document.getElementById("gameOverTitle"); return { mode: window.game.mode, scrollTop: s.scrollTop, titleTop: Math.round(t.getBoundingClientRect().top) }; });
+P.check("844x390: a Game Over card scrolled to its end before Retry opens at scrollTop 0 on the next death, its title on screen (review J4)",
+  j4a.overflow > 20 && j4a.scrollTop > 20 && j4b.mode === "gameOver" && j4b.scrollTop === 0 && j4b.titleTop >= 0, JSON.stringify({ j4a, j4b }));
+await page.setViewportSize({ width: 1440, height: 900 });
+await sleep(300);
+await page.click("#btnTryAgain");
+await page.waitForFunction(() => window.game.mode === "playing", null, { timeout: 10000 });
 
 // Victory: dialogue first, progress text, Escape -> run results with Play again focused.
 await P.g(() => {

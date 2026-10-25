@@ -909,6 +909,9 @@ Object.assign(Game.prototype, {
       if (!el) continue;
       el.classList.remove("hidden"); // body[data-mode] + .is-active own screen visibility now
       el.classList.toggle("is-active", key === m);
+      // release review J4: screens hide by visibility, so a .screen scroller kept the offset of its last visit and the
+      // next sector card opened partly scrolled (title and rank stamp off-screen). A screen that opens starts at the top.
+      if (key === m && prev !== m && el.scrollTop) el.scrollTop = 0;
     }
     this.clearDeathFreeze();
     this.syncTopBar();
