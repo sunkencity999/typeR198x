@@ -248,9 +248,10 @@ Extra one-off scripts live in `probes/` (shipped) or `out/` (ignored). They can 
   allocation scan of the per-key / per-frame functions. Check 6 counts autosave writes only (an existing tutorial-flag
   save point on the first typed word is not a per-key write).
 - `probes/t-measure-flightlog.mjs` — D6 UI: Records tabs by pointer and keyboard, the Flight Log from an injected
-  profile, empty state, legacy rows, menu Best WPM / goal, phone portrait / landscape / desktop (stat labels inside
-  their tiles), the sparkline legend / lone-point dots / gaps, colour-vision luminance of the key buckets
-  (screenshots under `out/t-measure-flightlog/`).
+  profile, empty state, legacy rows, menu Best WPM / goal, phone portrait / landscape / desktop / 1280 x 800 (stat
+  labels inside their tiles, every value on one line, the Drill tile's speed with its accuracy in the caption), the
+  note under the sector bests when a cleared sector has no timed WPM, the sparkline legend / lone-point dots / gaps,
+  colour-vision luminance of the key buckets (screenshots under `out/t-measure-flightlog/`).
 - `probes/t-measure-api.mjs` — the MEASURE API for the later tracks: scopes, reuse, `typistInterval`, keyMiss
   `expected`, shapes, `typistEndSession` mode bests, cost, the null-run (Flight Check) contract.
 - `probes/measure_lib.mjs` — helpers for the above: a controlled in-page typist (frozen spawner, scripted static
@@ -280,8 +281,8 @@ Extra one-off scripts live in `probes/` (shipped) or `out/` (ignored). They can 
 - `probes/t-arcade-counter.mjs` — D10 Counter-Signal (~2.5 min): table / window / par numbers, the Z6 window floor
   (`surgeWindow` = max(table, 2.25 x the segment's time at the pilot's speed), 1b / 3), sector 1 never surging, the first
   sector-2 surge at 6.0 s at a segment start (whole segment, slow widen), the pending start, the telegraph (charge bar,
-  meter, glow and outline draw counters; the bar's position and zero HUD growth at 1440 x 900, 390 x 844 and 844 x
-  390), fail and counter (exact damage / bonus, bolts at the aim point, scramble), the per-phase cap, pause, Retry boss,
+  meter, glow and outline draw counters, the glow alpha at or above its 2 Hz pulse trough at the sampled t; the bar's
+  position and zero HUD growth at 1440 x 900, 390 x 844 and 844 x 390), fail and counter (exact damage / bonus, bolts at the aim point, scramble), the per-phase cap, pause, Retry boss,
   par, the card-note scopes (sector / Game Over / run), reduced motion, a DPR 2 budget context and `legacy-inboss`.
 - `probes/t-arcade-overdrive.mjs` — D11 Overdrive (~2 min, controlled in-page typist on `performance.now()`):
   thresholds (2c: a fresh pilot's provisional 25 WPM threshold refreshes in Overdrive and the first Overdrive ends by
@@ -316,7 +317,7 @@ Extra one-off scripts live in `probes/` (shipped) or `out/` (ignored). They can 
   damage / score, tags, the results row, records), the next sector standard, the boss path, the count across a
   reload, no Cadet in daily / endless (real MODES runs), the offer hidden again when a mode run starts (8b, lead
   ruling Z9), a phone tap, the stays-on note on a death under Cadet, and the phone records row keeping its CADET chip
-  in view.
+  in view (and every column, with 12- and 24-character pilot names).
 - `probes/t-pace-save.mjs` — `run.pace` keys / types / < 400 B, a garbage blob normalised, no extra storage writes
   while typing, node --check + check-globals.
 - `probes/t-pace-perf.mjs [--dpr 2]` — S10 W3 and S1 W3 pinned at 2.5 with an 80 WPM typist, and S10 with an idle
@@ -334,12 +335,13 @@ Extra one-off scripts live in `probes/` (shipped) or `out/` (ignored). They can 
   through `game._rng` in a daily run and never in the campaign, identical wave openings on one date; the daily tile,
   start, pause copy and restart confirm, three waves and no boss, card / rating / medal (incl. the SILVER cap on a
   death and the accuracy rounded down), the save record (counted, practice, death, streak copy, midnight, 60-day prune
-  <= 8 KB), share line and clipboard copy, quit keeping the campaign run, a campaign start inside a mode run banking
-  the stored run, post-victory sectors, the locked fresh deck; the endless start rate, stream tuning, steps,
-  delivered-rate calibration, pressure cap, bests, powerups, no damage / boss, 6 cps frame budget; the drill clamp,
-  weighting, clock and pause, leaks, no score / powerups, lines vs the profile, bigram line, bests; deck placement, Tab
-  order, four layouts, the untouched menu blob, card keys, reduced motion, no tutorial toast, campaign chrome restored
-  after a paused drill. Every one checks the campaign fields stay byte-identical. `probes/modes_lib.mjs` holds the
+  <= 8 KB), share line and clipboard copy (and, at 1024 x 600 / 844 x 390, the focused share line and Copy clear of
+  the sticky actions), quit keeping the campaign run, a campaign start inside a mode run banking the stored run,
+  post-victory sectors, the locked fresh deck with the reason on every tile; the endless start rate, stream tuning,
+  steps, delivered-rate calibration, pressure cap, bests, powerups, no damage / boss, 6 cps frame budget; the drill
+  clamp, weighting, clock and pause, leaks, no score / powerups, lines vs the profile, bigram line, bests; deck
+  placement, Tab order, four layouts, the menu footer reachable with a saved run on six laptop windows (T3c), the
+  untouched menu blob, card keys, reduced motion, no tutorial toast, campaign chrome restored after a paused drill. Every one checks the campaign fields stay byte-identical. `probes/modes_lib.mjs` holds the
   fixtures (F5, F5P), `startMode`, `isolation`, `card` and a scripted static-plate typist (`typeWords`). Probe hooks:
   `game.modesDebug()` = `{ setNow, advance, state, plan, finish }`.
 - `probes/review-runtime.mjs` — regression checks for the review-fix runtime track (~25 s): explosion sheet factor through a DPR 1 -> 2 flip and back (R1), `PALETTE.rgba` alpha quantisation (R12), dying plates under source-over (R13), the full 450 ms loading fade (R27), plate-cache re-warm after a mid-sector resize (R30), bounded spawn/leak telemetry logs and their reset on a new run (R31).

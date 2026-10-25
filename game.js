@@ -58,10 +58,11 @@ const ASSET_VERSION = "20261024b";
 // /index.html and the older game.js but lost one other assets/js script fetches that script's old ?v= URL, gets this
 // release's file (the host ignores the query) and runs old and new code together; Resume can do nothing, plates can
 // stop spawning or a boss can stop taking damage, with "[TypeR] frame error" in the console, until the player reloads
-// once (the reload revalidates /index.html, and the new shell's ?v= URLs are all new). Once that browser runs this shell (it loads "/", served no-cache),
-// revalidateDocs refreshes its long-lived copies of /index.html and the secondary pages, and the in-site links carry
-// ?v=<token> (bump-version.sh), so the next /index.html visit is this release. A browser that never sends a request
-// keeps its copy until it expires; only the host can stop new 180-day entries (DEPLOY.md step 6).
+// once (the reload revalidates /index.html, and the new shell's ?v= URLs are all new). Once a browser runs this shell
+// (it loads "/", served no-cache), revalidateDocs refreshes its long-lived copies of /index.html and the secondary
+// pages, and the in-site links carry ?v=<token> (bump-version.sh), so the next /index.html visit is this release. A
+// browser that never sends a request keeps its copy until it expires; only the host can stop new 180-day entries
+// (DEPLOY.md step 6).
 (function staleShellGuard() {
   try {
     if (typeof document === "undefined" || typeof location === "undefined" || location.protocol === "file:") return;

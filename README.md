@@ -645,6 +645,15 @@ help manual, the info, support and privacy pages and this README describe this b
 daily, drill and endless records the save now keeps); the harness typists can model a target-acquisition pause
 (`--acquire-ms`), and the balance re-pass on the shipped constants is in `tools/playtest/balance.md`.
 
+**Release review.** On laptop windows the title menu's footer (Records, How to play, Settings, Reset save) stays at
+the bottom of the menu panel instead of below its fold, and Tab scrolls a focused control into view on any screen
+(clear of the footer, and of the results bar for the daily sortie's share line); the Game Over checkpoint note sits
+above the buttons it explains; a results screen always opens at its top. The Flight log's Drill tile shows the speed
+with the accuracy under it and explains a sector best without a WPM; the daily card's accuracy rule reads
+`BY ACCURACY`, the restart prompt says a failed sortie counts too, and locked practice tiles say `START A RUN TO
+UNLOCK`. The Hall of pilots fits a phone-width Records modal. The privacy policy is effective 25 October 2026 and
+lists every typing statistic the save keeps.
+
 ### 2026-10 training update, part 1 (release token `20261024a`, art token unchanged)
 
 **Honest speed.** WPM is now your hand speed: the time between correct keys inside a word or boss segment, with
