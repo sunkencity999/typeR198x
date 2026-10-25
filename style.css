@@ -2939,6 +2939,60 @@ body[data-flight-check="on"] .tapToType:not(.hidden) ~ .fcPanel .fcStep { visibi
 /* ===== end track:WORDS ===== */
 
 /* ===== track:MODES (52-modes.js) ===== */
+:root { --modes-bronze: #E0915A; }
+/* Title deck: the Daily sortie tile beside the Practice panel (Drill, Endless drift stacked), ~100 px under Start. */
+.modeDeck { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; margin-top: var(--sp-3); }
+.practicePanel { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; align-content: start; min-width: 0; }
+.practicePanel > .label { margin: 0; font-size: var(--fs-2xs); line-height: 1.2; }
+.modeDeck__meta { grid-column: 1 / -1; margin: 0; font-family: var(--font-mono); font-size: var(--fs-2xs); letter-spacing: 0.12em; text-transform: uppercase; color: var(--c-score); }
+.modeTile {
+  display: grid; align-content: center; gap: 1px; min-width: 0; min-height: 44px; padding: 4px 10px;
+  text-align: left; background: rgba(0,0,0,0.35); border: 1px solid var(--chrome1); border-radius: var(--r-md);
+  color: var(--c-text); font-family: var(--font-mono); cursor: pointer;
+  transition: border-color var(--dur-2), box-shadow var(--dur-2), transform var(--dur-1);
+}
+.modeTile:hover:not([aria-disabled="true"]) { border-color: var(--c-ui); transform: translateY(-1px); }
+.modeTile:focus-visible { outline: 2px solid var(--neon-cyan); outline-offset: 2px; }
+.modeTile > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.modeTile__eyebrow, .modeTile__sub, .modeTile__status { font-size: var(--fs-2xs); letter-spacing: 0.1em; text-transform: uppercase; line-height: 1.25; }
+.modeTile__title { font-family: var(--font-display); font-weight: 700; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; line-height: 1.25; }
+.modeTile__sub { opacity: 0.75; letter-spacing: 0.06em; }
+.modeTile--daily { grid-template-columns: minmax(0, 1fr) auto; column-gap: 8px; gap: 3px 8px; border-color: rgba(255,193,74,0.5); }
+.modeTile--daily .modeTile__eyebrow { color: var(--c-score); }
+.modeTile--daily .modeTile__title { font-size: 15px; }
+.modeTile--daily .modeTile__title, .modeTile--daily .modeTile__sub { grid-column: 1 / -1; }
+.modeTile--daily .modeTile__status { grid-row: 1; grid-column: 2; color: var(--c-score); }
+.modeTile--daily[aria-disabled="true"] .modeTile__status { grid-row: auto; grid-column: 1 / -1; }   /* the longer lock reason gets its own line */
+.modeTile[aria-disabled="true"] { opacity: 0.55; cursor: not-allowed; }
+.modeDeck.is-unavailable .modeTile { filter: grayscale(0.8); }
+:root.reduce-motion .modeTile { transition: none; }
+@media (max-width: 480px) { .modeDeck { grid-template-columns: 1fr; } .practicePanel { grid-template-columns: 1fr 1fr; } .practicePanel > .label { grid-column: 1 / -1; } }
+
+/* Mode results card (#screenModeResults): the medal is a word in the large badge. */
+.screen--modes { --panel-accent: var(--c-ui); --panel-glow: rgba(57,245,255,0.35); }
+body[data-run-mode="daily"] .screen--modes { --panel-accent: var(--c-score); --panel-glow: rgba(255,193,74,0.45); }
+.medalBadge { width: auto; padding: 0 12px; font-size: 13px; letter-spacing: 0.16em; }
+.medalBadge[data-medal="GOLD"] { --rank-c: var(--c-score); }
+.medalBadge[data-medal="SILVER"] { --rank-c: var(--c-text); }
+.medalBadge[data-medal="BRONZE"] { --rank-c: var(--modes-bronze); }
+.medalBadge[data-medal="NONE"] { --rank-c: rgba(255,255,255,0.45); text-shadow: none; }
+.medalBadge[data-medal=""] { display: none; }
+.modeLines { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-family: var(--font-mono); font-size: var(--fs-sm); letter-spacing: 0.1em; text-transform: uppercase; }
+.modeLines:empty { display: none; }
+.modeLines li { padding: 4px 0; border-bottom: 1px dashed var(--chrome0); }
+.shareRow { display: flex; gap: 8px; align-items: center; }
+.shareText {
+  flex: 1; min-width: 0; min-height: 44px; padding: 8px 10px; border: 1px solid rgba(57,245,255,0.35); border-radius: var(--r-md);
+  background: rgba(0,0,0,0.25); color: var(--c-text); font: var(--fs-xs) var(--font-mono);
+}
+.shareText:focus-visible { outline: 2px solid var(--neon-cyan); outline-offset: 2px; }
+
+/* In-run chrome: no hull in endless / drill, no score or multiplier in a drill, no stage bar outside the daily. */
+body[data-run-mode="endless"] .hudCell--hull, body[data-run-mode="drill"] .hudCell--hull, .hudCell.modesHidden, #hudMult.modesHidden { display: none; }
+body[data-run-mode="endless"] #stageBar, body[data-run-mode="drill"] #stageBar, body[data-run-mode="daily"] .stageSeg--boss { display: none; }
+@media (pointer: coarse) and (orientation: portrait) and (max-width: 1024px) {
+  body[data-mode="modeResults"] .rotateHint { display: none; }
+}
 /* ===== end track:MODES ===== */
 
 /* ===== track:ARCADE (50-boss.js, 82-overdrive.js) ===== */
