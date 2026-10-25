@@ -1,11 +1,12 @@
-// t-arcade-overdrive (ARCADE D11 Overdrive, ~2.5 min, DPR 1 + a reduced-motion context): the threshold relative to the
-// pilot (25 fresh, 1.05 x run speed), activation from MEASURE's honest intervals at 100 WPM, x1.25 on kill / bossChar /
-// segment only, white-hot beams / amber floaters / plume x2 / the arc, vent on a miss / a leak (hiss, announce, steam),
-// the slow exit, holding through pause and an empty field, a silent charge reset, the silent end on a boss kill and the
-// reset at the next sector, the card note, no per-key save writes, scripted input never charging, reduced motion,
-// drill / Flight Check blocking, the typed-array state and heap growth. Keys go through game.handleTyped(ch) from a
-// setTimeout chain scheduled on performance.now() (exact intervals). PASS = the feature works; exits 1 on any fail or
-// page / console error.
+// t-arcade-overdrive (ARCADE D11 Overdrive, ~3 min, DPR 1 + a fresh-pilot and a reduced-motion context): the
+// threshold relative to the pilot (25 fresh, 1.05 x run speed; a first Overdrive started at the provisional floor meets
+// the real T and ends by the slow rule, lead ruling Z2), activation from MEASURE's honest intervals at 100 WPM, x1.25 on
+// kill / bossChar / segment only, white-hot beams / amber floaters / plume x2 / the arc, vent on a miss / a leak (hiss,
+// announce, steam), the slow exit, holding through pause and an empty field, a silent charge reset, the silent end on a
+// boss kill and the reset at the next sector, the card note, no per-key save writes, scripted input never charging,
+// reduced motion, drill / Flight Check blocking, the typed-array state and heap growth. Keys go through
+// game.handleTyped(ch) from a setTimeout chain scheduled on performance.now() (exact intervals). PASS = the feature
+// works; exits 1 on any fail or page / console error.
 import { openProbe, sleep, waitFor, installTypist, freshControlled } from "./measure_lib.mjs";
 import { harnessFlags } from "./_lib.mjs";
 
@@ -19,7 +20,8 @@ async function installOd(T) {
     const g = window.game;
     const O = window.__od = { ev: [], ann: [], keyT: [], score: [], lasers: [], floaters: [], frames: [], sample: false, snaps: [], store: 0, countStore: false, steam: [], pushes: 0 };
     onGameHook("overdrive", function (e) {
-      O.ev.push({ on: e.on, reason: e.reason, ms: e.ms, t: performance.now(), cue: this.sfx.lastCue, titles: [this.callout && this.callout.title, ...(this.calloutQueue || []).map((c) => c.title)], ann: O.ann[O.ann.length - 1] || "" });
+      O.ev.push({ on: e.on, reason: e.reason, ms: e.ms, t: performance.now(), cue: this.sfx.lastCue, titles: [this.callout && this.callout.title, ...(this.calloutQueue || []).map((c) => c.title)], ann: O.ann[O.ann.length - 1] || "",
+        T: this._od ? this._od.threshold : null, provisional: this._od ? this._od.provisional : null });
     });
     onGameHook("keyCorrect", function (e) { if (O.keyT.length < 6000) O.keyT.push(e.t); });
     const wrap = (name, fn) => { const o = g[name]; g[name] = function () { return fn.call(this, o, arguments); }; };
@@ -57,7 +59,7 @@ async function installOd(T) {
         else if (s.clear) T.clear();
         else if (s.plate) T.plate(s.plate, s.lane == null ? 2 : s.lane, s.x == null ? null : s.x);
         else if (s.capsule) T.capsule(s.capsule, s.lane == null ? 2 : s.lane);
-        else if (s.snap) { const S = g._od; O.snaps.push({ label: s.snap, t: performance.now(), on: g.overdriveOn === true, charge: S.charge, burst: S.burst, threshold: S.threshold, count: S.count, clock: S.clock, reason: S.lastReason, cue: g.sfx.lastCue, ev: O.ev.length, ann: O.ann.length }); }
+        else if (s.snap) { const S = g._od; O.snaps.push({ label: s.snap, t: performance.now(), on: g.overdriveOn === true, charge: S.charge, burst: S.burst, threshold: S.threshold, count: S.count, clock: S.clock, reason: S.lastReason, cue: g.sfx.lastCue, ev: O.ev.length, ann: O.ann.length, run: typeof g.typistSpeed === "function" ? { ...g.typistSpeed("run") } : null }); }
         else if (s.ch) g.handleTyped(s.ch);
       };
       const next = () => {
@@ -331,24 +333,56 @@ const t16 = await P.g(() => ({ endAt: window.game._od.endAt instanceof Float64Ar
 P.check("16. state ring is Float64Array (64); JS heap growth over 10 s of typing in Overdrive < 1 MB (forced GC)", t16.endAt && t16.ms && t16.len === 64 && onAt0 && onAt1 && h1 - h0 < 1024 * 1024,
   { ...t16, onAt0, onAt1, heapDeltaKB: Math.round((h1 - h0) / 1024) });
 
-// 14. Reduced motion: steady arc alpha while active, no vent particles
-{
-  const ctx = await P.browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
+// A second browser context on a fresh save, started from the menu (sector 1, typist installed, field held).
+async function freshContext(tag, name, opts = {}) {
+  const ctx = await P.browser.newContext({ viewport: { width: 1440, height: 900 }, ...opts });
   await harnessFlags(ctx);
   await ctx.addInitScript((k) => { try { localStorage.removeItem(k); } catch {} }, "typesmup198x.save.v1");
   const page = await ctx.newPage();
-  page.on("pageerror", (e) => P.errors.pageErrors.push("rm: " + String(e && e.stack || e)));
-  page.on("console", (m) => { if (m.type() === "error") P.errors.consoleErrors.push("rm: " + m.text()); });
-  const R = { g: (fn, a) => page.evaluate(fn, a), page };
+  page.on("pageerror", (e) => P.errors.pageErrors.push(tag + ": " + String(e && e.stack || e)));
+  page.on("console", (m) => { if (m.type() === "error") P.errors.consoleErrors.push(tag + ": " + m.text()); });
+  const R = { g: (fn, a) => page.evaluate(fn, a), page, ctx };
   await page.goto(P.base, { waitUntil: "load" });
   await page.waitForFunction(() => { const el = document.getElementById("loadingOverlay"); return !el || el.classList.contains("hidden") || getComputedStyle(el).visibility === "hidden"; }, null, { timeout: 120000 });
-  await page.fill("#playerName", "CALM").catch(() => {});
+  await page.fill("#playerName", name).catch(() => {});
   await page.click("#btnStart");
   try { const s = page.locator("#btnStoryLaunch"); await s.waitFor({ state: "visible", timeout: 2500 }); await s.click(); } catch {}
   await page.waitForFunction(() => window.game && window.game.mode === "playing" && !window.game.levelIntro, null, { timeout: 30000 });
   await installTypist(R);
   await R.g(() => { window.__ty.clear(); window.__ty.hold(); });
   await installOd(R);
+  return R;
+}
+
+// 2c. Lead ruling Z2: a fresh pilot's first Overdrive starts while T is the provisional 25 WPM floor (no run speed yet);
+//     once MEASURE has 20 intervals T refreshes to 1.05 x the run speed while it is active, so slowing down ends it by the
+//     normal rule (slow, 1 s under 0.9 T) instead of lasting until a miss. 3-letter words at 200 ms / key (60 WPM)
+//     activate at ~3 s, well before the 20th interval (~5.8 s); then 420 ms / key (29 WPM, above the floor's 22.5 exit).
+{
+  const R = await freshContext("z2", "FIRSTOD");
+  const W3 = ["sky", "map", "cat", "dog", "sun", "red", "box", "pen", "cup", "hat", "jet", "kit", "log", "net"];
+  const A = plan(W3, 200);
+  const B = plan(["fog", "tin", "rug", "wax", "yak", "elk"], 420, { start: A.end });
+  await run(R, [...A.steps, { at: A.end - 1, snap: "slow2c" }, ...B.steps]);
+  const r = await R.g(() => {
+    const O = window.__od, g = window.game, S = g._od, snap = O.snaps.find((x) => x.label === "slow2c");
+    const s = g.typistSpeed("run");
+    return { ev: O.ev.map((e) => ({ on: e.on, reason: e.reason, T: e.T && Math.round(e.T * 10) / 10, provisional: e.provisional, dt: snap ? Math.round(e.t - snap.t) : null })),
+      snap: snap && { on: snap.on, T: Math.round(snap.threshold * 10) / 10, runWpm: snap.run && Math.round(snap.run.wpm * 10) / 10, runN: snap.run && snap.run.n },
+      T: Math.round(S.threshold * 10) / 10, provisional: S.provisional, run: { wpm: Math.round(s.wpm * 10) / 10, n: s.n },
+      misses: g.levelStats.total - g.levelStats.correct, reason: S.lastReason, on: g.overdriveOn === true };
+  });
+  const first = r.ev.find((e) => e.on), end = r.ev.find((e) => !e.on);
+  P.check("2c. Z2: a fresh pilot's first Overdrive (activated at the provisional floor, T 25) meets T = 1.05 x run speed once the run speed exists and ends by the slow rule after slowing to 29 WPM (no miss), within 4.5 s of the slowdown",
+    !!first && first.T === 25 && first.provisional === true && !!r.snap && r.snap.on && r.snap.T > 50 && r.snap.runN >= 20 && Math.abs(r.snap.T - 1.05 * r.snap.runWpm) < 3 && !r.provisional
+      && !!end && end.reason === "slow" && end.dt !== null && end.dt >= 0 && end.dt <= 4500 && r.misses === 0 && !r.on, r);
+  await R.ctx.close();
+}
+
+// 14. Reduced motion: steady arc alpha while active, no vent particles
+{
+  const R = await freshContext("rm", "CALM", { reducedMotion: "reduce" });
+  const page = R.page, ctx = R.ctx;
   // 2b (fresh save, S1, tutorial on): an S1 tutorial tip is on screen when the first Overdrive fires; the Overdrive tip
   //    stacks beside it under its own toast key instead of replacing it (the other S1 tips are marked seen so none
   //    takes the tip slot meanwhile)
