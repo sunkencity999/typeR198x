@@ -2,9 +2,9 @@
 // sector 5 wave 2, the pilot sources (run >= 20 intervals, profile >= 60 intervals, table) with and without MEASURE's
 // accessors, a fresh pilot's S1 W1 = 1.0 / quota 8, the 73 WPM ramp across a sector boundary, the diff() rows and the
 // pure helpers; lead ruling Z12: pilotCpsEff = L / (L / handCps + acq / 1000) for 35 / 55 / 80 WPM x acquisition 120 /
-// 300 / 600 ms x mean target length 1 / 5 / 7, the per-sector mean length from WORDS' mix (cached), and the wave start
-// reading MEASURE's typistAcquireMs (feature-detected, 300 ms without it). No typing (~15 s). PASS = the pace controller
-// computes what D2 / Z12 specify.
+// 300 / 600 ms x mean target length 1 / 5 / 7, the per-sector mean length from WORDS' mix (cached), the wave start
+// reading MEASURE's typistAcquireMs (feature-detected, 300 ms without it) and the clean-timeout back-off target (never a
+// faster wave; release review Z12-B3). No typing (~15 s). PASS = the pace controller computes what D2 / Z12 specify.
 // Usage: node tools/playtest/probes/t-pace-math.mjs
 import { openProbe, startFresh, waitFor } from "./b_lib.mjs";
 
@@ -210,6 +210,21 @@ const wsRef = (acq) => { const eff = ws.L / (ws.L / 10 + acq / 1000); const t = 
 const wsOk = (l, acq) => { const r = wsRef(acq); return l.acq === acq && l.source === "run" && l.eff === r.eff && l.target === r.target && l.mul === r.mul && Math.abs(l.len - Math.round(ws.L * 100) / 100) < 1e-9 && l.backoff === false; };
 P.check("12. Z12 wave start (S5 W2, run speed 120 WPM, prev 1.5): typistAcquireMs 450 -> acq 450, eff = L / (L / 10 + .45), target 0.85 x eff / 3.7 (1.22), mul by the step rule; MEASURE's accessor absent or returning NaN -> 300 ms (target 1.45); the real accessor on a fresh profile -> 300",
   wsOk(ws.s450, 450) && wsOk(ws.absent, 300) && wsOk(ws.nan, 300) && ws.realMs === 300 && wsOk(ws.real, 300) && ws.s450.mul < ws.absent.mul, { ws, ref450: wsRef(450), ref300: wsRef(300) });
+
+// ---- 13. Z12 safety net (release review Z12-B3): the back-off target; the wave after a clean timeout is never faster ----
+const bo = await P.g(() => {
+  const rows = [];
+  for (let p = 100; p <= 250; p += 5) for (let t = 100; t <= 250; t += 5) {
+    const prev = p / 100, target = t / 100, bt = paceBackoffTarget(target, prev);
+    rows.push({ prev, target, bt, mul: paceStepMul(prev, bt) });
+  }
+  const ex = (target, prev) => { const bt = paceBackoffTarget(target, prev); return { bt: paceRound2(bt), mul: paceStepMul(prev, bt), old: paceStepMul(prev, Math.max(1, target - 0.35)) }; };
+  return { rows, ramp: ex(2.11, 1.35), ramp2: ex(2.5, 1.7), steady: ex(1.7, 1.7), slowing: ex(1.4, 2.05), odd: [paceBackoffTarget(NaN, 1.7), paceBackoffTarget(2, NaN), paceBackoffTarget(2, 0)] };
+});
+const boBad = bo.rows.filter((r) => !(Math.abs(r.bt - Math.max(1, Math.min(r.target, r.prev) - 0.35)) < 1e-9 && r.mul === Math.max(1, Math.round((r.prev - 0.35) * 100) / 100) && r.mul <= r.prev));
+P.check("13. Z12 back-off (review Z12-B3): paceBackoffTarget(target, prev) = max(1, min(target, prev) - 0.35), so under the step rule the wave after a clean timeout runs at max(1, prev - 0.35) for every prev / own target in 1.0 .. 2.5 (961 pairs, never faster than prev); prev 1.35 / own 2.11 -> 1.0 (own - 0.35 alone: 1.70), prev 1.7 / own 2.5 -> 1.35 (alone: 2.05), steady 1.7 -> 1.35, slowing 2.05 / own 1.4 -> 1.70; odd input -> 1.0",
+  bo.rows.length === 961 && boBad.length === 0 && bo.ramp.mul === 1 && bo.ramp.old === 1.7 && bo.ramp2.mul === 1.35 && bo.ramp2.old === 2.05 && bo.steady.mul === 1.35 && bo.steady.bt === 1.35 &&
+  bo.slowing.mul === 1.7 && bo.slowing.old === 1.7 && bo.odd.every((x) => x === 1), { bad: boBad.slice(0, 3), ramp: bo.ramp, ramp2: bo.ramp2, steady: bo.steady, slowing: bo.slowing, odd: bo.odd });
 
 P.check("zero page errors and console errors", P.errors.pageErrors.length === 0 && P.errors.consoleErrors.length === 0, { pageErrors: P.errors.pageErrors, consoleErrors: P.errors.consoleErrors });
 await P.finish();

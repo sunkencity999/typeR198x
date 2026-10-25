@@ -6,8 +6,10 @@
 // (announced) counts them into the next wave's quota inside the sector, never past wave 3; Retry clears a pending
 // carry; the sector clock cutting a wave-3 drain still gets the callout; reduced motion fades the callout without the
 // slam and fades the leaving plates in place. Lead ruling Z12's safety net: a timeout with no leak in the wave lowers
-// the next wave's target by stepMax (floor 1.0); a timeout with a leak does not; wave 3 sets nothing; a Retry
-// (checkpoint restore) and a sector entry clear a pending back-off. ~100 s. PASS = the stakes behave as D3 / Z5 / Z12.
+// the next wave's target to stepMax under the slower of that target and the timed-out wave's pace (floor 1.0), so the
+// next wave never runs faster than the one that timed out, also while the pace still ramps (release review Z12-B3); a
+// timeout with a leak does not; wave 3 sets nothing; a Retry (checkpoint restore) and a sector entry clear a pending
+// back-off. ~110 s. PASS = the stakes behave as D3 / Z5 / Z12.
 // Usage: node tools/playtest/probes/t-pace-stakes.mjs
 import { openProbe, sleep, waitFor, startFresh, jumpTo, errorsCheck } from "./pace_lib.mjs";
 
@@ -205,9 +207,10 @@ P.check("5. S2: a pending carry of 3 for wave 2, then Retry sector: carry 0, pac
   pending.carry === 3 && pending.carryTo && pending.carryTo.wave === 1 && retry.carry === 0 && retry.carryTo === null && retry.wave === 0 && retry.cpMul === pending.cpMul &&
   Math.abs(retry.mul - retry.cpMul) <= 0.35 + 1e-9 && retry.quota === Math.round(10 * retry.mul), { pending, retry });
 
-// ---- 7. Z12 safety net: a timeout with no leak lowers the next wave's target by stepMax; cleared by Retry / sector entry ----
-// A stubbed pilot (run speed 110 WPM, acquisition 300 ms) on S4: W1 steps 1.0 -> 1.35 and W2's own target is ~1.58, so the
-// back-off (target - 0.35 ~ 1.23) is visible under the step rule.
+// ---- 7. Z12 safety net: a timeout with no leak lowers the next wave's target; cleared by Retry / sector entry ----
+// A stubbed pilot (run speed 110 WPM, acquisition 300 ms) on S4: W1 steps 1.0 -> 1.35 and W2's own target is ~1.58. The
+// back-off target is stepMax under the slower of that and W1's 1.35 (review Z12-B3; before it, own target - 0.35 ~ 1.23),
+// so W2 runs at 1.0.
 // (the sector's W1 already started at the table pace: applied is dropped so the probe's beginWave(0) is a fresh step from 1.0)
 const stubPilot = () => P.g(() => { const g = window.game; g.speedFor = () => ({ wpm: 110, n: 40 }); g.typistAcquireMs = () => 300; const ps = g.paceState(); ps.applied = null; ps.mul = 1; });
 const unstubPilot = () => P.g(() => { const g = window.game; delete g.speedFor; delete g.typistAcquireMs; });
@@ -219,10 +222,11 @@ await scriptTimeout(["neon", "grid", "volt"], 0);   // 2 kills, 0 leaks at the c
 const bo1 = await P.g(() => { const s = window.game.paceSnapshot(); return { w1: s.last, backoffTo: s.state.backoffTo, stats: s.stats.backoffs }; });
 await waitFor(P, () => window.game.wave === 1 && window.game.wavePhase === "spawn", 8000);
 const bo2 = await P.g(() => { const s = window.game.paceSnapshot(); return { w2: s.last, backoffTo: s.state.backoffTo, stats: s.stats.backoffs }; });
-const want2 = Math.round(Math.min(bo1.w1.mul + 0.35, Math.max(bo1.w1.mul - 0.35, Math.max(1, targetS4 - 0.35))) * 100) / 100;
-P.check("7a. Z12: S4 W1 (1.35) times out with 2 kills and no leak -> backoffTo wave 2; W2 runs from target - 0.35 (floor 1.0) under the step rule, below its own target; the back-off is spent",
-  bo1.w1.mul === 1.35 && bo1.backoffTo && bo1.backoffTo.level === 4 && bo1.backoffTo.wave === 1 && bo2.w2.backoff === true && Math.abs(bo2.w2.target - Math.round(Math.max(1, targetS4 - 0.35) * 100) / 100) < 0.011 &&
-  bo2.w2.mul === want2 && bo2.w2.mul < Math.round(Math.min(1.7, targetS4) * 100) / 100 && bo2.backoffTo === null && bo2.stats === bo1.stats + 1, { targetS4, want2, bo1, bo2 });
+const bt2 = Math.max(1, Math.min(targetS4, bo1.w1.mul) - 0.35);   // the back-off target
+const want2 = Math.round(Math.min(bo1.w1.mul + 0.35, Math.max(bo1.w1.mul - 0.35, bt2)) * 100) / 100;   // the step rule from W1
+P.check("7a. Z12: S4 W1 (1.35) times out with 2 kills and no leak -> backoffTo wave 2; W2's target drops 0.35 under the slower of its own (~1.58) and W1's pace (floor 1.0), so the step rule runs W2 at 1.0: below W1 and below its own target; the back-off is spent",
+  bo1.w1.mul === 1.35 && bo1.backoffTo && bo1.backoffTo.level === 4 && bo1.backoffTo.wave === 1 && bo2.w2.backoff === true && Math.abs(bo2.w2.target - Math.round(bt2 * 100) / 100) < 0.011 &&
+  bo2.w2.mul === want2 && want2 === 1 && bo2.w2.mul < bo1.w1.mul && bo2.w2.mul < Math.round(Math.min(1.7, targetS4) * 100) / 100 && bo2.backoffTo === null && bo2.stats === bo1.stats + 1, { targetS4, bt2, want2, bo1, bo2 });
 // a timeout with a leak in the wave sets nothing
 await jumpTo(P, 3);
 await stubPilot();
@@ -264,6 +268,22 @@ const bo7 = await P.g(() => {
 await unstubPilot();
 P.check("7c. Z12: a pending back-off (S4 W1 clean timeout) is cleared by Retry sector (W1 starts without it) and by a sector entry (S5)",
   bo5.level === 4 && bo5.wave === 1 && bo6.backoffTo === null && bo6.w1.backoff === false && bo7.backoffTo === null && bo7.level === 5, { bo5, bo6, bo7 });
+// 7d. review Z12-B3: the pace still ramping above the floor. Run speed 200 WPM, acquisition 120 ms, S4 W1 stepping from 1.35:
+// W1 runs 1.70 toward an own target near 2.5; it times out with no leak. Own target - 0.35 alone (~2.15) would step W2 up
+// to 2.05, faster than the wave that timed out; the back-off target 1.70 - 0.35 runs it at 1.35.
+const targetS4fast = await P.g(() => paceTargetMul(paceEffCps(200 / 12, paceMeanLen(LEVELS[3]), 120), LEVELS[3].targetCps));
+await jumpTo(P, 3);
+await P.g(() => { const g = window.game; g.speedFor = () => ({ wpm: 200, n: 40 }); g.typistAcquireMs = () => 120; const ps = g.paceState(); ps.applied = null; ps.mul = 1.35; });
+await scriptTimeout(["neon", "grid", "volt"], 0);   // 2 kills, 0 leaks at the cap
+const bo8 = await P.g(() => { const s = window.game.paceSnapshot(); return { w1: s.last, backoffTo: s.state.backoffTo }; });
+await waitFor(P, () => window.game.wave === 1 && window.game.wavePhase === "spawn", 8000);
+const bo9 = await P.g(() => window.game.paceSnapshot().last);
+await unstubPilot();
+const step = (p, t) => Math.round(Math.min(2.5, Math.max(1, Math.min(p + 0.35, Math.max(p - 0.35, t)))) * 100) / 100;
+const oldRule = step(bo8.w1.mul, Math.max(1, targetS4fast - 0.35));
+P.check("7d. Z12 (review Z12-B3): while the pace ramps (S4, own target >= 2.05, W1 stepped 1.35 -> 1.70) a clean W1 timeout runs W2 at 1.35 = W1 - 0.35 (target 1.35), not faster than W1 (own target - 0.35 alone would step it to 2.05)",
+  bo8.w1.mul === 1.7 && bo8.backoffTo && bo8.backoffTo.level === 4 && bo8.backoffTo.wave === 1 && targetS4fast >= 2.05 && bo9.backoff === true &&
+  bo9.mul === 1.35 && Math.abs(bo9.target - 1.35) < 0.011 && bo9.mul < bo8.w1.mul && oldRule > bo8.w1.mul, { targetS4fast, oldRule, bo8, bo9 });
 
 // ---- 6. reduced motion ----
 await P.page.emulateMedia({ reducedMotion: "reduce" });

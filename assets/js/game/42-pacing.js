@@ -12,7 +12,8 @@
 // target length L in characters (letters 1; paceMeanLen, from WORDS' word / letter / phrase mix). pilotCps = MEASURE's
 // run speed (>= 20 intervals), else the profile's lifetime speed (>= 60 intervals, so a Flight Check alone never moves
 // a fresh pilot's S1 W1 off 1.0), else the table. Safety net (Z12): a wave that times out with no leak in it lowers the
-// next wave's target by 0.35 (floor 1.0); cleared at sector entry and on a checkpoint restore. The wave's
+// next wave's target to 0.35 below the slower of that target and the timed-out wave's pace (floor 1.0), so the next
+// wave never runs faster than the one that timed out; cleared at sector entry and on a checkpoint restore. The wave's
 // tuning (scaffold, 40-combat.js beginWave) gets quota x mul (+ escaped carry), spawn rate x mul, maxEnemies +
 // min(3, round(2 (mul - 1))), plate speed x (1 + 0.15 (mul - 1)) and, from paceMul 1.35, an empty-field top-up to 2 alive.
 // Stakes (D3, lead ruling Z5): a wave's cap is computed from its quota and stream (>= delivery x 1.25 + 4 s, never below
@@ -96,6 +97,16 @@ function paceStepMul(prev, target) {
   const p = Number.isFinite(prev) && prev > 0 ? prev : PACE.mulMin;
   const t = Number.isFinite(target) ? target : PACE.mulMin;
   return paceRound2(clamp(clamp(t, p - PACE.stepMax, p + PACE.stepMax), PACE.mulMin, PACE.mulMax));
+}
+
+// Z12 safety net: the target of the wave after a timeout with no leak: stepMax under the slower of the wave's own
+// target and prev, the paceMul of the wave that timed out (floor 1.0). Under the step rule that wave then runs at
+// prev - stepMax (floor 1.0), never faster than the one that timed out, also while the pace is still ramping up
+// (release review Z12-B3: the own target - stepMax alone could sit above prev, and the step went up).
+function paceBackoffTarget(target, prev) {
+  const p = Number.isFinite(prev) && prev > 0 ? prev : PACE.mulMin;
+  const t = Number.isFinite(target) ? target : PACE.mulMin;
+  return Math.max(PACE.mulMin, Math.min(t, p) - PACE.stepMax);
 }
 
 // Z5: seconds the stream needs to deliver a wave's quota at its spawn rate x spawnMul (spawnAcc primed at
@@ -314,7 +325,8 @@ Object.assign(Game.prototype, {
       this._paceLast = { level: L, wave: w, mul: a.mul, target: null, source: "replay", cps: null, wpm: null, n: null, acq: null, len: null, eff: null, backoff: false, carry: 0, quota: t.quota };
       return;
     }
-    // Z12 safety net: the previous wave of this sector timed out with no leak, so this wave's target drops by stepMax.
+    // Z12 safety net: the previous wave of this sector timed out with no leak, so this wave's target drops stepMax
+    // under the slower of its own target and that wave's pace (ps.mul): the step rule then never speeds it up.
     const backoff = !!(ps.backoffTo && ps.backoffTo.level === L && ps.backoffTo.wave === w);
     ps.backoffTo = null;
     let mul, src = null, target = null, source, acq = null, len = null, eff = null;
@@ -326,7 +338,7 @@ Object.assign(Game.prototype, {
       len = paceMeanLen(cfg);
       eff = paceEffCps(src.cps, len, acq);
       target = paceTargetMul(eff, cfg.targetCps);
-      if (backoff) { target = Math.max(PACE.mulMin, target - PACE.stepMax); this.paceStats().backoffs++; }
+      if (backoff) { target = paceBackoffTarget(target, ps.mul); this.paceStats().backoffs++; }
       mul = paceStepMul(ps.mul, target);
       ps.mul = mul;
       source = src.source;
