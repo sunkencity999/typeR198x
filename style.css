@@ -2936,9 +2936,11 @@ body[data-flight-check="on"] .tapToType:not(.hidden) ~ .fcPanel .fcStep { visibi
 /* Results screens (release 20261024a, J1): the rank line, ACC caption and WEAK SIGNAL strip make the cards taller, so on
    a 720 px window or a phone the actions would sit below the fold of the .screen scroller (scrollTop stays 0). They
    stick to its bottom edge instead; the negative inset and margin cancel the bar's own bottom padding, so the layout at
-   the end of the scroll is unchanged and nothing shows under the bar. Phones: an opaque fill (bonus rows show through). */
+   the end of the scroll is unchanged and nothing shows under the bar. Phones: an opaque fill (bonus rows show through).
+   The MODES results card (#screenModeResults: medal, lines, share row) takes the same bar; it overflowed at 844 x 390. */
 .screen--clear .screenActions,
 .screen--over .screenActions,
+.screen--modes .screenActions,
 .screen--victory .endingActions {
   position: sticky;
   bottom: calc(-1 * var(--sp-5));
@@ -2950,6 +2952,7 @@ body[data-flight-check="on"] .tapToType:not(.hidden) ~ .fcPanel .fcStep { visibi
 @media (max-width: 640px) {
   .screen--clear .screenActions,
   .screen--over .screenActions,
+  .screen--modes .screenActions,
   .screen--victory .endingActions {
     bottom: -12px;
     padding-bottom: 12px;
