@@ -112,7 +112,10 @@ const panel = await P.g(() => {
   const speedPts = pts("#panelLog .flSpark__speed"), accPts = pts("#panelLog .flSpark__acc");
   const rows = document.querySelectorAll("#panelLog .flSectors tbody tr");
   const stats = [...document.querySelectorAll("#panelLog .flStat")].map((s) => s.textContent);
-  return {
+  const drillTile = [...document.querySelectorAll("#panelLog .flStat")].find((el) => /^drill$/i.test(el.querySelector(".flStat__label").textContent.trim()));
+  const drill = drillTile ? { value: drillTile.querySelector(".flStat__value").textContent, cap: (drillTile.querySelector(".flStat__cap") || {}).textContent || "" } : null;
+  const untimed = !!document.querySelector('#panelLog [data-fl="untimed"]');
+  return { drill, untimed,
     keys: keyEls.length, badErr, badLat, med, slow, slowCount: slow.split(" · ").filter(Boolean).length, weakText, weak: weak.slice(),
     title: !!(svg && svg.querySelector("title") && svg.querySelector("title").textContent.length > 10), role: svg && svg.getAttribute("role"),
     speedPts, accPts, rows: rows.length, row1: rows[0] && rows[0].textContent, row3: rows[2] && rows[2].textContent, locked: [...rows].filter((r) => r.classList.contains("is-locked")).length,
@@ -120,12 +123,12 @@ const panel = await P.g(() => {
     sr: (document.querySelector("#panelLog .flSr") || {}).textContent || "", hiddenKeys: document.querySelector("#panelLog .flKeys").getAttribute("aria-hidden"), stats
   };
 });
-P.check("3. Flight Log from an injected profile: 26 keys with data-err buckets and --lat per formula, 5 slowest, weak keys === typistWeakKeys(), 20-point sparklines with a <title>, 10 sector rows, goal, sr summary",
+P.check("3. Flight Log from an injected profile: 26 keys with data-err buckets and --lat per formula, 5 slowest, weak keys === typistWeakKeys(), 20-point sparklines with a <title>, 10 sector rows, goal, sr summary; the Drill tile value is the speed alone with the accuracy in its caption (review CT-B2); no untimed-sector note when every cleared row has a WPM",
   panel.keys === 26 && panel.badErr.length === 0 && panel.badLat.length === 0 && panel.slowCount === 5 && /^[A-Z] \d+ MS( · [A-Z] \d+ MS){4}$/.test(panel.slow) &&
   panel.weakText === (panel.weak.length ? panel.weak.map((c) => c.toUpperCase()).join(" · ") : "NONE YET") &&
   panel.speedPts === 20 && panel.accPts === 20 && panel.title && panel.role === "img" && panel.rows === 10 && /^161%?98\.5%$/.test(panel.row1.replace(/\s+/g, "")) && panel.locked === 5 &&
   panel.goal === panel.wantGoal && /^Weak keys: .*Slowest keys: .*Most missed: /.test(panel.sr) && panel.hiddenKeys === "true" &&
-  panel.stats.some((t) => /BEST WPM\s*64/i.test(t)) && panel.stats.some((t) => /THROUGHPUT\s*31/i.test(t)) && panel.stats.some((t) => /DAYS FLOWN\s*5/i.test(t)) && panel.stats.some((t) => /CEILING\s*72/i.test(t)) && panel.stats.some((t) => /DRILL\s*58 · 97\.2%/i.test(t)),
+  panel.stats.some((t) => /BEST WPM\s*64/i.test(t)) && panel.stats.some((t) => /THROUGHPUT\s*31/i.test(t)) && panel.stats.some((t) => /DAYS FLOWN\s*5/i.test(t)) && panel.stats.some((t) => /CEILING\s*72/i.test(t)) && panel.drill && panel.drill.value === "58" && panel.drill.cap === "at 97.2% · best 60 s drill" && !panel.untimed,
   panel);
 
 // ---- 8. colour vision: the err buckets differ in luminance ----
@@ -173,8 +176,10 @@ const menu = await P.g(() => ({ wpm: document.getElementById("statWpm").textCont
 P.check("6. menu: #statWpm === bests.speed (row shown), #statGoal === the goal text", !menu.rowHidden && menu.wpm === String(menu.best) && !menu.goalHidden && menu.goal === menu.want, menu);
 
 // ---- 7. phone portrait / landscape ----
+// The widest drill best the reviewer measured (104 WPM at 98.4 %), restored after the loop.
+const drill0 = await P.g(() => { const b = window.game.save.profile.bests; const d = b.drill; b.drill = { speed: 104, acc: 98.4 }; return d; });
 const phone = {};
-for (const [name, vp] of [["portrait", { width: 390, height: 844 }], ["landscape", { width: 844, height: 390 }], ["desktop", { width: 1440, height: 900 }]]) {
+for (const [name, vp] of [["portrait", { width: 390, height: 844 }], ["landscape", { width: 844, height: 390 }], ["desktop", { width: 1440, height: 900 }], ["laptop", { width: 1280, height: 800 }]]) {
   await page.setViewportSize(vp);
   await sleep(300);
   await openRecords();
@@ -193,14 +198,18 @@ for (const [name, vp] of [["portrait", { width: 390, height: 844 }], ["landscape
       return { label: lab.textContent, end: Math.round(lr.left + lab.scrollWidth), tileEnd: Math.round(tr.right - parseFloat(getComputedStyle(t).paddingRight)), cut: lab.scrollWidth > lab.clientWidth + 1 };
     });
     const badLabels = labels.filter((l) => l.cut || l.end > l.tileEnd + 1);
-    return { inner: over(inner), scroll: over(scroll), log: over(log), doc: document.documentElement.scrollWidth - document.documentElement.clientWidth, keyW, badLabels, labels: labels.length };
+    // every stat value is one line (the drill best "58 · 97.2%" wrapped in the 5-across row; review CT-B2)
+    const lines = (el) => { const r = document.createRange(); r.selectNodeContents(el); return new Set([...r.getClientRects()].filter((q) => q.width > 0).map((q) => Math.round(q.top))).size; };
+    const valueLines = Math.max(...[...log.querySelectorAll(".flStat__value")].map(lines));
+    return { valueLines, inner: over(inner), scroll: over(scroll), log: over(log), doc: document.documentElement.scrollWidth - document.documentElement.clientWidth, keyW, badLabels, labels: labels.length };
   });
   await P.shot(`flightlog-${name}`);
   await closeRecords();
 }
 await page.setViewportSize({ width: 1440, height: 900 });
-P.check("7. 390 x 844, 844 x 390 and 1440 x 900: no horizontal overflow in the Records modal or the Flight Log, keys >= 26 px wide, every stat label (THROUGHPUT, DAYS FLOWN ...) ends inside its own tile, untruncated",
-  Object.values(phone).every((p) => p.inner <= 1 && p.scroll <= 1 && p.log <= 1 && p.doc <= 1 && p.keyW >= 26 && p.labels === 5 && p.badLabels.length === 0), phone);
+await P.g((d) => { window.game.save.profile.bests.drill = d; }, drill0);
+P.check("7. 390 x 844, 844 x 390, 1440 x 900 and 1280 x 800: no horizontal overflow in the Records modal or the Flight Log, keys >= 26 px wide, every stat label (THROUGHPUT, DAYS FLOWN ...) ends inside its own tile, untruncated, every stat value on one line",
+  Object.values(phone).every((p) => p.inner <= 1 && p.scroll <= 1 && p.log <= 1 && p.doc <= 1 && p.keyW >= 26 && p.labels === 5 && p.badLabels.length === 0 && p.valueLines === 1), phone);
 
 // ---- 11. switching to the Flight Log recomputes the scroll cue (release 20261024a, J3) ----
 await page.setViewportSize({ width: 1280, height: 720 });
@@ -345,9 +354,12 @@ await openRecords();
 await P.g(() => document.getElementById("tabLog").click());
 await sleep(150);
 rule.tile = await P.g(() => { const t = [...document.querySelectorAll("#panelLog .flStat")].find((el) => /best wpm/i.test(el.querySelector(".flStat__label").textContent)); return t ? { value: t.querySelector(".flStat__value").textContent, cap: (t.querySelector(".flStat__cap") || {}).textContent || "" } : null; });
+rule.untimed = await P.g(() => { const n = document.querySelector('#panelLog [data-fl="untimed"]'); return n ? n.textContent : null; });
+rule.row1 = await P.g(() => { const r = document.querySelector("#panelLog .flSectors tbody tr"); return r ? r.textContent : null; });
 await closeRecords();
-P.check("10. a measured speed with no Best WPM yet: the menu row reads 'not set yet' with the rule as its title, the Flight Log tile '--' captions 'needs a clear with 60 timed keys', the help WPM item states the rule",
+P.check("10. a measured speed with no Best WPM yet: the menu row reads 'not set yet' with the rule as its title, the Flight Log tile '--' captions 'needs a clear with 60 timed keys', the help WPM item states the rule; Sector 1 cleared at 89.5 % without a timed best ('1 -- 89.5%') gets the note under the table (review J6)",
   rule.wpm === "not set yet" && rule.title === "Best WPM counts a cleared sector with at least 60 timed keys." && rule.tile && rule.tile.value === "--" &&
+  rule.row1 === "1--89.5%" && rule.untimed === "Best WPM --: no clear of that sector had 60 timed keys yet (single letters are not timed)." &&
   rule.tile.cap === "needs a clear with 60 timed keys" && rule.help.includes("Best WPM counts a cleared sector with at least 60 timed keys."), rule);
 
 // ---- 5. legacy rows and the old best ----

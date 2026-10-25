@@ -1158,9 +1158,13 @@ Object.assign(Game.prototype, {
     }
     const dash = (v) => (v > 0 ? String(v) : "--");
     const b = p.bests || {};
-    const drill = b.drill && b.drill.speed > 0 ? `${b.drill.speed | 0} · ${typistRound(b.drill.acc, 1)}%` : "--";
+    // Drill tile: the value is the speed, the accuracy moves to the caption ("104 · 98.4%" wrapped in the 5-across row;
+    // release review CT-B2).
+    const hasDrill = !!(b.drill && b.drill.speed > 0);
+    const drill = hasDrill ? String(b.drill.speed | 0) : "--";
+    const drillCap = hasDrill && Number.isFinite(Number(b.drill.acc)) && Number(b.drill.acc) > 0 ? `at ${typistRound(Number(b.drill.acc), 1)}% · best 60 s drill` : "best 60 s drill";
     const stat = (label, value, cap) => `<div class="flStat"><span class="flStat__label">${label}</span><span class="flStat__value mono">${value}</span>${cap ? `<span class="flStat__cap">${cap}</span>` : ""}</div>`;
-    const stats = `<div class="flStats">${stat("Best WPM", dash(b.speed | 0), (b.speed | 0) > 0 ? "" : `needs a clear with ${TYPIST_BEST_MIN_N} timed keys`)}${stat("Throughput", dash(Math.round(p.thrEma || 0)), "what the stream let you type")}${stat("Days flown", dash(this.typistDaysFlown()))}${stat("Ceiling", dash(b.ceiling | 0), "best endless drift")}${stat("Drill", drill, "best 60 s drill")}</div>`;
+    const stats = `<div class="flStats">${stat("Best WPM", dash(b.speed | 0), (b.speed | 0) > 0 ? "" : `needs a clear with ${TYPIST_BEST_MIN_N} timed keys`)}${stat("Throughput", dash(Math.round(p.thrEma || 0)), "what the stream let you type")}${stat("Days flown", dash(this.typistDaysFlown()))}${stat("Ceiling", dash(b.ceiling | 0), "best endless drift")}${stat("Drill", drill, drillCap)}</div>`;
     // keyboard glyph
     const med = this.typistKeyMedianMs(ty);
     let keyRows = "";
@@ -1223,14 +1227,18 @@ Object.assign(Game.prototype, {
       spark = `<div class="flSpark"><p class="flList__label">Speed and accuracy · last ${N}</p>${legend}<svg viewBox="0 0 200 48" role="img" preserveAspectRatio="none"><title>${summary}</title>${accLine}${speedLines}</svg></div>`;
     }
     const unlocked = clamp((this.save.lastUnlockedLevel | 0) || 1, 1, 10);
-    let rows = "";
+    let rows = "", untimed = false;
     for (let L = 1; L <= 10; L++) {
       const e = p.sectorBest && p.sectorBest[String(L)];
       const spd = e && e.speed > 0 ? String(e.speed) : "--";
       const acc = e && e.acc > 0 ? `${typistRound(e.acc, 1)}%` : "--";
+      if (L <= unlocked && e && !(e.speed > 0) && e.acc > 0) untimed = true;
       rows += `<tr class="${L > unlocked ? "is-locked" : ""}"><td>${L}</td><td>${spd}</td><td>${acc}</td></tr>`;
     }
-    const table = `<table class="hsTable flSectors"><caption class="flList__label">Sector bests</caption><thead><tr><th scope="col">Sector</th><th scope="col">Best WPM</th><th scope="col">Best Acc</th></tr></thead><tbody>${rows}</tbody></table>`;
+    // A cleared sector without a Best WPM says why (release review J6): a fast clear of the short, letter-heavy S1 can
+    // stay under the 60 timed keys a best needs (single-letter targets add no interval), while its card showed a WPM.
+    const untimedNote = untimed ? `<p class="flNote" data-fl="untimed">Best WPM --: no clear of that sector had ${TYPIST_BEST_MIN_N} timed keys yet (single letters are not timed).</p>` : "";
+    const table = `<table class="hsTable flSectors"><caption class="flList__label">Sector bests</caption><thead><tr><th scope="col">Sector</th><th scope="col">Best WPM</th><th scope="col">Best Acc</th></tr></thead><tbody>${rows}</tbody></table>${untimedNote}`;
     return `${head}${stats}${legacy}${keys}${lists}${spark}${table}`;
   },
 
