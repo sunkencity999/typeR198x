@@ -49,8 +49,8 @@ async function installHooks() {
   await P.g(() => {
     const g = window.game;
     if (window.__b10) return;
-    const B = window.__b10 = { spawns: [], leaks: [], damage: [], surges: [], phases: [], boss: [], pace: [], hullIn: null, lastCard: null,
-      reset() { B.spawns = []; B.leaks = []; B.damage = []; B.surges = []; B.phases = []; B.boss = []; B.pace = []; B.hullIn = B.lastCard; } };
+    const B = window.__b10 = { spawns: [], leaks: [], damage: [], surges: [], windows: [], phases: [], boss: [], pace: [], hullIn: null, lastCard: null,
+      reset() { B.spawns = []; B.leaks = []; B.damage = []; B.surges = []; B.windows = []; B.phases = []; B.boss = []; B.pace = []; B.hullIn = B.lastCard; } };
     const ctx = () => ({ t: g.playClock || 0, L: g.levelIndex + 1, wave: g.wave | 0, phase: g.inBoss ? "boss" + (((g.boss && g.boss.phase) | 0) + 1) : g.wavePhase });
     const wrap = (name, after) => {
       const orig = g[name];
@@ -83,6 +83,13 @@ async function installHooks() {
       onGameHook("waveWillEnd", function (e) { const p = B.pace[B.pace.length - 1]; if (p && !e.byQuota) { p.timedOut = true; p.escaped = e.alive | 0; } });
       onGameHook("waveDrained", function (e) { const p = B.pace[B.pace.length - 1]; if (p && !e.byQuota) p.escaped += e.detonated | 0; });
       onGameHook("sectorCardWillShow", function () { B.lastCard = { hp: this.player.hp, maxHp: this.player.maxHp }; });
+      // Counter-Signal windows (lead ruling Z6): each surge's window, the table window and the pilot's time for the
+      // segment at their hand speed (pilotWpm("base"): run, else lifetime)
+      onGameHook("counterSignal", function (e) {
+        if (e.result !== "start") return;
+        const hand = typeof this.pilotWpm === "function" ? this.pilotWpm("base") : null;
+        B.windows.push({ ...ctx(), chars: e.chars, dur: e.dur, table: typeof surgeDuration === "function" ? surgeDuration(e.chars, e.level, !!e.slow) : null, hand, need: hand > 0 ? e.chars * 12 / hand : null });
+      });
     }
   });
 }
@@ -288,6 +295,7 @@ for (let s = 0; s < SECTORS; s++) {
     damage: B.damage.filter((d) => d.t >= bossUnlock.t).reduce((a, d) => a + d.dmg, 0),
     damageBySource: B.damage.filter((d) => d.t >= bossUnlock.t).reduce((a, d) => { a[d.source] = (a[d.source] || 0) + d.dmg; return a; }, {}),
     surgesFired: B.surges.filter((x) => x.fired).length, surgesCountered: B.surges.filter((x) => x.countered).length,
+    surgeWindows: B.windows.map((w) => ({ chars: w.chars, dur: r2(w.dur), table: r2(w.table), need: r2(w.need), hand: r1(w.hand) })),
     phases: bossPhases.map((bp) => {
       const leaks = B.leaks.filter((l) => l.t >= bp.t0 && l.t < bp.t1).length;
       const a = dbgAcc[`boss${bp.phase}`];

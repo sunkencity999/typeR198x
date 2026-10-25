@@ -6,6 +6,9 @@
 // sectors 1-3 for 35/.90, 55/.93 and 80/.97, 55/.93 clears sector 10 from a direct jump. Every child run must end with
 // zero page / console errors. Writes out/t-arcade-balance/summary.json (per profile and sector: surges started /
 // countered / fired, surge damage, boss seconds, tally clear / time / accuracy / flawless) for PACE's re-pass.
+// Lead ruling Z6 (fair surge windows): 35/.90 takes 0 surge damage in S1-3; 55/.93 keeps >= 15 % hull through the S10
+// jump; 80/.97 still meets real surges in S8-10 (a jump to S8, three sectors): every fight starts one, some are
+// countered, and its windows average <= 1.75 x its own time for the segment (window = max(table, 1.5 x that time)).
 //
 // Usage: node probes/t-arcade-balance.mjs [--only w80-a.97-j10] [--reuse] [--parallel 2]
 //   --reuse     skip a profile whose JSON already exists (re-check the assertions without re-running Chrome)
@@ -30,7 +33,8 @@ const PROFILES = [
   { key: "w55-a.93-s1-3", wpm: 55, acc: 0.93, sectors: 3 },
   { key: "w80-a.97-s1-3", wpm: 80, acc: 0.97, sectors: 3 },
   { key: "w55-a.93-j10", wpm: 55, acc: 0.93, jump: 10 },
-  { key: "w80-a.97-j10", wpm: 80, acc: 0.97, jump: 10 }
+  { key: "w80-a.97-j10", wpm: 80, acc: 0.97, jump: 10 },
+  { key: "w80-a.97-j8", wpm: 80, acc: 0.97, jump: 8, sectors: 3 }
 ].filter((p) => !ONLY || p.key === ONLY);
 const labelOf = (p) => `t-arcade-${p.key}`;
 
@@ -43,7 +47,8 @@ function runB10(p) {
   const file = path.join(B10_DIR, `${label}.json`);
   if (REUSE && fs.existsSync(file)) return Promise.resolve({ p, label, code: null, reused: true, ms: 0 });
   const args = [path.join(HERE, "b10.mjs"), "--wpm", String(p.wpm), "--accuracy", String(p.acc), "--label", label, "--minions", "danger"];
-  if (p.jump) args.push("--jump", String(p.jump)); else args.push("--sectors", String(p.sectors));
+  if (p.jump) args.push("--jump", String(p.jump));
+  if (p.sectors) args.push("--sectors", String(p.sectors));
   const t0 = Date.now();
   return new Promise((resolve) => {
     const child = spawn(process.execPath, args, { cwd: path.resolve(HERE, ".."), stdio: ["ignore", "pipe", "pipe"] });
@@ -74,6 +79,7 @@ for (const r of runs) {
       level: s.level, mode: s.mode, death: s.death, minHpPct: s.minHpPct, bossReached: !!b, bossCleared: !!s.bossCleared, bossSeconds: s.bossDurationS,
       surgesStarted: fired + countered, surgesCountered: countered, surgesFired: fired, bossPhases: phases,
       surgeDamage: b ? (b.damageBySource && b.damageBySource.surge) | 0 : 0, bossDamage: b ? b.damage | 0 : 0,
+      windows: b && b.surgeWindows ? b.surgeWindows : [],
       tally: s.tally ? { clear: s.tally.clear, time: s.tally.time, accuracy: s.tally.accuracy, flawless: s.tally.flawless, total: s.tally.total, par: s.tally.par, elapsed: s.tally.elapsed } : null,
       rank: s.results && s.results.rank, wpm: s.results && s.results.wpm, acc: s.results && s.results.acc, clockRatio: s.clockRatio
     };
@@ -106,6 +112,24 @@ if (j80) {
 }
 const j55 = fights.find((f) => f.key === "w55-a.93-j10");
 if (j55) check("55/.93 sector 10 from a direct jump ends in victory", j55.mode === "victory", { mode: j55.mode, minHpPct: j55.minHpPct, death: j55.death, surges: [j55.surgesStarted, j55.surgesCountered, j55.surgesFired], surgeDamage: j55.surgeDamage });
+
+// ---- Z6: fair surge windows ----
+const mean = (xs) => (xs.length ? xs.reduce((a, x) => a + x, 0) / xs.length : null);
+const r2 = (x) => (x === null ? null : Math.round(x * 100) / 100);
+const w35 = fights.filter((f) => f.key === "w35-a.9-s1-3");
+if (w35.length) check("Z6: 35/.90 takes 0 surge damage in S1-3", w35.length === 3 && w35.every((f) => f.surgeDamage === 0),
+  w35.map((f) => `S${f.level}: started ${f.surgesStarted} c ${f.surgesCountered} f ${f.surgesFired} dmg ${f.surgeDamage} windows ${f.windows.map((w) => `${w.dur}/${w.table}`).join(",")}`));
+if (j55) check("Z6: 55/.93 sector 10 jump keeps min hull >= 15 %", j55.minHpPct >= 15, { minHpPct: j55.minHpPct, mode: j55.mode, surges: [j55.surgesStarted, j55.surgesCountered, j55.surgesFired], surgeDamage: j55.surgeDamage,
+  window: r2(mean(j55.windows.map((w) => w.dur))), table: r2(mean(j55.windows.map((w) => w.table))), need: r2(mean(j55.windows.filter((w) => w.need).map((w) => w.need))) });
+const j8 = fights.filter((f) => f.key === "w80-a.97-j8");
+if (j8.length) {
+  const ws = j8.flatMap((f) => f.windows.filter((w) => w.need > 0));
+  const ratio = mean(ws.map((w) => w.dur / w.need));
+  check("Z6: 80/.97 meets real surges in S8-10: every fight starts >= 1, some countered, windows average <= 1.75 x its own time for the segment",
+    j8.length === 3 && j8.every((f) => f.bossReached && f.surgesStarted >= 1) && j8.reduce((a, f) => a + f.surgesCountered, 0) >= 1 && ratio !== null && ratio <= 1.75,
+    { sectors: j8.map((f) => `S${f.level} ${f.mode}: started ${f.surgesStarted} c ${f.surgesCountered} f ${f.surgesFired} dmg ${f.surgeDamage} minHp ${f.minHpPct}%`), windowOverNeed: r2(ratio),
+      windowOverTable: r2(mean(ws.map((w) => w.dur / w.table))), n: ws.length });
+}
 
 const fail = results.filter((r) => r.result === "fail").length;
 fs.writeFileSync(path.join(OUT, "probe.json"), JSON.stringify({ probe: "t-arcade-balance", pass: results.filter((r) => r.result === "pass").length, fail, results }, null, 2));

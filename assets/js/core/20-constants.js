@@ -133,10 +133,12 @@ const MINION_SPAWN_DX = -40;                   // minions appear at boss.artRect
 // Counter-Signal (ARCADE D10): surges from sector 2; the first of a fight arms min(firstAtS, surgeEvery) s after the intro
 // unlock, then every surgeEvery (LEVEL_TABLE); it starts at a segment start with the whole segment. Window =
 // baseS + chars x perChar(L) (perChar .30 s at S2 down to .12 s at S10, linear), x slowWiden when the pilot's live speed
-// is under slowWpm (or unknown); at most maxFiredPerPhase fired surges per phase. scrambleS: the fail scramble of the
-// reset word; barCommitS: the DOM charge bar's write cadence (a 200 ms linear CSS transition eases between writes).
+// is under slowWpm (or unknown); at most maxFiredPerPhase fired surges per phase. Lead ruling Z6: a window is never
+// shorter than fairMul x the time the pilot needs for the segment at their measured hand speed (run, else lifetime, else
+// fairWpm): surgeWindow(). scrambleS: the fail scramble of the reset word; barCommitS: the DOM charge bar's write
+// cadence (a 200 ms linear CSS transition eases between writes).
 const COUNTER_SIGNAL = Object.freeze({ fromLevel: 2, firstAtS: 6, baseS: 0.6, perCharFromS: 0.30, perCharToS: 0.12,
-  slowWpm: 35, slowWiden: 1.2, maxFiredPerPhase: 2, scrambleS: 0.3, barCommitS: 0.2 });
+  slowWpm: 35, slowWiden: 1.2, maxFiredPerPhase: 2, fairMul: 1.5, fairWpm: 30, scrambleS: 0.3, barCommitS: 0.2 });
 
 function bossSegmentCount(level) {
   return 6 + 3 * (level - 1);
@@ -150,6 +152,12 @@ function counterSignalPerChar(level) {            // linear S2 .30 -> S10 .12
 function surgeDuration(chars, level = 2, slow = false) {
   const d = COUNTER_SIGNAL.baseS + Math.max(0, chars | 0) * counterSignalPerChar(level);
   return slow ? d * COUNTER_SIGNAL.slowWiden : d;
+}
+
+// Z6: the table window, or fairMul x the segment's typing time at handWpm (chars x 12 / WPM s) when that is longer.
+function surgeWindow(chars, level = 2, slow = false, handWpm = 0) {
+  const wpm = handWpm > 0 ? handWpm : COUNTER_SIGNAL.fairWpm;
+  return Math.max(surgeDuration(chars, level, slow), COUNTER_SIGNAL.fairMul * Math.max(0, chars | 0) * 12 / wpm);
 }
 
 // ----------------------------- Scoring -----------------------------
