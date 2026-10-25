@@ -2976,6 +2976,11 @@ body[data-flight-check="on"] .tapToType:not(.hidden) ~ .fcPanel .fcStep { visibi
     background: linear-gradient(180deg, rgba(5,6,11,0), rgb(5,6,11) var(--sp-3));
   }
 }
+/* The share line and Copy are the only focusable controls inside a scrolling results card (release review
+   B-PERF-A11Y-1): once focused (trapFocus scrolls them into view, native Tab out of the input does too) they clear the
+   sticky Fly again / Menu bar, 72-88 px tall in the row layout and 132 px in the phone column layout. */
+.screen--modes .shareRow > * { scroll-margin-bottom: 96px; }
+@media (max-width: 640px) { .screen--modes .shareRow > * { scroll-margin-bottom: 148px; } }
 /* ===== end track:MEASURE ===== */
 
 /* ===== track:PACE (42-pacing.js) ===== */

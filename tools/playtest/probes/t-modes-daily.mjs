@@ -91,6 +91,32 @@ const d11 = await P.g(async () => ({ clip: await navigator.clipboard.readText(),
 P.check("D11 share line matches the format; Copy puts it on the clipboard; toast SHARE LINE COPIED", c5.shareShown && RE.test(c5.share) && c5.share.includes("DAILY 2026-10-23 · S5 CHROME MONOLITH") &&
   d11.clip === c5.share && d11.toast.includes("SHARE LINE COPIED"), { share: c5.share, d11 });
 
+// D11b (release review B-PERF-A11Y-1): on a short window the results card scrolls under the sticky Fly again / Menu bar;
+// real Shift+Tab from Fly again to Copy and to the share line leaves each focused control wholly visible.
+const d11b = {};
+for (const [w, h] of [[1024, 600], [844, 390]]) {
+  await P.page.setViewportSize({ width: w, height: h });
+  await sleep(350);
+  await P.g(() => { document.getElementById("screenModeResults").scrollTop = 0; document.getElementById("btnModeAgain").focus({ preventScroll: true }); });
+  const seen = [];
+  for (let i = 0; i < 2; i++) {
+    await P.page.keyboard.press("Shift+Tab");
+    await sleep(250);
+    seen.push(await P.g(() => {
+      const el = document.activeElement, r = el.getBoundingClientRect();
+      let own = 0;
+      for (let x = 0; x < 5; x++) for (let y = 0; y < 3; y++) { const e = document.elementFromPoint(r.left + r.width * (x + 0.5) / 5, r.top + r.height * (y + 0.5) / 3); if (e && (e === el || el.contains(e))) own++; }
+      return `${el.id}:${own}`;
+    }));
+  }
+  d11b[`${w}x${h}`] = seen;
+}
+await P.page.setViewportSize({ width: 1440, height: 900 });
+await sleep(300);
+await P.g(() => { document.getElementById("screenModeResults").scrollTop = 0; });
+P.check("D11b 1024x600 and 844x390: Shift+Tab from Fly again focuses Copy, then the share line, each wholly visible above the sticky actions (15 / 15 points)",
+  Object.values(d11b).every((s) => s.join() === "btnModeCopy:15,modeShareText:15"), d11b);
+
 // D7 Fly again -> practice
 await P.g(() => document.getElementById("btnModeAgain").focus());
 await P.page.keyboard.press("Enter");
