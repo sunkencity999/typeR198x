@@ -58,6 +58,8 @@ check("C2 two a-z words of <= 8 letters, <= 15 chars", PH.every((p) => /^[a-z]{1
 const INV = G("LEXICON_INVENTIONS");
 check("C3 every invention is in ALL_WORDS (the list documents a removal) and not in COMMON_WORDS", INV.every((w) => G("ALL_WORDS").includes(w) && !C.includes(w)));
 check("C3 WAVE_WORDS has no invention; ALL_WORDS keeps them (boss/attract history)", G("WAVE_WORDS.every(w => !LEXICON_INVENTIONS.includes(w)) && ALL_WORDS.length === 329"));
+check("C3 'japan' is an invention (reads as a proper noun, lead ruling Z4): out of WAVE_WORDS and every level's words; 'mars' and 'kana' stay in WAVE_WORDS",
+  INV.includes("japan") && G("!WAVE_WORDS.includes('japan') && LEVELS.every(c => !c.words.includes('japan')) && WAVE_WORDS.includes('mars') && WAVE_WORDS.includes('kana')"));
 check("C4 LEXICON_NEON_EXTRA in WAVE_WORDS, a-z, 7..13 letters", G("LEXICON_NEON_EXTRA.every(w => WAVE_WORDS.includes(w) && /^[a-z]{7,13}$/.test(w))"));
 // ---- C5 per level / wave ----
 const lv = G(`LEVELS.map(cfg => [0,1,2].map(w => { const win = waveLengthWindow(cfg, w), pw = lexiconPhraseWindow(win); return { L: cfg.level, w, win, pw,
