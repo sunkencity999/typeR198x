@@ -28,15 +28,43 @@ lock; 10 ms to 1.5 s; never in boss fights or the Flight Check), keeps a run EMA
 lifetime, else 300 ms, clamped 120-900 ms. PACE (`42-pacing.js`) targets `clamp(0.85 x pilotCpsEff / targetCps, 1.0,
 2.5)` with `pilotCpsEff = L / (L / pilotCps + acq / 1000)`, L = the sector's mean target length (`paceMeanLen`: the
 quota-weighted chars per spawn of WORDS' mix, letters 1): S1 2.13, S2 2.56, S3 3.27, S4 4.25, S5 5.13, S6 5.51,
-S7 6.57, S8 7.01, S9 7.92, S10 8.28. Safety net: a wave that times out with no leak lowers the next wave's target by
-0.35 (floor 1.0; cleared at sector entry and on a checkpoint restore). **No Z12 number changed**: alpha .1, 10
-samples, default 300 ms and clamp 120-900 ms ship as ruled, because every Z12 target below held with them.
+S7 6.57, S8 7.01, S9 7.92, S10 8.28. Safety net: a wave that times out with no leak lowers the next wave's target to
+0.35 under the slower of that target and the timed-out wave's paceMul (floor 1.0; cleared at sector entry and on a
+checkpoint restore), so under the step rule it runs 0.35 slower than the wave that timed out (review fix Z12-B3,
+below). **No Z12 number changed**: alpha .1, 10 samples, default 300 ms and clamp 120-900 ms ship as ruled. With them
+every Z12 target for the 55 / 80 profiles holds; the 35 / .90 latency target does **not** (review finding Z12-B1, open
+for the lead: no Z12 number reaches it), and a stale high stored acquisition time slows a fast returning pilot for one
+to two sectors (Z12-B2, open for the lead).
 
 What the harness typists measure as acquisition (the gap includes the typist's own key interval, so a typist with no
 latency still reads one interval plus the loop's few ms): no latency 196-218 ms at 80 WPM, 255-350 ms at 55, 400-455
 ms at 35; with `--acquire-ms 300` (300 ms, 600 ms with probability .1, mean ~330) 510-590 ms at 80, 585-675 ms at 55,
 690-860 ms at 35. A fresh pilot keeps the 300 ms default through most of S1 (the field is often empty when a plate
 dies there, so samples are few: 7 in 45 s at 80 WPM) and reaches 10 samples early in S2.
+
+### Release review of this branch (`b1712c1`): findings Z12-B1 / B2 / B3
+
+Re-checked on 2026-10-25 on `wt/pace-acq`; each finding was reproduced on an export of `b1712c1` before any change
+(play / wall 0.97 in every reproduction run).
+
+- **Z12-B3 (low): fixed.** The safety net lowered the next wave's own target by 0.35, but the step rule then moved from
+  the timed-out wave's paceMul toward that lowered target, so while the pace was still ramping (own target - 0.35 above
+  the previous paceMul) the wave after a clean timeout ran faster than the one that timed out, with the escaped plates
+  carried in. Reproduced with the review's probe (seeded 100 WPM lifetime, no stored acquisition, W1's cap forced with
+  2 plates up and no leak): S2 W1 1.35 -> W2 1.70, S3 W1 1.35 -> W2 1.40. `paceBackoffTarget(target, prev)` now takes
+  the 0.35 off the slower of the own target and the timed-out wave's pace (floor 1.0), so the unchanged step rule runs
+  the back-off wave at prev - 0.35 (floor 1.0); the same probe now reads S2 1.35 -> 1.0 and S3 1.35 -> 1.0. New checks:
+  `t-pace-math` 13 (961 prev / target pairs), `t-pace-stakes` 7a (S4 W1 1.35 -> W2 1.0, was 1.23) and 7d (a ramp
+  above the floor: W1 1.70 -> W2 1.35, where the old rule gave 2.05). **The fix moves no balance number below**: in
+  the 171 b10 / t-pace-balance result files of this branch's `out/`, the review's export and the reproductions, the
+  back-off fired 5 times, each time after a wave at paceMul 1.0 with the lowered target at the floor, where the old
+  and the new rule both give 1.0 (every back-off wave's recorded paceMul equals max(1, previous - 0.35)); a run without
+  a back-off is untouched by the change.
+- **Z12-B1 (medium): open, a lead decision.** "35 / .90 with latency: 0 damage S1-3 and not harder than live" is not
+  met, and this file no longer claims it. Data, cause and the options are in the 35 / .90 section below.
+- **Z12-B2 (low): open, a lead decision.** A stale high stored acquisition time (`profile.acqEma` 750-900 ms: a shared
+  save, a slow earlier session) keeps a fast returning pilot's pace low for one to two sectors and misses the R26
+  returning-pilot idle bounds. Data and the options are in "Stored acquisition time from another pilot" below.
 
 ### Z12 targets with `--acquire-ms 300` (55 / 80, fresh and seeded): b10 x 4 + latency matrix x 2 = 6 runs per profile
 
@@ -47,7 +75,7 @@ dies there, so samples are few: 7 in 45 s at 80 WPM) and reaches 10 samples earl
 | 80 / .97 fresh | 6 | 0 of 12 | 0 | 3 / 6 %, 7 / 8 % | 0 | 12 x 3 | cuts 2 of 4, 0-leak timeouts 2, PW 3 1 3 1 | cuts 0 of 8, PW 8 x 3 |
 | 80 / .97 seeded | 6 | 0 of 12 | 0 | 2 / 9 %, 9 / 7 % | 0 | 12 x 3 | cuts 3 of 4, 0-leak timeouts 0, PW 3 2 2 2 | (live: the fresh runs) |
 
-Every Z12 target holds: no S2 / S3 wave timed out with 0 leaks (20261024b: 5 in 16 sectors), clock cuts 0 % of the 48
+Every Z12 target for the 55 / 80 profiles holds: no S2 / S3 wave timed out with 0 leaks (20261024b: 5 in 16 sectors), clock cuts 0 % of the 48
 S2 / S3 sectors (target <= 15 %; 20261024b 9 of 16 = 56 %), S2-3 idle 1-11 % (<= 15 %), 0 deaths, and PERFECT WAVE 3 in
 every S2 / S3 sector, the same as live (whose waves end at the table cap and, before D3, paid PERFECT WAVE on a timeout
 too). The 300 ms typists now run S2 at paceMul 1.0-1.47 and S3 at 1.0-1.17 (they reach the S2 / S3 boss 10-30 s sooner
@@ -68,7 +96,7 @@ b10 with the latency (this branch "T-", 20261024b "B-", live "L-"; live's ranks 
 | L-w55-acq | 4 | 1 | 1 | - | 53-58 / 59-63 / 70-73 | 0 of 8 | 0 (0) | 3 3 3 3 3 3 3 3 | 0 | 0 0 0 0 | AAAAABABBAAA | 0.97 |
 | L-w80-acq | 4 | 1 | 1 | - | 53-58 / 59-61 / 67-69 | 0 of 8 | 0 (0) | 3 3 3 3 3 3 3 3 | 0 | 0 0 0 0 | ASASSASSASAA | 0.97 |
 
-### 35 / .90 with `--acquire-ms 300` (Z12: 0 damage S1-3, not harder than live)
+### 35 / .90 with `--acquire-ms 300` (Z12: 0 damage S1-3, not harder than live): not met (review Z12-B1, open)
 
 | run set | runs | paceMul S2 | paceMul S3 | acq ms S2-3 | to boss S1 / S2 / S3 s | clock cuts S2-3 | timeouts S2-3 (0 leaks) | PERFECT WAVE S2-3 | deaths | damage per run | ranks S1-S3 per run | play / wall |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -77,16 +105,79 @@ b10 with the latency (this branch "T-", 20261024b "B-", live "L-"; live's ranks 
 | B-w35-acq | 2 | 1.27-1.34 | 1 | - | 45 / 71-76 / 75-83 | 1 of 4 | 0 (0) | 3 2 3 3 | 0 | 0 0 | AAAAAA | 0.97 |
 | L-w35-acq | 4 | 1 | 1 | - | 57-61 / 60-70 / 80-83 | 0 of 8 | 0 (0) | 3 3 3 3 3 3 3 3 | 0 | 0 14 14 0 | BBCBBCBCCABB | 0.97-0.98 |
 
-Latency matrix 35 / .90 fresh: round 1 **22 damage** (S3: W2 timed out with 1 escaped and no leak, W3 took it as +1
-and leaked one word, then the sector clock cut W3; paceMul 1.0 in every wave), round 2 0 damage. Over this branch's 10
-latency runs of the profile (8 b10, 2 matrix): 0 damage in 9, 22 in 1, 0 deaths, ranks A / B. Live took damage in 2
-of 4 runs (14, in the S3 boss), `20261024b` 0 in 2 (with its S2 at paceMul 1.27-1.34). With the latency this typist's
-effective speed is 1.4-1.66 cps against S3's 2.3 (target 0.85 x 1.6 / 2.3 = 0.6): its pace sits at the 1.0 floor in
-S2-3 on this branch, as on live, so no Z12 number reaches it (D2 never paces below 1.0). What differs from live there is
-D3 / Z5 (a wave that runs out with plates up pays no PERFECT WAVE and carries its escapes; the Z5 cap is longer than
-live's table cap), not the pace. Not harder than live: the S1 boss ~15 s sooner and S2 / S3 up to 15 s sooner, damage
-in 1 of 10 runs vs 2 of 4, two 0-leak timeouts in 20 S2 / S3 sectors (b10 r1 and matrix p1, S3 W2, 1 escaped each)
-where live's waves end silently at the table cap. Reported for the lead: the "0 damage" line missed once in 10.
+**Not met; this branch does not claim it.** The profile's latency runs on this code (the Z12-B3 fix leaves every one
+of them unchanged), S2 / S3 only (S1 had no damage, no timeout and PERFECT WAVE 3 in every run):
+
+| run set | runs | S2 / S3 sectors | runs with wave damage | waves timed out with 0 leaks | clock cuts | PERFECT WAVE < 3 | deaths | paceMul |
+|---|---|---|---|---|---|---|---|---|
+| this branch, b10 fresh + seeded (table above) | 8 | 16 | 0 | 1 (S2 W3) | 0 | 1 | 0 | 1.0 |
+| this branch, matrix p1 / p2 | 2 | 4 | 1 (p1 S3: 22) | 1 (p1 S3 W2) | 1 | 1 | 0 | 1.0 |
+| review, b10 fresh r1-r6 | 6 | 12 | 1 (r6 S3: 24) | 1 (r1 S2 W3) | 1 | 2 | 0 | 1.0 |
+| review, b10 seeded r1-r2 | 2 | 4 | 0 | 1 (r1 S3 W2) | 1 | 1 | 0 | 1.0 |
+| review, matrix v1-v4 | 4 | 8 | 1 (v4 S3: 64) | 1 (v1 S3 W2) | 0 | 2 | 0 | 1.0 |
+| reproduction `R-T-w35-acq300` r1-r2 (`b1712c1`) | 2 | 4 | 0 | 1 (r2 S3 W3) | 0 | 1 | 0 | 1.0 |
+| **this code, all** | **24** | **48** | **3** | **6** | **3** | **8** | **0** | **1.0** |
+| live `a0a3845` (this branch's 4 + the review's 6) | 10 | 20 | 0 | 0 | 1 | 1 | 0 | 1.0 |
+
+The three damaging runs, all in S3 waves at paceMul 1.0: matrix p1 22 (W2 timed out with 1 escaped and no leak, W3
+took it as +1 and leaked a word, the sector clock cut W3); review b10 r6 24 (W3 leaked 1, clock cut, PERFECT WAVE 2);
+review matrix v4 64 (W3 timed out with 2 escaped after 3 leaks; no carry was involved). Live's only damage with this
+typist is the S3 boss (14 in 2 of this branch's 4 L- runs; the review's r4 a 14-point surge), which is ARCADE, not the
+waves. `20261024b` (S2 at paceMul 1.27-1.34): 0 damage in 2 runs, and the review's `V-B-w35-acq300-r2` had a 0-leak
+timeout in S3 W3 (PERFECT WAVE 2). Without the latency the mechanism showed once too: the review's
+`V-T-w35-nolat-r1` S3 W3 timed out with 1 escaped after 1 leak, 26 damage at paceMul 1.0 (1 of 6 runs of this code;
+`20261024b` 0 of 3, live 0 of 2); this branch's 4 no-latency runs had none. The pilot reaches the bosses sooner than
+on live (the S1 boss ~15 s, S2 / S3 up to 15 s), but in the waves this code is harder than live for this typist: wave
+damage in 3 of 24 runs against 0 of 10, and "WAVE TIMED OUT · N ESCAPED" for a pilot who missed nothing in 6 of 48
+sectors, where live's waves end silently at the table cap.
+
+Why no Z12 number reaches it: with the latency this typist clears 1.45-1.66 cps (acquisition 716-900 ms) against a
+floor stream (paceMul 1.0) of about 1.9-2.5 cps in S2 W3 and S3 (its target there is 0.85 x 1.6 / 2.3 = 0.6). Every S2 /
+S3 wave of the profile runs at the 1.0 floor on this branch, as on live, and D2 never paces below 1.0, so neither the
+formula nor the back-off (floor 1.0) has anything to lower. The difference from live is D3 / Z5: live's waves end at
+the table cap and drop their backlog; here a floor wave is quota-boxed with the longer Z5 cap, so the backlog stays on
+the field (leaks, damage) or leaves at the cap as a clean timeout and is carried into the next wave. The lead's
+options (review Z12-B1):
+(a) let D2 pace below 1.0 when pilotCpsEff < targetCps, limited to S2-3 and the campaign (changes D2's "never below
+    1.0"; at 0.75 the S3 floor stream drops to about 1.4-1.9 cps);
+(b) for floor-paced waves only, keep live's table cap as the wave length (no Z5 extension) and drop the carry (changes
+    Z5 and the D3 carry for those waves);
+(c) restate the target, e.g. "no wave damage in S1-2, S3 not worse than live".
+Until one is decided, the 20261025a release notes and this file make no claim for the 35 / .90 latency target.
+
+### Stored acquisition time from another pilot (review finding Z12-B2, open: a lead decision)
+
+`typistAcquireMs()` serves the stored lifetime value (`profile.acqEma`) until the run has 10 acquisition samples, and a
+sample exists only when another lockable target is up as the previous one ends (`typistAcqArm`). At paceMul 1.0-1.26
+the S1 / S2 field is sparse, so a run collects 1-2 samples in S1 and about 5 in S2, and the stored value moves only
+alpha .1 per sample. A stored value that is too high (750-900 ms: a shared save whose other pilot is slower, or a slow
+earlier session; a slow pilot stores 740-900 in these runs) therefore holds a fast pilot's pace low for one to two
+sectors. One that is too low corrects within a wave, because an over-paced field produces samples quickly.
+
+Measured with the review's probe (`t-pace-balance` plus `--seed-acq`, which writes `profile.acqEma` into the R26
+seeded fixture; no latency). Without a stored value the same fixture reads S1 7 %, S2 2-3 % idle (matrix above).
+
+| profile | stored acqEma | run | S1 idle (returning <= 15 %) | S2 idle (<= 15 %) | S3 idle | acq ms PACE used S1 · S2 · S3 | paceMul S1 · S2 |
+|---|---|---|---|---|---|---|---|
+| 55 / .93 | 900 | review r1 | **27 %** | **19 %** | 10 % | 900/900/900 · 833/771/633 · 633/268/289 | 1.08 x3 · 1.0-1.01 |
+| 55 / .93 | 900 | review r2 | **21 %** | **23 %** | 7 % | 900/776/776 · 634/634/561 · 561/248/268 | 1.08-1.2 · 1.01-1.07 |
+| 55 / .93 | 900 | reproduction r1 (`b1712c1`) | **22 %** | **18 %** | 9 % | 900/900/900 · 637/568/568 · 267/279/283 | 1.08 x3 · 1.0-1.04 |
+| 55 / .93 | 900 | reproduction r2 (`b1712c1`) | 10 % | 5 % | 8 % | 900/714/497 · 267/275/264 · 289/273/289 | 1.08-1.53 · 1.39-1.42 |
+| 55 / .93 | 840 | review r1 | 12 % | 3 % | 7 % | 840/726/622 · ~290 · ~280 | 1.12-1.35 · 1.39-1.41 |
+| 55 / .93 | 750 | review r1 / r2 | 12 % / **22 %** | 3 % / **20 %** | 8 % / 7 % | r2: 750/698/698 · 486/486/449 · ~260 | r2: 1.21-1.26 · 1.13-1.17 |
+| 55 / .93 | 620 | review r1 / r2 | 4 % / 9 % | 3 % / 4 % | 9 % / 11 % | 620/458/264 · ~260 · ~280 | 1.35-1.92 · 1.43-1.57 |
+| 80 / .97 | 900 | review r1 / r2 | **23 %** / **16 %** | 6 % / 10 % | 5 % / 5 % | 900/829/761 · ~200 · ~220 | 1.23-1.82 · 1.74-2.11 |
+| 80 / .97 | 540 | review r1 / r2 | 14 % / 8 % | 6 % / 5 % | 3 % / 3 % | 540/446/337 · ~210 · ~210 | 1.35-2.05 · 2.04-2.1 |
+
+Controls (review): a stored value that is too low, 120 ms, with `--acquire-ms 300` at 80 / .97 and `--acquire-ms 500` at
+55 / .93, was corrected by S1 W2 (acq 531 / 869), with no timeout. No deaths, no damage in any of these runs; two more
+reproduction runs (r3 / r4) were discarded because the machine slept under them (play / wall far below 0.9). Every
+option changes a ruled Z12 rule or number, so none is applied here; the lead's options (review Z12-B2):
+(1) before 10 samples, blend the run EMA into the lifetime value in proportion to the run's sample count instead of
+    switching at 10;
+(2) also sample the spawn-to-first-key gap when a plate arrives on an empty field (the gap's clock runs only while a
+    lockable target is up), so the sparse S1 / S2 field still yields samples;
+(3) cap the lifetime fallback's influence until 10 samples, e.g. min(lifetime, 300 + the run-sample-weighted run EMA).
 
 ### R26 / Q1 targets without latency (`t-pace-balance --matrix --parallel 2`, rounds p1 / p2, 20 pass / 0 fail each)
 
