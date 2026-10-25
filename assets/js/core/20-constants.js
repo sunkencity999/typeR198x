@@ -135,11 +135,12 @@ const MINION_SPAWN_DX = -40;                   // minions appear at boss.artRect
 // baseS + chars x perChar(L) (perChar .30 s at S2 down to .12 s at S10, linear), x slowWiden when the pilot's live speed
 // is under slowWpm (or unknown); at most maxFiredPerPhase fired surges per phase. Lead ruling Z6: a window is never
 // shorter than fairMul x the time the pilot needs for the segment at their measured hand speed (run, else lifetime, else
-// fairWpm): surgeWindow(). fairMul 1.75, not the ruling's minimum 1.5 (balance re-pass: at 1.5 a 35 / .90 pilot lost 2 of
-// ~31 S2-3 surges to a miss or a minion inside the window, minimum slack 0 s; at 1.75 0 of 13, minimum slack 1.2 s). scrambleS: the fail scramble of the reset word; barCommitS: the DOM charge bar's write
+// fairWpm): surgeWindow(). fairMul 2.25, not the ruling's minimum 1.5 (balance re-pass, 35 / .90 pilot in S3 boss fights:
+// at 1.5 it lost 2 of ~31 surges to a miss or a minion inside the window; at 1.75 none without target-acquisition latency
+// but 3 of 24 with the Z7 300 ms latency, as at 2.0; at 2.25 0 of 24 with it). scrambleS: the fail scramble of the reset word; barCommitS: the DOM charge bar's write
 // cadence (a 200 ms linear CSS transition eases between writes).
 const COUNTER_SIGNAL = Object.freeze({ fromLevel: 2, firstAtS: 6, baseS: 0.6, perCharFromS: 0.30, perCharToS: 0.12,
-  slowWpm: 35, slowWiden: 1.2, maxFiredPerPhase: 2, fairMul: 1.75, fairWpm: 30, scrambleS: 0.3, barCommitS: 0.2 });
+  slowWpm: 35, slowWiden: 1.2, maxFiredPerPhase: 2, fairMul: 2.25, fairWpm: 30, scrambleS: 0.3, barCommitS: 0.2 });
 
 function bossSegmentCount(level) {
   return 6 + 3 * (level - 1);

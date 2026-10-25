@@ -1,5 +1,5 @@
 // t-arcade-counter (ARCADE D10 Counter-Signal, ~2.5 min, DPR 1 + a DPR 2 budget context): the table and window
-// numbers, the fair window (lead ruling Z6: never shorter than COUNTER_SIGNAL.fairMul (1.75, the ruling's floor 1.5) x
+// numbers, the fair window (lead ruling Z6: never shorter than COUNTER_SIGNAL.fairMul (2.25, the ruling's floor 1.5) x
 // the pilot's time for the segment at their hand speed, run else lifetime else 30 WPM, never shorter than the table),
 // sector 1 never surging, the first surge of a
 // sector-2 fight at 6.0 s at a segment start with the whole segment (slow widen and the 30 WPM fair window for an
@@ -58,23 +58,23 @@ const t1 = await P.g(() => ({
   cs: { fromLevel: COUNTER_SIGNAL.fromLevel, firstAtS: COUNTER_SIGNAL.firstAtS, maxFiredPerPhase: COUNTER_SIGNAL.maxFiredPerPhase, slowWpm: COUNTER_SIGNAL.slowWpm, slowWiden: COUNTER_SIGNAL.slowWiden }
 }));
 const near = (a, b, e = 1e-9) => Math.abs(a - b) <= e;
-// 1b. Z6 fair window: surgeWindow(chars, L, slow, handWpm) = max(table, 1.75 x chars x 12 / handWpm), 30 WPM when unknown;
+// 1b. Z6 fair window: surgeWindow(chars, L, slow, handWpm) = max(table, 2.25 x chars x 12 / handWpm), 30 WPM when unknown;
 //     counterSignalWindow() reads pilotWpm("base") (run, else lifetime) through a stubbed MEASURE speed
 const t1b = await P.g(() => {
   const g = window.game, orig = g.typistSpeed;
   const stub = (run, life) => { g.typistSpeed = function (scope, w) { if (scope === "run") return run; if (scope === "lifetime") return life; if (scope === "live") return { wpm: 0, n: 0 }; return orig.call(this, scope, w); }; };
   const W = (chars, L) => g.counterSignalWindow(chars, L, g.counterSignalSlow());
-  const out = { fn: [surgeWindow(6, 2, true, 0), surgeWindow(6, 2, false, 40), surgeWindow(6, 10, false, 100), surgeWindow(10, 10, false, 74), surgeWindow(0, 4, false, 50)], cs: [COUNTER_SIGNAL.fairMul, COUNTER_SIGNAL.fairWpm] };
+  const out = { fn: [surgeWindow(6, 2, true, 0), surgeWindow(6, 2, false, 40), surgeWindow(6, 10, false, 140), surgeWindow(10, 10, false, 74), surgeWindow(0, 4, false, 50)], cs: [COUNTER_SIGNAL.fairMul, COUNTER_SIGNAL.fairWpm] };
   stub({ wpm: 30, n: 50 }, { wpm: 0, n: 0 }); out.run30 = W(6, 2);
   stub({ wpm: 30, n: 5 }, { wpm: 40, n: 300 }); out.life40 = W(6, 2);
   stub({ wpm: 0, n: 0 }, { wpm: 0, n: 0 }); out.none = W(6, 2);
-  stub({ wpm: 100, n: 50 }, { wpm: 0, n: 0 }); out.fast10 = W(6, 10);
+  stub({ wpm: 140, n: 50 }, { wpm: 0, n: 0 }); out.fast10 = W(6, 10);
   delete g.typistSpeed;
   return out;
 });
-P.check("1b. Z6 (fairMul 1.75 >= the ruling's 1.5, fairWpm 30): surgeWindow(6,2,slow,unknown) 4.2 (> 2.88), (6,2,40 WPM) 3.15 > 2.4, (6,10,100 WPM) table 1.32, (10,10,74 WPM) 2.84 > 1.8; counterSignalWindow from run 30 -> 4.2, run n<20 + lifetime 40 -> 3.15, no speed -> 4.2, run 100 at S10 -> 1.32",
-  near(t1b.fn[0], 4.2) && near(t1b.fn[1], 3.15) && near(t1b.fn[2], 1.32) && near(t1b.fn[3], 1.75 * 10 * 12 / 74) && near(t1b.fn[4], 0.6) && t1b.cs[0] === 1.75 && t1b.cs[1] === 30
-  && near(t1b.run30, 4.2) && near(t1b.life40, 3.15) && near(t1b.none, 4.2) && near(t1b.fast10, 1.32), t1b);
+P.check("1b. Z6 (fairMul 2.25 >= the ruling's 1.5, fairWpm 30): surgeWindow(6,2,slow,unknown) 5.4 (> 2.88), (6,2,40 WPM) 4.05 > 2.4, (6,10,140 WPM) table 1.32, (10,10,74 WPM) 3.65 > 1.8; counterSignalWindow from run 30 -> 5.4, run n<20 + lifetime 40 -> 4.05, no speed -> 5.4, run 140 at S10 -> 1.32",
+  near(t1b.fn[0], 5.4) && near(t1b.fn[1], 4.05) && near(t1b.fn[2], 1.32) && near(t1b.fn[3], 2.25 * 10 * 12 / 74) && near(t1b.fn[4], 0.6) && t1b.cs[0] === 2.25 && t1b.cs[1] === 30
+  && near(t1b.run30, 5.4) && near(t1b.life40, 4.05) && near(t1b.none, 5.4) && near(t1b.fast10, 1.32), t1b);
 P.check("1. surgeEvery [null,20,20,14,13,12,11,10,9,8]; perChar(2/6/10) .30/.21/.12; surgeDuration(6,2) 2.4, (6,10) 1.32, (6,10,slow) 1.584; SCORE.par(100,5) = 100/(0.9 x 3.7)",
   JSON.stringify(t1.every) === JSON.stringify([null, 20, 20, 14, 13, 12, 11, 10, 9, 8]) && near(t1.pc[0], 0.30) && near(t1.pc[1], 0.21) && near(t1.pc[2], 0.12)
   && near(t1.d[0], 2.4) && near(t1.d[1], 1.32) && near(t1.d[2], 1.584) && near(t1.par, 100 / 3.33) && near(t1.par2, 100 / (0.9 * 1.7))
