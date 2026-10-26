@@ -71,8 +71,8 @@ async function installHooks() {
   await P.g(() => {
     const g = window.game;
     if (window.__b10) return;
-    const B = window.__b10 = { spawns: [], leaks: [], damage: [], surges: [], windows: [], phases: [], boss: [], pace: [], hullIn: null, lastCard: null,
-      reset() { B.spawns = []; B.leaks = []; B.damage = []; B.surges = []; B.windows = []; B.phases = []; B.boss = []; B.pace = []; B.hullIn = B.lastCard; } };
+    const B = window.__b10 = { spawns: [], leaks: [], damage: [], surges: [], windows: [], phases: [], boss: [], pace: [], ends: [], approaches: [], hullIn: null, lastCard: null,
+      reset() { B.spawns = []; B.leaks = []; B.damage = []; B.surges = []; B.windows = []; B.phases = []; B.boss = []; B.pace = []; B.ends = []; B.approaches = []; B.hullIn = B.lastCard; } };
     const ctx = () => ({ t: g.playClock || 0, L: g.levelIndex + 1, wave: g.wave | 0, phase: g.inBoss ? "boss" + (((g.boss && g.boss.phase) | 0) + 1) : g.wavePhase });
     const wrap = (name, after) => {
       const orig = g[name];
@@ -98,6 +98,22 @@ async function installHooks() {
     wrap("onBossPhaseClear", function () { B.boss.push({ ...ctx(), ev: "phase", phase: this.boss ? this.boss.phase : null }); });
     wrap("onBossKill", function () { B.boss.push({ ...ctx(), ev: "kill" }); });
     wrap("onGameOver", function () { B.boss.push({ ...ctx(), ev: "death" }); });
+    // Z13 (any tree, live a0a3845 included: wrappers, no hooks): every wave end (by quota or by its cap) with the plates
+    // still up, and the boss approach with the sector clock, the phase it cut and the plates it detonated
+    const pre = (name, before) => {
+      const orig = g[name];
+      if (typeof orig !== "function") return;
+      g[name] = function (...a) { try { before.apply(this, a); } catch (e) { console.warn("b10 pre", name, e); } return orig.apply(this, a); };
+    };
+    pre("endWave", function () {
+      if (this.wavePhase !== "spawn") return;
+      const q = typeof this.waveQuota === "function" ? this.waveQuota() : (LEVELS[this.levelIndex].quota[this.wave] || 1);
+      B.ends.push({ ...ctx(), waveT: Math.round((this.waveT || 0) * 100) / 100, levelT: Math.round((this.levelT || 0) * 100) / 100, kills: this.waveKills | 0, quota: q, alive: this.countAliveEnemies(), byQuota: (this.waveKills | 0) >= q });
+    });
+    pre("beginBossApproach", function () {
+      if (this.inBoss || this.wavePhase === "approach") return;
+      B.approaches.push({ ...ctx(), levelT: Math.round((this.levelT || 0) * 100) / 100, phaseT: Math.round((this.phaseT || 0) * 100) / 100, alive: this.countAliveEnemies() });
+    });
     // PACE: the tuning each wave really ran with (listeners after 42-pacing.js read what it wrote), timeouts, card hull
     if (typeof onGameHook === "function") {
       onGameHook("waveWillStart", function (e) {
@@ -340,7 +356,9 @@ for (let s = 0; s < SECTORS; s++) {
     const leaks = B.leaks.filter((l) => !l.minion && l.wave === w && inSpan(l.t, { t0: sp.t0, t1: next ? next.t0 : waveSpan.t1 })).length;
     const a = dbgAcc[`w${w + 1}:spawn`];
     const pw = [...B.pace].reverse().find((x) => x.L === rec.level && x.wave === w) || { mul: 1, quota: null, timedOut: false, escaped: 0, acq: null, len: null, eff: null, backoff: false, floor: null, capEnd: null, leftover: null };
-    return { wave: w + 1, spawnS: r1(sp.t1 - sp.t0), enemies: n, hungrySpawns: hungryN, chars, incomingCps: r2(cps), ratio: r2(cps / rec.targetCps), streamCps: r2(streamCps), streamRatio: r2(streamCps / rec.targetCps), charsPerEnemy: r2(chars / Math.max(1, n)),
+    const end = B.ends.find((e) => e.L === rec.level && e.wave === w);
+    const drainLeaks = B.leaks.filter((l) => !l.minion && l.wave === w && l.phase === "drain").length;
+    return { wave: w + 1, spawnS: r1(sp.t1 - sp.t0), enemies: n, hungrySpawns: hungryN, endByQuota: end ? end.byQuota : null, endAlive: end ? end.alive : null, endLevelT: end ? end.levelT : null, drainLeaks, chars, incomingCps: r2(cps), ratio: r2(cps / rec.targetCps), streamCps: r2(streamCps), streamRatio: r2(streamCps / rec.targetCps), charsPerEnemy: r2(chars / Math.max(1, n)),
       leaks, idleMaxS: r2(rec.idleByWave[w]), dbgIncomingCps: a && a.n ? r2(a.sum / a.n) : null, dbgLeaksPerMinMax: a ? a.max : null,
       mul: pw.mul, quota: pw.quota, timedOut: pw.timedOut, escaped: pw.escaped, source: pw.source, target: pw.target, acq: pw.acq, len: pw.len, eff: pw.eff, backoff: pw.backoff,
       floor: pw.floor, capEnd: pw.capEnd, leftover: pw.leftover,
@@ -370,6 +388,9 @@ for (let s = 0; s < SECTORS; s++) {
   rec.perfectWaves = ev.levelStats ? ev.levelStats.perfectWaves | 0 : null;
   rec.cleanTimeouts = rec.perWave.filter((w) => w && w.timedOut && !(w.leaks > 0)).length;
   rec.floorCapEnds = rec.perWave.filter((w) => w && w.floor && w.capEnd).length;
+  // Z13: the boss approach (levelT, the phase it interrupted with its elapsed time, the plates it detonated); a wave-3
+  // drain cut by the sector clock leaves its plates less time to leak
+  rec.approach = B.approaches.find((a) => a.L === rec.level) || null;
   report.sectors.push(rec);
   await P.shot(`s${rec.level}-end`);
   console.log(JSON.stringify({ sector: rec.level, mode: rec.mode, playS: rec.playSeconds, clockRatio: rec.clockRatio, toBoss: rec.secondsToBoss, bossS: rec.bossDurationS, minHpPct: rec.minHpPct,
@@ -377,6 +398,8 @@ for (let s = 0; s < SECTORS; s++) {
     mul: rec.perWave.map((w) => w && w.mul), quota: rec.perWave.map((w) => w && w.quota), paceRatio: rec.perWave.map((w) => w && w.paceRatio), paceStream: rec.perWave.map((w) => w && w.paceStreamRatio), timedOut: rec.perWave.map((w) => w && (w.timedOut ? `esc ${w.escaped}` : "-")),
     acq: rec.perWave.map((w) => w && w.acq), eff: rec.perWave.map((w) => w && w.eff), backoff: rec.perWave.map((w) => w && w.backoff), clockCut: rec.clockCut, perfectWaves: rec.perfectWaves, cleanTimeouts: rec.cleanTimeouts,
     floor: rec.perWave.map((w) => w && (w.floor ? (w.capEnd ? `cap left ${w.leftover}` : "F") : "-")),
+    ends: rec.perWave.map((w) => w && (w.endByQuota === null ? "?" : w.endByQuota ? "quota" : `cap up ${w.endAlive} drainLeaks ${w.drainLeaks}`)),
+    approach: rec.approach && `levelT ${rec.approach.levelT} W${rec.approach.wave + 1} ${rec.approach.phase} +${rec.approach.phaseT}s det ${rec.approach.alive}`,
     hullIn: rec.hullIn && `${rec.hullIn.hp}/${rec.hullIn.maxHp}`, throughput: rec.throughput, hungry: rec.perWave.map((w) => w && `${w.hungrySpawns}/${w.enemies}`), idle: rec.perWave.map((w) => w && w.idleMaxS), surges: rec.boss && [rec.boss.surgesFired, rec.boss.surgesCountered],
     rank: rec.results && rec.results.rank, rankL: rec.results && rec.results.rankLevelAware, wpm: rec.results && rec.results.wpm, acc: rec.results && rec.results.acc, dmg: rec.levelStats.damageTaken, score: rec.score, death: rec.death }));
 
