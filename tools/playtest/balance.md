@@ -62,24 +62,27 @@ floor (17 / 17).
 | `d28653f` (Z12 section, all) | 24 | 3 | 6 | 40 of 48 | 3 | 0 | - | (no floor) | | |
 | experiment: a0a3845's .5 s / 10-90 px on floor waves `ZX-` | 4 | 0 | 0 | 8 of 8 | 0 of 8 | 0 | 0 | 9 (1-5 up) | 51-59 / 67-70 / 73-83 | A / B |
 
-**Z13's targets, as measured:** 0-leak timeouts **met** (0, as live: a floor wave's cap end is no timeout, and every
-wave of this typist runs at the floor); PERFECT WAVE in S2 / S3 **met** (39 of 40 sectors at 3, live 31 of 32); S1-3
-wave damage **not met**: 3 of 20 runs took wave damage against 0 of 16 on live (Fisher's exact p ~ .24, so not a
-demonstrated difference, but the target is "no worse than live's 0"). All three are the same event in S3 W3: a floor
-wave reached its 26 s cap with 5-6 plates up (r5: 6 up, a 15-plate wave averaging 5.5 characters a plate, the heaviest
-S3 W3 measured; z1: 5 up; r13: 5 up after one leak inside the wave, hence its PERFECT WAVE 2) and its oldest plates
-reached the ship during the 6 s drain, as a0a3845's drain allows (2, 1 and 2 drain leaks; 50, 26 and 68 damage). Live
-has the same cap ends with as many plates up (ZL r5: 6 up, r6: 5 up, both full 6 s drains) and none of its 16 runs
-leaked. What still differs in a floor wave: the content (WORDS' S3 W3 plates average 4.0 characters here, 3.8 on live;
-the stream is calibrated to the same characters per second) and D2's spawner: with a 10-30 px roll-in each plate
-reaches the ship ~.3 s (up to .65 s) sooner after its spawn than with 10-90 px, while the cap and the 6 s drain run on
-the spawn clock, so a leftover has a little less drain before it arrives. The 4 experiment runs with live's spawner
-had no wave damage either (live spawner 0 of 20 runs, this branch 3 of 20), too few to separate that from chance. Next
-to live the pilot reaches each boss sooner (S1 10-15 s, S2 5-10 s) and ranks about one letter higher; next to
-`d28653f` the 0-leak timeouts (6) and the lost PERFECT WAVEs (8 sectors) are gone. For the lead: (a) accept (live's
-rule, variance); (b) floor waves also take a0a3845's 10-90 px roll-in (untested against the fresh S1 idle bound: S1's
-plates are slow, so about +.4 s per refill of an empty field); (c) the full a0a3845 spawner at the floor (measured
-above: it breaks Q1's fresh S1 idle bound).
+**Z13's targets, as measured:** 0-leak timeouts **met** (0, as live: a floor wave's cap end is no timeout; every S2 /
+S3 wave of this typist ran at the floor, but not every S1 wave: S1 W3 stepped to 1.02 / 1.03 / 1.14 in fresh r2 / r12
+/ r13 and to 1.01 in seeded r2 once the run or profile speed gate opened, and the seeded fixture's S1 W1 always runs
+at 1.35 (profile 32 WPM, the 300 ms default; b10 did not record that wave before commit c781c98), so 6 of the 162 S1-3
+waves kept D3 / Z5 and none of them timed out); PERFECT WAVE in S2 / S3 **met** (39 of 40 sectors at 3, live 31 of
+32); S1-3 wave damage **not met**: 3 of 20 runs took wave damage against 0 of 16 on live (Fisher's exact p ~ .24, so
+not a demonstrated difference, but the target is "no worse than live's 0"). All three are the same event in S3 W3: a
+floor wave reached its 26 s cap with 5-6 plates up (r5: 6 up, a 15-plate wave averaging 5.5 characters a plate, the
+heaviest S3 W3 measured; z1: 5 up; r13: 5 up after one leak inside the wave, hence its PERFECT WAVE 2) and its oldest
+plates reached the ship during the 6 s drain, as a0a3845's drain allows (2, 1 and 2 drain leaks; 50, 26 and 68
+damage). Live has the same cap ends with as many plates up (ZL r5: 6 up, r6: 5 up, both full 6 s drains) and none of
+its 16 runs leaked. What still differs in a floor wave: the content (WORDS' S3 W3 plates average 4.0 characters here,
+3.8 on live; the stream is calibrated to the same characters per second) and D2's spawner: with a 10-30 px roll-in
+each plate reaches the ship ~.3 s (up to .65 s) sooner after its spawn than with 10-90 px, while the cap and the 6 s
+drain run on the spawn clock, so a leftover has a little less drain before it arrives. The 4 experiment runs with
+live's spawner had no wave damage either (live spawner 0 of 20 runs, this branch 3 of 20), too few to separate that
+from chance. Next to live the pilot reaches each boss sooner (S1 10-15 s, S2 5-10 s) and ranks about one letter
+higher; next to `d28653f` the 0-leak timeouts (6) and the lost PERFECT WAVEs (8 sectors) are gone. For the lead: (a)
+accept (live's rule, variance); (b) floor waves also take a0a3845's 10-90 px roll-in (untested against the fresh S1
+idle bound: S1's plates are slow, so about +.4 s per refill of an empty field); (c) the full a0a3845 spawner at the
+floor (measured above: it breaks Q1's fresh S1 idle bound).
 
 ### Z14 target: stored `profile.acqEma` 900, no latency, seeded R26 fixture (`t-pace-balance --seed-profile auto --seed-acq 900`)
 
@@ -120,8 +123,9 @@ toward 300 rather than the stored value while n = 0); a lead decision.
 | 55 / .93 seeded | 7 / 3 % (<= 15) | 3 / 3 % | 12 / 11 % | <= 0.42 s | 38 / 47 s | 0 / 0 | S A A; A A S | 1.35/1.7/1.99 · 1.64/1.47/1.46 · 1.12/1.13/1.14 | 7 / 7 · 3 / 2 · 13 / 8 % |
 | 80 / .97 seeded | 10 / 13 % (<= 15) | 6 / 4 % | 5 / 2 % | <= 0.42 s | 35 / 33 s | 0 / 0 | S S S; S S S | 1.35/1.7/2.05 · 2/1.99/2 · 1.65/1.61/1.61 | 6 / 13 · 8 / 5 · 4 / 5 % |
 
-Every Q1 / R26 target holds in both rounds; no wave timed out, no wave damage. The 35 / .90 typist flies every S2 / S3
-wave at the floor (one S3 W3 cap end, no leak); the 80 fresh S1 margin stays 27-28 % against 30 %.
+Every Q1 / R26 target holds in both rounds; no wave timed out, no wave damage. The 35 / .90 typist without latency
+flies every S2 / S3 wave at the floor (one S3 W3 cap end, no leak; its S1 W3 at 1.35 is above it); the 80 fresh S1
+margin stays 27-28 % against 30 %.
 
 ### Z12 targets with `--acquire-ms 300` (latency matrix rounds acq300-z1 / z2: 21 pass / 1 fail, 22 pass / 0 fail)
 
