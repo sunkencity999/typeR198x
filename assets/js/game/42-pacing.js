@@ -22,6 +22,13 @@
 // once (they warp off, no explosion, no damage) and at the drain end "WAVE TIMED OUT · N ESCAPED" counts them into the
 // next wave of the sector. Clears of sectors 4-9 repair half of the missing hull and carry the rest. Cadet (D2): from the second death in one sector the Game Over
 // card offers "Fly at Cadet pace" (stream x0.75, damage x0.75, score x0.8, tag CADET) until that sector is cleared.
+// Floor waves (lead ruling Z13): a campaign wave whose paceMul after the step rule (and any back-off; a probe pin
+// too) is exactly 1.0 with no escaped carry runs on live a0a3845's wave rule end to end: the table quota, stream and
+// cap (waveTuning.floor, no Z5 extension; 40-combat.js ends it at the cap whatever is on the field), PERFECT WAVE as
+// live (no damage and a kill, also at the cap), the clear sting, and plates still up at the cap stay in the drain as
+// live (typeable, they can leak, the drain's 6 s end or the boss approach detonates them): no WAVE TIMED OUT, no
+// escape, no carry, no back-off. A wave above 1.0 or with a carry, Cadet (0.75) and every mode keep D3 / Z5 / Z12.
+// D2's stream constants (the 0.1 s empty-field spawn, the 10-30 px roll-in) stay on at every pace, the floor included.
 
 // ----------------------------- Tuning: every PACE number (the balance re-pass retunes here) -----------------------------
 // Also PACE-owned, in 20-constants.js because the scaffold spawner reads them directly: HUNGRY_SPAWN_S (0.1 s) and
@@ -161,6 +168,19 @@ function paceApplyTuning(t, cfg, wave, mul, carry) {
   t.speedMul = 1 + PACE.speedPerMul * (mul - 1);
   t.hungryMinAlive = mul >= PACE.hungryMin2AtMul ? 2 : HUNGRY_MIN_ALIVE;
   t.cap = paceWaveCap(cfg, w, t.quota, mul);
+  t.floor = false;
+  return t;
+}
+
+// Z13: a floor wave is paceMul exactly 1.0 with no escaped carry (the caller checks campaign). At 1.0 paceApplyTuning
+// already wrote the table's quota, stream, alive cap, speed and empty-field rule; the floor wave keeps the table cap
+// (a0a3845's wave length) and is marked for 40-combat.js's cap rule and PACE's wave-end listeners.
+function paceIsFloor(mul, carry) {
+  return mul === PACE.mulMin && !((carry | 0) > 0);
+}
+function paceApplyFloor(t, cfg) {
+  t.cap = cfg.cap;
+  t.floor = true;
   return t;
 }
 
@@ -250,6 +270,11 @@ Object.assign(Game.prototype, {
   paceCampaign() {
     return !this.paceInCheck() && this.paceMode() === "campaign";
   },
+  // Z13: the wave in progress is a floor wave (live a0a3845's wave rule; waveTuning.floor, set at waveWillStart).
+  paceFloorNow() {
+    const t = typeof this.waveTuningNow === "function" ? this.waveTuningNow() : null;
+    return !!(t && t.floor);
+  },
 
   // run.pace (section 9), normalised once per object; runs without a record keep it in memory.
   paceState() {
@@ -318,11 +343,14 @@ Object.assign(Game.prototype, {
     if (!pinned && a && a.level === L && a.wave === w) {
       // Continue / a wave replayed after a reload: the same tuning, no new step; the replay makes its own carry and back-off.
       paceApplyTuning(t, cfg, w, a.mul, 0);
+      const carried = a.quota - t.quota;   // Z13: the replayed quota above round(table x mul) is the carry it had
       t.quota = a.quota;
       t.cap = paceWaveCap(cfg, w, t.quota, a.mul);
+      const floor = paceIsFloor(a.mul, carried) && this.paceCampaign();
+      if (floor) paceApplyFloor(t, cfg);
       if (ps.carryTo && ps.carryTo.level === L && ps.carryTo.wave === w + 1) { ps.carry = 0; ps.carryTo = null; }
       if (ps.backoffTo && ps.backoffTo.level === L && ps.backoffTo.wave === w + 1) ps.backoffTo = null;
-      this._paceLast = { level: L, wave: w, mul: a.mul, target: null, source: "replay", cps: null, wpm: null, n: null, acq: null, len: null, eff: null, backoff: false, carry: 0, quota: t.quota };
+      this._paceLast = { level: L, wave: w, mul: a.mul, target: null, source: "replay", cps: null, wpm: null, n: null, acq: null, len: null, eff: null, backoff: false, carry: 0, quota: t.quota, floor };
       return;
     }
     // Z12 safety net: the previous wave of this sector timed out with no leak, so this wave's target drops stepMax
@@ -347,12 +375,15 @@ Object.assign(Game.prototype, {
     ps.carry = 0;
     ps.carryTo = null;
     paceApplyTuning(t, cfg, w, mul, carry);
+    // Z13: paceMul exactly 1.0 and no carry in a campaign wave: live a0a3845's wave rule (table cap, no D3 / Z5 / Z12)
+    const floor = paceIsFloor(mul, carry) && this.paceCampaign();
+    if (floor) paceApplyFloor(t, cfg);
     ps.applied = { level: L, wave: w, mul, quota: t.quota };
     if (ps.waveMuls.length > w) ps.waveMuls.length = w;
     ps.waveMuls.push(mul);
     this._paceLast = { level: L, wave: w, mul, target: target === null ? null : paceRound2(target), source,
       cps: src ? paceRound2(src.cps) : null, wpm: src ? Math.round(src.wpm) : null, n: src ? src.n : null,
-      acq: acq === null ? null : Math.round(acq), len: len === null ? null : paceRound2(len), eff: eff === null ? null : paceRound2(eff), backoff, carry, quota: t.quota };
+      acq: acq === null ? null : Math.round(acq), len: len === null ? null : paceRound2(len), eff: eff === null ? null : paceRound2(eff), backoff, carry, quota: t.quota, floor };
   },
 
   // Z12: wave leaks (not boss minions) since the wave started; a timeout with none sets the next wave's back-off.
@@ -363,7 +394,9 @@ Object.assign(Game.prototype, {
 
   // ------------------------- D3: perfect wave by quota, timed-out waves -------------------------
   paceOnWaveWillEnd(evt) {
-    if (evt.byQuota || this.paceInCheck()) return;
+    // Z13: a floor wave ends as on live a0a3845: PERFECT WAVE without damage (also at the cap), the clear sting, its
+    // plates stay in the drain; no timeout, no escape, no back-off
+    if (evt.byQuota || this.paceInCheck() || evt.floor || this.paceFloorNow()) return;
     evt.perfect = false;     // a wave that runs out of time never pays PERFECT WAVE
     evt.clearSfx = false;    // and plays no clear sting
     // Z5: the plates still alive at the cap leave the field now (no explosion); they are the N that escaped.
@@ -393,6 +426,7 @@ Object.assign(Game.prototype, {
   // Drain end of a timed-out wave: N = the plates that left at the cap (plus any a drain timeout detonated).
   paceOnWaveDrained(evt) {
     if (evt.byQuota !== false || this.paceInCheck()) return;
+    if (evt.floor || this.paceFloorNow()) { this._paceTimeout = null; return; }   // Z13: the drain detonated a floor wave's leftovers, as live
     const to = this._paceTimeout;
     this._paceTimeout = null;
     const n = (to && to.level === (evt.level | 0) && to.wave === (evt.wave | 0) ? to.n | 0 : 0) + Math.max(0, evt.detonated | 0);
@@ -663,6 +697,7 @@ Object.assign(Game.prototype, {
       const cfg = LEVELS[this.levelIndex];
       if (t && cfg) {
         paceApplyTuning(t, cfg, this.wave, v, 0);
+        if (paceIsFloor(v, 0) && this.paceCampaign()) paceApplyFloor(t, cfg);   // Z13
         if (ps) {
           const w = clamp(this.wave | 0, 0, 2);
           ps.applied = { level: cfg.level, wave: w, mul: v, quota: t.quota };
@@ -675,7 +710,7 @@ Object.assign(Game.prototype, {
   },
 
   // Pure preview: { target, mul, tuning } for a sector / wave / hand speed (cps) / previous paceMul / acquisition time
-  // (ms; Z12, 0 = hand speed alone).
+  // (ms; Z12, 0 = hand speed alone), as a campaign wave without carry (Z13: at 1.0 the floor wave's table cap).
   pacePlan(levelIndex, wave, pilotCps, prev = PACE.mulMin, acqMs = 0) {
     const i = clamp(levelIndex | 0, 0, 9);
     const cfg = LEVELS[i];
@@ -684,6 +719,7 @@ Object.assign(Game.prototype, {
     const mul = paceStepMul(prev, target);
     const tuning = paceApplyTuning({ levelIndex: i, wave: w, quota: 1, spawnMul: 1, maxEnemiesAdd: 0, speedMul: 1,
       hungryMinAlive: HUNGRY_MIN_ALIVE, cap: cfg.cap, pressureCap: pressureCap(cfg) }, cfg, w, mul, 0);
+    if (paceIsFloor(mul, 0)) paceApplyFloor(tuning, cfg);
     return { target, mul, tuning };
   },
 

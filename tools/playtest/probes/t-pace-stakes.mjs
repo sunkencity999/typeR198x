@@ -9,7 +9,9 @@
 // the next wave's target to stepMax under the slower of that target and the timed-out wave's pace (floor 1.0), so the
 // next wave never runs faster than the one that timed out, also while the pace still ramps (release review Z12-B3); a
 // timeout with a leak does not; wave 3 sets nothing; a Retry (checkpoint restore) and a sector entry clear a pending
-// back-off. ~110 s. PASS = the stakes behave as D3 / Z5 / Z12.
+// back-off. Lead ruling Z13: a campaign wave at exactly paceMul 1.0 without a carry is a floor wave on live a0a3845's
+// rule (t-pace-floor), so the D3 / Z5 scenarios here run above the floor (pacePin 1.05 / 1.1; 7a-7d step from a stubbed
+// pilot) or with a carry. ~110 s. PASS = the stakes behave as D3 / Z5 / Z12.
 // Usage: node tools/playtest/probes/t-pace-stakes.mjs
 import { openProbe, sleep, waitFor, startFresh, jumpTo, errorsCheck } from "./pace_lib.mjs";
 
@@ -49,7 +51,8 @@ async function scriptTimeout(words, wave = null) {
 }
 
 // ---- 0a. Z5: every wave cap >= max(table cap, stream delivery of its quota x 1.25 + 4 s) ----
-// The probe integrates the spawner's accumulator itself (1/240 s steps from SPAWN_ACC_PRIME, the ramp with the kills one
+// (paceApplyTuning, the D3 / Z5 tuning: at paceMul 1 it is the cap of a carried or Daily Sortie wave; a campaign floor
+// wave keeps the table cap, Z13, t-pace-floor 1.) The probe integrates the spawner's accumulator itself (1/240 s steps from SPAWN_ACC_PRIME, the ramp with the kills one
 // plate behind the spawns) for every sector, wave and paceMul 0.75 (Cadet) .. 2.5, and reads PACE's tuning.
 const caps = await P.g(() => {
   const rows = [];
@@ -71,14 +74,14 @@ const tight = caps.filter((r) => r.delivery > r.table);
 P.check("0a. Z5: all 180 wave caps (S1-10 x W1-3 x paceMul .75 / 1 / 1.35 / 1.7 / 2.05 / 2.5) = max(table cap, delivery x 1.25 + 4 s) (+-.02 s), never below the table",
   caps.length === 180 && capBad.length === 0, { bad: capBad.slice(0, 4), deliveryOverTable: tight.length, samples: caps.filter((r) => r.mul === 1 && r.w === 3).map((r) => `S${r.L} W3 d${r.delivery} cap ${r.table}->${r.cap}`) });
 
-// ---- 0b. Z5: a pilot who keeps up never times out: S1 W3 (stream delivery ~23 s > the 22 s table cap) at paceMul 1.0
-// with a killer that keeps exactly one plate of backlog (kills the oldest plate once a newer one is up and the oldest is
+// ---- 0b. Z5: a pilot who keeps up never times out: S1 W3 (stream delivery ~23 s > the 22 s table cap) at paceMul 1.05
+// (just above the Z13 floor: quota 13, the table's empty-field rule) with a killer that keeps exactly one plate of backlog (kills the oldest plate once a newer one is up and the oldest is
 // 0.5 s old, the last one after 0.5 s), so the field is never empty and the stream alone delivers the quota ----
 await jumpTo(P, 0);
 const keep = await P.g(async () => {
   const g = window.game;
   g.enemies.length = 0; g.powerups.length = 0; g.lock = null; g.powerAcc = -1e9;
-  g.pacePin(1);
+  g.pacePin(1.05);
   g.beginWave(2);
   g.levelT = 0;
   const t0 = g.playClock, cap = g.waveTuningNow().cap, quota = g.waveQuota();
@@ -100,7 +103,7 @@ const keep = await P.g(async () => {
   g.pacePin(null);
   return { cap, table: LEVELS[0].cap, quota, byQuota, timedOut, waveT: Math.round(g.waveT * 100) / 100, playS: Math.round((g.playClock - t0) * 100) / 100, kills: g.waveKills, maxBacklog, emptyS: Math.round(emptyS * 100) / 100 };
 });
-P.check("0b. Z5: S1 W3 at paceMul 1.0, a pilot who kills every plate with one plate of backlog: the wave ends by quota after the 22 s table cap (no timeout), its cap > 1.25 x that time",
+P.check("0b. Z5: S1 W3 at paceMul 1.05, a pilot who kills every plate with one plate of backlog: the wave ends by quota after the 22 s table cap (no timeout), its cap > 1.25 x that time",
   keep.byQuota === true && !keep.timedOut && keep.kills >= keep.quota && keep.waveT > keep.table && keep.cap > keep.waveT && keep.cap > keep.table && keep.maxBacklog >= 1, keep);
 
 // ---- 1. PERFECT WAVE by quota ----
@@ -118,6 +121,9 @@ const pw = await P.g(() => {
 P.check("1. S4 W1 ended by quota with waveDmg 0: +1,000 (250 x 4) and a PERFECT WAVE callout", pw.gained === 1000 && pw.titles.includes("PERFECT WAVE") && pw.perfect >= 1, pw);
 
 // ---- 2. timeout with 3 alive: they leave at once, 3 escaped ----
+// Z13: from here to 5 every wave is pinned just above the floor (1.1), where D3 / Z5 apply
+const ABOVE = 1.1;
+await P.g((m) => window.game.pacePin(m), ABOVE);
 await jumpTo(P, 3);
 await scriptTimeout(["neon", "grid", "volt"], 0);
 const cap = await P.g(() => {
@@ -212,6 +218,7 @@ P.check("5. S2: a pending carry of 3 for wave 2, then Retry sector: carry 0, pac
 // back-off target is stepMax under the slower of that and W1's 1.35 (review Z12-B3; before it, own target - 0.35 ~ 1.23),
 // so W2 runs at 1.0.
 // (the sector's W1 already started at the table pace: applied is dropped so the probe's beginWave(0) is a fresh step from 1.0)
+await P.g(() => window.game.pacePin(null));   // 7a-7d: the step rule from a stubbed pilot (above the floor)
 const stubPilot = () => P.g(() => { const g = window.game; g.speedFor = () => ({ wpm: 110, n: 40 }); g.typistAcquireMs = () => 300; const ps = g.paceState(); ps.applied = null; ps.mul = 1; });
 const unstubPilot = () => P.g(() => { const g = window.game; delete g.speedFor; delete g.typistAcquireMs; });
 const targetS4 = await P.g(() => paceTargetMul(paceEffCps(110 / 12, paceMeanLen(LEVELS[3]), 300), LEVELS[3].targetCps));
@@ -286,6 +293,7 @@ P.check("7d. Z12 (review Z12-B3): while the pace ramps (S4, own target >= 2.05, 
   bo9.mul === 1.35 && Math.abs(bo9.target - 1.35) < 0.011 && bo9.mul < bo8.w1.mul && oldRule > bo8.w1.mul, { targetS4fast, oldRule, bo8, bo9 });
 
 // ---- 6. reduced motion ----
+await P.g((m) => window.game.pacePin(m), ABOVE);
 await P.page.emulateMedia({ reducedMotion: "reduce" });
 await sleep(200);
 await jumpTo(P, 3);
@@ -309,6 +317,7 @@ const seen = await P.g(async () => {
 P.check("6. reduced motion: the leaving plates fade in place (dx 0 on every frame) and the callout draws at titleScale 1 from its first frames (no slam, fade only)",
   rm0 === true && rmEscape.length >= 4 && rmEscape.every((m) => m.dx === 0) && seen.length >= 6 && seen.some((s) => s.t < 0.24) && seen.every((s) => s.scale === 1), { rm0, rmEscape: rmEscape.slice(-2), frames: rmEscape.length, seen });
 await P.shot("timeout-callout-reduced-motion");
+await P.g(() => window.game.pacePin(null));
 
 errorsCheck(P);
 await P.finish();

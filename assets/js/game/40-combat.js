@@ -222,8 +222,9 @@ Object.assign(Game.prototype, {
         if (this.waveKills >= this.waveQuota()) this.endWave();
         else if (this.waveT >= (wt ? wt.cap : cfg.cap)) {
           // Lead ruling Z5: the cap times a wave out only with plates on the field. An empty field means the pilot has
-          // killed everything that spawned, so the cap lifts for this wave and it ends by quota.
-          if (this.countAliveEnemies() > 0) this.endWave();
+          // killed everything that spawned, so the cap lifts for this wave and it ends by quota. Z13: a floor wave
+          // (waveTuning.floor, PACE) keeps live a0a3845's rule: its table cap ends it whatever is on the field.
+          if (this.countAliveEnemies() > 0 || (wt && wt.floor)) this.endWave();
           else if (wt) wt.cap = Infinity;
         }
         break;
@@ -232,7 +233,8 @@ Object.assign(Game.prototype, {
         const alive = this.countAliveEnemies();
         if ((alive === 0 && this.phaseT >= DRAIN_MIN_S) || this.phaseT >= DRAIN_MAX_S) {
           const detonated = alive ? this.detonateLeftovers() : 0;
-          this.hook("waveDrained", { wave: this.wave, level: cfg.level, byQuota: this._waveByQuota !== false, detonated });
+          const wt = this.waveTuningNow();
+          this.hook("waveDrained", { wave: this.wave, level: cfg.level, byQuota: this._waveByQuota !== false, detonated, floor: !!(wt && wt.floor) });
           if (this.wave < 2) {
             this.setWavePhase("banner");
             this.showBanner({ kind: "wave", eyebrow: `WAVE ${this.wave + 2} / 3` });
@@ -267,10 +269,10 @@ Object.assign(Game.prototype, {
     // Per-wave tuning (scaffold): table defaults, then waveWillStart listeners (PACE pace, MODES streams) rewrite it.
     const cfg = LEVELS[this.levelIndex];
     this._waveByQuota = true;
-    const t = this.waveTuning || (this.waveTuning = { levelIndex: -1, wave: -1, quota: 1, spawnMul: 1, maxEnemiesAdd: 0, speedMul: 1, hungryMinAlive: HUNGRY_MIN_ALIVE, cap: 0, pressureCap: 0 });
+    const t = this.waveTuning || (this.waveTuning = { levelIndex: -1, wave: -1, quota: 1, spawnMul: 1, maxEnemiesAdd: 0, speedMul: 1, hungryMinAlive: HUNGRY_MIN_ALIVE, cap: 0, pressureCap: 0, floor: false });
     t.levelIndex = this.levelIndex; t.wave = this.wave;
     t.quota = cfg.quota[this.wave] || 1; t.spawnMul = 1; t.maxEnemiesAdd = 0; t.speedMul = 1; t.hungryMinAlive = HUNGRY_MIN_ALIVE;
-    t.cap = cfg.cap; t.pressureCap = pressureCap(cfg);
+    t.cap = cfg.cap; t.pressureCap = pressureCap(cfg); t.floor = false;   // floor: PACE's Z13 floor wave (live a0a3845's wave rule)
     this.hook("waveWillStart", { wave: this.wave, level: cfg.level, levelIndex: this.levelIndex, cfg, tuning: t });
     this.setWavePhase("spawn");
     this.sfx.waveStart(this.wave + 1);
@@ -287,11 +289,13 @@ Object.assign(Game.prototype, {
     const cfg = LEVELS[this.levelIndex];
     const quota = this.waveQuota();
     const byQuota = this.waveKills >= quota;
+    const wt = this.waveTuningNow();
     this._waveFinished = true;
     this._waveByQuota = byQuota;
-    // waveWillEnd (scaffold): PACE pays PERFECT WAVE only by quota (D3) and mutes the clear sting on a timeout.
+    // waveWillEnd (scaffold): PACE pays PERFECT WAVE only by quota (D3) and mutes the clear sting on a timeout; a Z13
+    // floor wave keeps these defaults (live a0a3845: no damage and a kill pays, at the cap too).
     const evt = this.hook("waveWillEnd", { wave: this.wave, level: cfg.level, byQuota, quota, kills: this.waveKills, dmg: this.waveDmg || 0,
-      alive: this.countAliveEnemies(), waveT: this.waveT, perfect: (this.waveDmg || 0) === 0 && this.waveKills > 0, clearSfx: true });
+      alive: this.countAliveEnemies(), waveT: this.waveT, perfect: (this.waveDmg || 0) === 0 && this.waveKills > 0, clearSfx: true, floor: !!(wt && wt.floor) });
     if (evt.clearSfx) this.sfx.waveClear(this.wave + 1);
     if (evt.perfect) {
       this.levelStats.perfectWaves = (this.levelStats.perfectWaves | 0) + 1;
