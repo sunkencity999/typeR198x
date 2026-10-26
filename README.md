@@ -73,12 +73,15 @@ the play-test harness has its own [tools/playtest/README.md](./tools/playtest/RE
   opens on three lines (lock, fire, let go) with the full story behind *Read the full briefing*.
 - **Pace follows you.** At every wave the game compares your measured hand speed (this run, else your profile), plus
   the time you take to find each new target, with the sector's stream and scales it up to 2.5x: more plates at once, a
-  little faster, a bigger quota. It never drops below the table on its own. A wave's time cap always leaves room for
-  its whole stream, and it times the wave out only while plates are still flying: they warp away without damage, the
-  wave pays no perfect-wave bonus and the callout reads `WAVE TIMED OUT · N ESCAPED`; after wave 1 or 2 those N join
-  the next wave. From Sector 4 a clear repairs half of the missing hull and the rest carries
-  (`HULL 72% · REPAIRED +28%` on the next sector card). Two deaths in one sector add **Fly at Cadet pace** to Game
-  Over: 75 % stream and damage, 80 % score, tagged CADET, until that sector is cleared.
+  little faster, a bigger quota. It never drops below the table on its own. A campaign wave at the table pace (nothing
+  carried in) runs as it did before the pace existed: it ends at the table's time cap, plates still flying stay in
+  play for a few seconds (shoot them or take the hit) and a wave without damage is a perfect wave. A sped-up wave, a
+  wave with a carry, Cadet pace and the daily sortie get a time cap that always leaves room for the whole stream, and
+  it times the wave out only while plates are still flying: they warp away without damage, the wave pays no
+  perfect-wave bonus (that needs the quota met without damage) and the callout reads `WAVE TIMED OUT · N ESCAPED`;
+  after wave 1 or 2 those N join the next wave. From Sector 4 a clear repairs half of the missing hull and the rest
+  carries (`HULL 72% · REPAIRED +28%` on the next sector card). Two deaths in one sector add **Fly at Cadet pace** to
+  Game Over: 75 % stream and damage, 80 % score, tagged CADET, until that sector is cleared.
 - **Daily sortie, drill, endless drift.** Under Start, the **Daily sortie** flies one sector a day (picked from your
   top three unlocked by the local date), three waves and no boss. Your first finished or failed attempt of the day
   counts; later ones are practice. Its rating is speed x (accuracy / 100)^2 and the medal compares it with the median
@@ -235,7 +238,7 @@ Module map, in `index.html` load order:
 | `assets/js/game/30-input.js` | Keydown routing, `handleTyped`, lock rules (release, three-miss loss), scoring hooks |
 | `assets/js/game/32-typist.js` | Hand speed (qualifying intervals, live / window / sector / run / lifetime), per-key and bigram profile (`save.profile`), weak keys, sessions and bests, the typo pair / gun pop, HUD ACC / WPM providers, rank line / WEAK SIGNAL / Game Over cause, Flight log, goal line (MEASURE) |
 | `assets/js/game/40-combat.js` | Spawning, lanes, waves (a wave's cap ends it only with plates alive) and approach, kills, powerups, damage, `update(dt)` |
-| `assets/js/game/42-pacing.js` | Pace controller (`paceMul` per wave from MEASURE's speed into `waveTuning`), perfect wave by quota, computed wave caps, timed-out waves (the escaping plates) and their quota carry, hull carry from sector 4, the Cadet assist and the `diff()` row (PACE) |
+| `assets/js/game/42-pacing.js` | Pace controller (`paceMul` per wave from MEASURE's speed and acquisition time into `waveTuning`), floor waves (paceMul 1.0, no carry) on the table's wave rule, perfect wave by quota, computed wave caps, timed-out waves (the escaping plates) and their quota carry, hull carry from sector 4, the Cadet assist and the `diff()` row (PACE) |
 | `assets/js/game/45-feedback.js` | Banner system (sector, wave, boss intro/clear, callouts) and score floaters |
 | `assets/js/game/50-boss.js` | Boss v2: phases, minions, intro and finale; Counter-Signal (surge cadence, `surgeWindow` from the pilot's speed, telegraph, fail reset, counter, DOM charge bar) (ARCADE) |
 | `assets/js/game/52-modes.js` | Daily Sortie (date seed, per-wave mulberry32 through `this.rand()`, medal, streak, share line), Endless Drift and Drill streams (`waveTuning`, own text picker), the title deck, the mode results screen, `save.modes` (MODES) |

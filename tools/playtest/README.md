@@ -309,7 +309,15 @@ Extra one-off scripts live in `probes/` (shipped) or `out/` (ignored). They can 
   keeps the field clear is never timed out, an empty field lifts the cap); a timeout with plates alive: they leave at
   once as escaping plates (no detonation, no damage, warping off to the right; a fade under reduced motion) and the
   drain end calls `WAVE TIMED OUT · N ESCAPED` (no sting, no bonus, announced), the quota carry and its limits, the
-  sector-clock cut of a wave-3 drain, Retry clearing a carry.
+  sector-clock cut of a wave-3 drain, Retry clearing a carry. Since lead ruling Z13 these scenarios run above the
+  floor (`pacePin` 1.05 / 1.1, or the Z12 back-off's stubbed pilot): a campaign wave at exactly 1.0 is a floor wave.
+- `probes/t-pace-floor.mjs` (~45 s) — lead ruling Z13, the floor wave: a campaign wave at exactly paceMul 1.0 with no
+  carry runs on live `a0a3845`'s wave rule (all 30 sector / wave tunings carry a0a3845's quota and 22-40 s cap with
+  the table stream; a fresh S1 W1; at the cap with plates up it ends into the drain with the clear sting and PERFECT
+  WAVE for no damage and a kill, the plates stay and can be typed or leak and hurt, the 6 s drain end detonates the
+  rest; an empty field still ends it; no `WAVE TIMED OUT`, no escape, no carry, no back-off; the sector clock cutting
+  a floor wave-3 drain), the waves that keep D3 / Z5 (a carried 1.0 wave, a pin at 1.1, Cadet, the Daily Sortie) and
+  Continue (a replayed floor wave stays one, a replayed carried wave does not).
 - `probes/t-pace-hull.mjs` — S1-3 refill, S4 220/500 -> S5 432/600 with the card / Level Complete copy, flawless
   stays full, Retry refills, quit at Level Complete + Continue keeps the carried hull and shows the line once, legacy
   fixtures, and the `PACE x2.0` results chip with its announcement (none at the table pace).
@@ -322,8 +330,8 @@ Extra one-off scripts live in `probes/` (shipped) or `out/` (ignored). They can 
   while typing, node --check + check-globals.
 - `probes/t-pace-perf.mjs [--dpr 2]` — S10 W3 and S1 W3 pinned at 2.5 with an 80 WPM typist, and S10 with an idle
   pilot: fps, maxRenderMs, shadowBlur, full-frame fills, composite sets, max alive. Run it alone.
-- `probes/t-pace-balance.mjs --wpm W --accuracy A [--seed-profile auto|WPM] [--jump L --sectors N --retry N]
-  [--set knob=value,rollin=a-b] [--acquire-ms N]` / `--matrix [--parallel 2]` — the R26 balance targets (idle share
+- `probes/t-pace-balance.mjs --wpm W --accuracy A [--seed-profile auto|WPM] [--seed-acq MS] [--jump L --sectors N
+  --retry N] [--set knob=value,rollin=a-b] [--acquire-ms N]` / `--matrix [--parallel 2]` — the R26 balance targets (idle share
   S1-3, deaths, damage, rank, time to the S1 boss, min hull, longest idle gap) with a play-clock-paced typist; prints
   per sector idle / deaths / hull in / min hull / per-wave paceMul, quota, carry, timeouts and escaped plates; JSON
   under `out/t-pace-balance/`. `--acquire-ms` is the Z7 latency (as b10); with it the p55 / p80 runs judge lead
@@ -341,6 +349,15 @@ Extra one-off scripts live in `probes/` (shipped) or `out/` (ignored). They can 
   release / lost lock / leak / pause, boss fights and a real Flight Check never feeding it), `t-measure-profile` 1b
   / 5 / 14 the `profile.acqEma` field, `t-pace-math` 7b / 10-12 the formula (35 / 55 / 80 WPM x 120 / 300 / 600 ms x
   L 1 / 5 / 7), the mean length and the wave start, and `t-pace-stakes` 7a-7c the back-off and its clearing.
+- **Floor waves and a stale stored acquisition time (lead rulings Z13 / Z14).** `b10` and `t-pace-balance` record per
+  wave `floor` (paceMul exactly 1.0, no carry: live `a0a3845`'s wave rule), `capEnd` (its cap ended it) and
+  `leftover` (plates up at a floor wave's cap; they stay in the drain); `timedOut`, `escaped` and the 0-leak timeout
+  counts cover the D3 / Z5 judgement of the other waves only, and a floor wave's cap end is not a timeout (live has
+  none either). `t-pace-balance` splits damage into waves and boss and records play / wall per sector; with
+  `--acquire-ms` its p35 run judges Z13 (0 deaths, 0 wave damage, no 0-leak timeout in S1-3; boss damage, rank, floor
+  cap ends and PERFECT WAVE reported). `--seed-acq MS` writes `profile.acqEma` into the seeded fixture (Z14: a
+  returning pilot whose save holds a slower pilot's value). `t-measure-api` 9d and `t-measure-profile` 16 check
+  Z14's blend of the run's first samples with the lifetime value.
 - `probes/pace_lib.mjs` — helpers: the b10 typist on the play clock (optional acquisition latency), forced clears,
   deaths, the in-place reload, canvas budget counters.
 - `probes/t-modes-rng.mjs`, `t-modes-daily.mjs`, `t-modes-endless.mjs [--dpr 2]`, `t-modes-drill.mjs`,
