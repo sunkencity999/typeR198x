@@ -324,7 +324,8 @@ Object.assign(Game.prototype, {
     return n;
   },
 
-  // Z12: MEASURE's acquisition time in ms (typistAcquireMs: run EMA, else lifetime, else 300, clamped there), else 300.
+  // Z12: MEASURE's acquisition time in ms (typistAcquireMs: the run EMA from 10 samples, before that its Z14 blend with
+  // the lifetime value or 300, clamped there), else 300.
   paceAcquireMs() {
     if (typeof this.typistAcquireMs === "function") {
       const v = Number(this.typistAcquireMs());

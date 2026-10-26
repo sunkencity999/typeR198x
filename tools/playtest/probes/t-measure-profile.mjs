@@ -2,7 +2,8 @@
 // bigram EMAs, the 200-bigram cap, the 16 KB budget, no new storage writes while typing, weak keys / bigram formulas,
 // sessions, speedEma, sector bests, practice sessions and mode bests (R17), the goal line, blocked storage, the
 // hot-path allocation scan, and lead ruling Z12's lifetime acquisition EMA (profile.acqEma: additive, absent by default,
-// normalised and capped in typistNormaliseAcq, inside the 16 KB budget). PASS = the feature works.
+// normalised and capped in typistNormaliseAcq, inside the 16 KB budget) with lead ruling Z14's blend of a stored value
+// and a new run's first samples. PASS = the feature works.
 // Usage: node tools/playtest/probes/t-measure-profile.mjs
 import { openProbe, sleep, waitFor, installTypist, holdField, startFresh, jumpTo, clearBoss, typeFor, wordSteps, runSteps, dieByLeak, SIGNAL12 } from "./measure_lib.mjs";
 
@@ -364,6 +365,42 @@ const mixed = await P.g(async () => {
 P.check("15. 40-save.js without the hook registry: loadSave keeps the pilot (9,473, sector 2, CLEAR1) at schema 2, storeSave writes without throwing; the full release then migrates it to schema 3 with the old WPM flagged legacy",
   !mixed.error && mixed.loaded.highScore === 9473 && mixed.loaded.level === 2 && mixed.loaded.name === "CLEAR1" && mixed.loaded.schema === 2 &&
   mixed.stored === true && mixed.storedSchema === 2 && mixed.full.schema === 3 && mixed.full.legacy === true, mixed);
+
+// ---- 16. lead ruling Z14: a stored profile.acqEma (loaded from the save) gives way to a new run's samples ----
+// A returning pilot whose save holds acqEma 900 (a slower pilot on a shared save) starts a run: typistAcquireMs() reads
+// 900 with no sample, then (n x run EMA + (10 - n) x lifetime) / 10 while the lifetime EMA itself steps alpha .1 per
+// sample, the run EMA alone from 10. A save without the field blends with 300 and writes the field at the 10th sample.
+async function acqBlendRun(stored) {
+  await P.goto({ schema: 3, playerName: "ACQ", selectedShip: "coconut", lastUnlockedLevel: 1, storySeen: true, keyboardHintSeen: true, onboardingDone: Date.now(), settings: { muted: true },
+    profile: { v: 1, keys: {}, bigrams: {}, speedEma: 0, sessions: [], ...(stored ? { acqEma: stored } : {}) } });
+  await P.startRun("ACQ");
+  await waitFor(P, () => !window.game.levelIntro, 6000);
+  return P.g(() => {
+    const g = window.game, ty = g.typistState();
+    const out = { stored: g.save.profile.acqEma === undefined ? null : g.save.profile.acqEma, n0: g.typistAcquireMs(), steps: [] };
+    for (let k = 1; k <= 12; k++) {
+      g.typistAddAcquire(ty, 250);   // the real sample path (run EMA and lifetime EMA), as a 250 ms gap closing
+      if (k === 1 || k === 5 || k === 9 || k === 10 || k === 12) out.steps.push({ n: ty.aqRunN, ms: Math.round(g.typistAcquireMs() * 1000) / 1000, life: g.save.profile.acqEma === undefined ? null : g.save.profile.acqEma });
+    }
+    return out;
+  });
+}
+const blendWant = (stored) => {
+  let life = stored || 0;
+  const out = [];
+  for (let k = 1; k <= 12; k++) {
+    if (life > 0) life += 0.1 * (250 - life); else if (k >= 10) life = 250;
+    const L = life > 0 ? Math.round(life) : null;
+    const ms = k >= 10 ? 250 : (k * 250 + (10 - k) * (L || 300)) / 10;
+    if (k === 1 || k === 5 || k === 9 || k === 10 || k === 12) out.push({ n: k, ms: Math.round(Math.min(900, Math.max(120, ms)) * 1000) / 1000, life: L });
+  }
+  return out;
+};
+const z14a = await acqBlendRun(900);
+const z14b = await acqBlendRun(null);
+P.check("16. Z14: a stored acqEma 900 serves 900 with no sample, then 776.5 / 442 / 275.2 at 1 / 5 / 9 samples of 250 ms (the lifetime stepping 835 / 634 / 502) and 250 from 10; a save without it: 300, 295 / 275 / 255, then 250 with acqEma written at the 10th",
+  z14a.stored === 900 && z14a.n0 === 900 && JSON.stringify(z14a.steps) === JSON.stringify(blendWant(900)) &&
+  z14b.stored === null && z14b.n0 === 300 && JSON.stringify(z14b.steps) === JSON.stringify(blendWant(null)), { z14a, z14b, want900: blendWant(900), wantNone: blendWant(null) });
 
 P.check("zero page errors", P.errors.pageErrors.length === 0, P.errors.pageErrors);
 await P.finish();

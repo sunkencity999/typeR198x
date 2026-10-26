@@ -16,7 +16,9 @@
 // lockable target is on the field to the first correct key of the next lock; boss fights and the Flight Check never
 // feed it; counted from TYPIST_GAP_MIN_MS (D1's touch / IME burst floor) to SPEED_GAP_MAX_MS. A run EMA (alpha .1,
 // this._ty) and a lifetime EMA (profile.acqEma, written from the first run that reaches 10 samples); typistAcquireMs()
-// gives PACE (D2) the run EMA from 10 samples, else the lifetime EMA, else 300 ms, clamped to 120 .. 900 ms.
+// gives PACE (D2) the run EMA from 10 samples and before that (lead ruling Z14) the sample-weighted blend
+// (n x run EMA + (10 - n) x lifetime EMA) / 10 (n = this run's samples; 300 ms in place of a lifetime value the profile
+// does not have yet, so a run with no sample reads the lifetime value, else 300), clamped to 120 .. 900 ms.
 
 // ----------------------------- Constants -----------------------------
 const SPEED_GAP_MAX_MS = 1500;          // D1: an interval above this is a pause, not typing
@@ -417,16 +419,16 @@ Object.assign(Game.prototype, {
     p.acqEma = Math.round(life);
   },
 
-  // Z12 API (PACE D2): the pilot's acquisition time in ms: this run's EMA from 10 samples, else the lifetime EMA when
-  // present, else 300; clamped to 120 .. 900. Any time, no allocation.
+  // Z12 API (PACE D2): the pilot's acquisition time in ms: this run's EMA from 10 samples; before that (lead ruling Z14,
+  // a stale stored value must not hold a returning pilot's pace for a sector or two) the blend
+  // (n x run EMA + (10 - n) x base) / 10 of this run's n samples with base = the lifetime EMA when present, else 300
+  // (n = 0: the base alone); clamped to 120 .. 900. Any time, no allocation.
   typistAcquireMs() {
     const ty = this.typistState();
-    let ms = TYPIST_ACQ_DEFAULT_MS;
-    if (ty.aqRunN >= TYPIST_ACQ_MIN_N && ty.aqRunId === this.typistRunKey()) ms = ty.aqRunEma;
-    else {
-      const p = this.save && this.save.profile;
-      if (p && p.acqEma > 0) ms = p.acqEma;
-    }
+    const n = ty.aqRunId === this.typistRunKey() ? Math.min(ty.aqRunN, TYPIST_ACQ_MIN_N) : 0;
+    const p = this.save && this.save.profile;
+    const base = p && p.acqEma > 0 ? p.acqEma : TYPIST_ACQ_DEFAULT_MS;
+    const ms = n >= TYPIST_ACQ_MIN_N ? ty.aqRunEma : (n * ty.aqRunEma + (TYPIST_ACQ_MIN_N - n) * base) / TYPIST_ACQ_MIN_N;
     return clamp(ms, TYPIST_ACQ_MIN_MS, TYPIST_ACQ_MAX_MS);
   },
 

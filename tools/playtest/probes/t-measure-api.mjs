@@ -2,7 +2,8 @@
 // typistInterval event, keyMiss attribution, stats / session shapes, typistEndSession mode bests (R17), cost, the
 // null-run (Flight Check) contract, and lead ruling Z12's acquisition gap (typistAcquireMs: the gap from a target's end
 // to the next lock's first correct key, its run / lifetime EMAs, fallbacks and clamp; boss fights and a real Flight
-// Check never feed it). PASS = the API behaves as documented.
+// Check never feed it) with lead ruling Z14's blend before 10 samples ((n x run EMA + (10 - n) x lifetime, else 300) / 10).
+// PASS = the API behaves as documented.
 // Usage: node tools/playtest/probes/t-measure-api.mjs
 import { openProbe, sleep, waitFor, installTypist, holdField, startFresh, clearBoss, wordSteps, runSteps, SIGNAL12 } from "./measure_lib.mjs";
 
@@ -135,7 +136,7 @@ const aq = await P.g(async () => {
   g.typistAddAcquire = function (t, ms) { log.push(ms); return orig.call(this, t, ms); };   // instance wrapper: sees every sample
   const dbg = () => g.typistDebug().acq;
   // checks 2-8 may have left a few samples (a kill drop's capsule counts as a lockable target); none reached 10
-  const fresh = { ms: g.typistAcquireMs(), n: dbg().n, life: dbg().life, has: "acqEma" in g.save.profile };
+  const fresh = { ms: g.typistAcquireMs(), n: dbg().n, ema: ty.aqRunEma, same: ty.aqRunId === g.typistRunKey(), life: dbg().life, has: "acqEma" in g.save.profile };
   ty.aqRunId = null;   // the next sample restarts the run EMA (as a new run would)
   // (a) letter plates: each kill with another plate up opens a gap, the next first key closes it (13 letters, 12 gaps)
   window.__ty.clear(); window.__ty.hold();
@@ -147,7 +148,7 @@ const aq = await P.g(async () => {
     if (i + 1 < letters.length) window.__ty.plate(letters[i + 1], i % 2 ? 2 : 4, 880);
     await T(gaps[i - 1]);
     g.handleTyped(letters[i]);
-    if (log.length === 9) Object.assign(at9, { ms: g.typistAcquireMs(), life: g.save.profile.acqEma, n: dbg().n });
+    if (log.length === 9) Object.assign(at9, { ms: g.typistAcquireMs(), life: g.save.profile.acqEma, n: dbg().n, ema: ty.aqRunEma });
     if (log.length === 10) Object.assign(at10, { ms: g.typistAcquireMs(), life: g.save.profile.acqEma, ema: ty.aqRunEma });
   }
   let ema = 0, life = 0;
@@ -177,19 +178,42 @@ const aq = await P.g(async () => {
   g.save.profile.acqEma = 640; const lifeOnly = g.typistAcquireMs();
   g.save.profile.acqEma = 1400; const lifeHi = g.typistAcquireMs();
   delete g.save.profile.acqEma; const none = g.typistAcquireMs();
-  ty.aqRunId = keep.id; g.save.profile.acqEma = keep.life; ty.aqLife = keep.mirror;
-  return { fresh, a, b, c, d, e, f, pz, lo, hi, lifeOnly, lifeHi, none, before, back: g.typistAcquireMs() };
+  // (i) lead ruling Z14: this run's n samples (run EMA 250 / 600 / 100) against no lifetime value, 900, 200 and 1400
+  const keepN = ty.aqRunN;
+  ty.aqRunId = g.typistRunKey();
+  const blend = [];
+  for (const [ema, life] of [[250, null], [250, 900], [600, 200], [100, 1400]]) {
+    if (life === null) delete g.save.profile.acqEma; else g.save.profile.acqEma = life;
+    for (const n of [0, 1, 5, 9, 10, 12]) { ty.aqRunN = n; ty.aqRunEma = ema; blend.push({ ema, life, n, ms: Math.round(g.typistAcquireMs() * 1000) / 1000 }); }
+  }
+  ty.aqRunN = 5; ty.aqRunEma = 250; g.save.profile.acqEma = 900; ty.aqRunId = "another-run";
+  const otherRun = g.typistAcquireMs();   // another run's 5 samples count as none: the lifetime value
+  ty.aqRunN = keepN; ty.aqRunEma = keep.ema;
+  ty.aqRunId = keep.id; if (keep.life === undefined) delete g.save.profile.acqEma; else g.save.profile.acqEma = keep.life; ty.aqLife = keep.mirror;
+  return { fresh, a, b, c, d, e, f, pz, lo, hi, lifeOnly, lifeHi, none, before, blend, otherRun, back: g.typistAcquireMs() };
 });
 const within = (x, want, tol = 45) => typeof x === "number" && Math.abs(x - want) <= tol;
-P.check("9a. Z12 acquisition gap: fresh save 300 ms, no profile.acqEma; 12 letter-to-letter gaps (another plate up at each kill) give 12 samples within 45 ms of the scripted gaps, the run EMA follows the alpha .1 recurrence; 9 samples -> still 300 and no lifetime field; the 10th writes profile.acqEma = the run EMA and typistAcquireMs() = it (clamped 120..900); later samples step the lifetime EMA",
-  aq.fresh.ms === 300 && aq.fresh.n < 10 && aq.fresh.life === null && !aq.fresh.has && aq.a.samples.length === 12 && aq.a.samples.every((ms, i) => within(ms, aq.a.gaps[i])) &&
-  Math.abs(aq.a.ema - aq.a.ref) < 1e-6 && aq.a.n === 12 && aq.a.at9.ms === 300 && aq.a.at9.life === undefined && aq.a.at10.life === Math.round(aq.a.at10.ema) &&
+const clampAcq = (x) => Math.min(900, Math.max(120, x));
+const freshWant = aq.fresh.same && aq.fresh.n > 0 ? clampAcq((aq.fresh.n * aq.fresh.ema + (10 - aq.fresh.n) * 300) / 10) : 300;   // Z14: earlier checks' samples blend with 300
+P.check("9a. Z12 acquisition gap: fresh save, no profile.acqEma (300 ms, or Z14's blend with 300 of the few samples earlier checks left); 12 letter-to-letter gaps (another plate up at each kill) give 12 samples within 45 ms of the scripted gaps, the run EMA follows the alpha .1 recurrence; 9 samples -> Z14 (9 x run EMA + 300) / 10 and no lifetime field; the 10th writes profile.acqEma = the run EMA and typistAcquireMs() = it (clamped 120..900); later samples step the lifetime EMA",
+  Math.abs(aq.fresh.ms - freshWant) < 1e-6 && aq.fresh.n < 10 && aq.fresh.life === null && !aq.fresh.has && aq.a.samples.length === 12 && aq.a.samples.every((ms, i) => within(ms, aq.a.gaps[i])) &&
+  Math.abs(aq.a.ema - aq.a.ref) < 1e-6 && aq.a.n === 12 && Math.abs(aq.a.at9.ms - clampAcq((9 * aq.a.at9.ema + 300) / 10)) < 1e-6 && aq.a.at9.life === undefined && aq.a.at10.life === Math.round(aq.a.at10.ema) &&
   Math.abs(aq.a.at10.ms - Math.min(900, Math.max(120, aq.a.at10.ema))) < 1e-9 && aq.a.life === Math.round(aq.a.lifeRef) && Math.abs(aq.a.ms - Math.min(900, Math.max(120, aq.a.ref))) < 1e-6, aq.a);
 P.check("9b. Z12 gaps: nothing when the field was empty at the kill; nothing over 1.5 s; a manual release (350 ms) and a lost lock (250 ms) open a gap closed by the next lock's first key; the locked plate leaking opens one (300 ms); a pause drops the pending gap",
   aq.b.added.length === 0 && !aq.b.pending && aq.c.added.length === 0 && !aq.c.pending && aq.d.added.length === 1 && within(aq.d.added[0], 350) &&
   aq.e.added.length === 1 && within(aq.e.added[0], 250) && aq.f.added.length === 1 && within(aq.f.added[0], 300) && aq.pz.added.length === 0 && !aq.pz.pending, { b: aq.b, c: aq.c, d: aq.d, e: aq.e, f: aq.f, pz: aq.pz });
 P.check("9c. typistAcquireMs clamp and fallbacks: run EMA 50 -> 120, 2000 -> 900; another run's samples -> the lifetime EMA (640; 1400 -> 900); no lifetime -> 300",
   aq.lo === 120 && aq.hi === 900 && aq.lifeOnly === 640 && aq.lifeHi === 900 && aq.none === 300 && aq.back === aq.before, { lo: aq.lo, hi: aq.hi, lifeOnly: aq.lifeOnly, lifeHi: aq.lifeHi, none: aq.none, before: aq.before, back: aq.back });
+// Z14 expected values, by hand: (n x run EMA + (10 - n) x (lifetime or 300)) / 10 before 10 samples, the run EMA from 10, clamped 120..900
+const BLEND_WANT = {
+  "250/none": [300, 295, 275, 255, 250, 250],   // no lifetime value: blended with 300
+  "250/900": [900, 835, 575, 315, 250, 250],    // a stale stored 900 gives way sample by sample
+  "600/200": [200, 240, 400, 560, 600, 600],
+  "100/1400": [900, 900, 750, 230, 120, 120]    // clamp on both ends (a hand-edited 1400; a run EMA of 100)
+};
+const blendBad = aq.blend.filter((r) => { const want = BLEND_WANT[`${r.ema}/${r.life === null ? "none" : r.life}`][[0, 1, 5, 9, 10, 12].indexOf(r.n)]; return Math.abs(r.ms - want) > 1e-6; });
+P.check("9d. Z14 blend before 10 samples: n = 0 / 1 / 5 / 9 / 10 / 12 at run EMA 250 with no lifetime -> 300 / 295 / 275 / 255 / 250 / 250, with a stored 900 -> 900 / 835 / 575 / 315 / 250 / 250; run EMA 600 over 200 -> 200 / 240 / 400 / 560 / 600 / 600; clamped (100 over 1400 -> 900 / 900 / 750 / 230 / 120 / 120); another run's 5 samples -> the lifetime value",
+  aq.blend.length === 24 && blendBad.length === 0 && aq.otherRun === 900 && aq.back === aq.before, { bad: blendBad, blend: aq.blend.map((r) => `${r.ema}/${r.life}/n${r.n}:${r.ms}`).join(" "), otherRun: aq.otherRun });
 
 // ---- 3. lifetime after a cleared sector; a new run resets run speed and the HUD ----
 await holdField(P);
