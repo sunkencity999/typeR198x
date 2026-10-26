@@ -18,7 +18,8 @@ starts after the run start), so **no run was discarded** (threshold 0.9; the que
 live `a0a3845` = this branch's 4 `L-` runs and the review's 6 `V-L-` runs (the Z12 exports) plus 6 new `ZL-` runs
 with this branch's `b10.mjs` in a live export's `probes-t/`; `d28653f` = the 24 runs of "this code, all" in the Z12
 section below plus 3 + 3 new stored-900 runs (`D-Z14-*`, this probe in a `d28653f` export). JSON: `out/b10/Z-*.json`,
-`out/t-pace-balance/*-z1.json`, `*-z2.json`, `*-acq300-z1.json`, `*-acq300-z2.json`, `Z14-*.json`.
+`ZL-*.json`, `ZX-*.json`, `out/t-pace-balance/*-z1.json`, `*-z2.json`, `*-acq300-z1.json`, `*-acq300-z2.json`,
+`Z14-*.json`, `D-Z14-*.json`, `X-*.json` (the export runs copied in; the exports were removed).
 
 **What live `a0a3845` does with a wave** (`git show a0a3845:assets/js/game/40-combat.js`, `core/20-constants.js`):
 - start, `beginWave` 227-242: waveKills / waveT / waveDmg 0, hungryT 0, spawnAcc = SPAWN_ACC_PRIME .85, phase spawn,
