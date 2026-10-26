@@ -149,7 +149,7 @@ Spot checks by hand:
 curl -sI https://typer198x.com/index.html | grep -i cache-control
 curl -sI https://typer198x.com/privacy-policy.html | grep -i cache-control
 curl -s  https://typer198x.com/ | grep -o 'v=[0-9a-z]*' | sort | uniq -c
-curl -s  https://typer198x.com/privacy-policy.html | grep 'Effective date'    # 25 October 2026
+curl -s  https://typer198x.com/privacy-policy.html | grep 'Effective date'    # 26 October 2026
 ```
 
 ## 7. After the deploy

@@ -585,13 +585,13 @@ folder reference, configure signing and bundle identifiers, test on hardware, ar
 
 Everything the game stores lives on the player's device under `typesmup198x.save.v1` (plus a one-session
 rotate-hint flag on phones), including the typing profile behind the Flight log (per-key speed and misses, timing for
-the up to 200 most-typed letter pairs, the average and best speeds, each sector's best speed and accuracy, the count of
-days played with the last date, a dated summary of each of the last 100 sessions: sector attempts, deaths included,
-daily sorties, drills and endless drifts), the daily sortie results of up to 60 days with the sortie count, streak and
-that day's attempts, the drill and endless drift run counts and bests, and when the Flight Check was finished or
-skipped; it is never sent anywhere and Reset save erases it.
+the up to 200 most-typed letter pairs, the average and best speeds, how long the pilot usually takes to find the next
+target, each sector's best speed and accuracy, the count of days played with the last date, a dated summary of each of
+the last 100 sessions: sector attempts, deaths included, daily sorties, drills and endless drifts), the daily sortie
+results of up to 60 days with the sortie count, streak and that day's attempts, the drill and endless drift run counts
+and bests, and when the Flight Check was finished or skipped; it is never sent anywhere and Reset save erases it.
 The game uses that profile on the device to rate daily sorties and to aim words and drills at weak keys.
-[privacy-policy.html](./privacy-policy.html) says so, effective 25 October 2026. No accounts, analytics, telemetry or
+[privacy-policy.html](./privacy-policy.html) says so, effective 26 October 2026. No accounts, analytics, telemetry or
 third-party scripts; the web build makes no network calls while playing beyond fetching its own code, art and music. The footer links
 [privacy-policy.html](./privacy-policy.html); `privacy.html` is a meta-refresh stub for old links.
 [info.html](./info.html) and [support.html](./support.html) carry the same icon/meta block as the game
