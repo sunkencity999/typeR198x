@@ -12,7 +12,7 @@ WPM, typo feedback, rank lines, the pilot profile and Flight log, the first-run 
 two-word targets aimed at weak keys, the Counter-Signal boss attack and Overdrive, a stream that follows the pilot's
 speed with timed-out waves, hull carry and Cadet pace, and the daily sortie, drill and endless drift) and its pace
 follow-up (release `20261025a`: the pace also counts how quickly the pilot finds the next target, and a wave at the
-standard pace plays by the original wave rules). Release steps
+standard pace lasts and ends by the original wave rules). Release steps
 live in [DEPLOY.md](./DEPLOY.md);
 the play-test harness has its own [tools/playtest/README.md](./tools/playtest/README.md).
 
@@ -75,8 +75,9 @@ the play-test harness has its own [tools/playtest/README.md](./tools/playtest/RE
 - **Pace follows you.** At every wave the game compares your measured hand speed (this run, else your profile), plus
   the time you take to find each new target, with the sector's stream and scales it up to 2.5x: more plates at once, a
   little faster, a bigger quota. It never drops below the table on its own. A campaign wave at the table pace (nothing
-  carried in) runs as it did before the pace existed: it ends at the table's time cap, plates still flying stay in
-  play for a few seconds (shoot them or take the hit) and a wave without damage is a perfect wave. A sped-up wave, a
+  carried in) lasts and ends as it did before the pace existed (new plates still roll in a moment sooner and an empty
+  field refills sooner): it ends at the table's time cap, plates still flying stay in play for a few seconds (shoot
+  them or take the hit) and a wave without damage is a perfect wave. A sped-up wave, a
   wave with a carry, Cadet pace and the daily sortie get a time cap that always leaves room for the whole stream, and
   it times the wave out only while plates are still flying: they warp away without damage, the wave pays no
   perfect-wave bonus (that needs the quota met without damage) and the callout reads `WAVE TIMED OUT · N ESCAPED`;
@@ -617,12 +618,13 @@ remixes are welcome.
 
 ### 2026-10 pace follow-up (release token `20261025a`)
 
-**Standard-pace waves play by the original rules again.** When the game has not sped the stream up (the standard
-pace, nothing carried over from a timed-out wave), a wave runs as it did before the pace existed: it lasts as long as
-the sector's table says, plates still flying when it ends stay in play for a few seconds (shoot them down or take the
-hit), and a wave without damage is a perfect wave, even when its time ran out. The stream-sized time limit, `WAVE
-TIMED OUT · N ESCAPED`, the escaping plates and the carry into the next wave are now only for sped-up waves (and for
-Cadet pace and the daily sortie), where they keep a fast pilot from being swamped.
+**Standard-pace waves end by the original rules again.** When the game has not sped the stream up (the standard
+pace, nothing carried over from a timed-out wave), a wave lasts and ends as it did before the pace existed (as since
+`20261024b`, new plates roll in a moment sooner and an empty field refills sooner): it lasts as long as the sector's
+table says, its plates come at the same rate, plates still flying when it ends stay in play for a few seconds (shoot
+them down or take the hit), and a wave without damage is a perfect wave, even when its time ran out. The
+stream-sized time limit, `WAVE TIMED OUT · N ESCAPED`, the escaping plates and the carry into the next wave are now
+only for sped-up waves (and for Cadet pace and the daily sortie), where they keep a fast pilot from being swamped.
 
 **The pace settles from your first targets.** The time you take to find the next target used to come from your
 Flight log until the run had timed ten of them. Now every one the run times moves the value a tenth of the way toward
