@@ -313,7 +313,8 @@ Extra one-off scripts live in `probes/` (shipped) or `out/` (ignored). They can 
   floor (`pacePin` 1.05 / 1.1, or the Z12 back-off's stubbed pilot): a campaign wave at exactly 1.0 is a floor wave.
 - `probes/t-pace-floor.mjs` (~45 s) — lead ruling Z13, the floor wave: a campaign wave at exactly paceMul 1.0 with no
   carry runs on live `a0a3845`'s wave rule (all 30 sector / wave tunings carry a0a3845's quota and 22-40 s cap with
-  the table stream; a fresh S1 W1; at the cap with plates up it ends into the drain with the clear sting and PERFECT
+  the table stream; on all 30 the spawner accumulates a0a3845's spawn rate, its length-window mix without WORDS'
+  `waveTextLen`, while a carried 1.0 wave keeps WORDS' rate; a fresh S1 W1; at the cap with plates up it ends into the drain with the clear sting and PERFECT
   WAVE for no damage and a kill, the plates stay and can be typed or leak and hurt, the 6 s drain end detonates the
   rest; an empty field still ends it; no `WAVE TIMED OUT`, no escape, no carry, no back-off; the sector clock cutting
   a floor wave-3 drain), the waves that keep D3 / Z5 (a carried 1.0 wave, a pin at 1.1, Cadet, the Daily Sortie) and

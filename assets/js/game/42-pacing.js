@@ -23,12 +23,14 @@
 // next wave of the sector. Clears of sectors 4-9 repair half of the missing hull and carry the rest. Cadet (D2): from the second death in one sector the Game Over
 // card offers "Fly at Cadet pace" (stream x0.75, damage x0.75, score x0.8, tag CADET) until that sector is cleared.
 // Floor waves (lead ruling Z13): a campaign wave whose paceMul after the step rule (and any back-off; a probe pin
-// too) is exactly 1.0 with no escaped carry runs on live a0a3845's wave rule end to end: the table quota, stream and
-// cap (waveTuning.floor, no Z5 extension; 40-combat.js ends it at the cap whatever is on the field), PERFECT WAVE as
+// too) is exactly 1.0 with no escaped carry runs on live a0a3845's wave rule end to end: the table quota and cap
+// (waveTuning.floor, no Z5 extension; 40-combat.js ends it at the cap whatever is on the field), a0a3845's spawn rate
+// (40-combat.js tickSpawner: waveSpawnRate's length-window mix, not WORDS' waveTextLen), PERFECT WAVE as
 // live (no damage and a kill, also at the cap), the clear sting, and plates still up at the cap stay in the drain as
 // live (typeable, they can leak, the drain's 6 s end or the boss approach detonates them): no WAVE TIMED OUT, no
 // escape, no carry, no back-off. A wave above 1.0 or with a carry, Cadet (0.75) and every mode keep D3 / Z5 / Z12.
-// D2's stream constants (the 0.1 s empty-field spawn, the 10-30 px roll-in) stay on at every pace, the floor included.
+// D2's stream constants (the 0.1 s empty-field spawn, the 10-30 px roll-in) stay on at every pace, the floor included
+// (a0a3845's .5 s / 10-90 px there breaks lead ruling Q1's fresh S1 idle bound; pending with the lead, balance.md).
 
 // ----------------------------- Tuning: every PACE number (the balance re-pass retunes here) -----------------------------
 // Also PACE-owned, in 20-constants.js because the scaffold spawner reads them directly: HUNGRY_SPAWN_S (0.1 s) and

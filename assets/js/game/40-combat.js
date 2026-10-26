@@ -161,7 +161,8 @@ Object.assign(Game.prototype, {
     const alive = this.countAliveEnemies();
     const t = this.waveTuningNow();
     const quota = this.waveQuota();
-    this.spawnAcc += dt * waveSpawnRate(cfg, this.wave, this.waveKills, quota) * (t ? t.spawnMul : 1);
+    // Z13: a floor wave (waveTuning.floor, PACE) spawns at live a0a3845's rate (the length-window mix, no waveTextLen)
+    this.spawnAcc += dt * waveSpawnRate(cfg, this.wave, this.waveKills, quota, !!(t && t.floor)) * (t ? t.spawnMul : 1);
     if (alive < (t ? t.hungryMinAlive : HUNGRY_MIN_ALIVE)) {
       this.hungryT = (this.hungryT || 0) + dt;
       if (this.hungryT >= HUNGRY_SPAWN_S) {

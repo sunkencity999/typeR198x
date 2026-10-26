@@ -55,6 +55,50 @@ const table = await P.g(({ LIVE_CAP, LIVE_QUOTA }) => {
 P.check("1. Z13: all 30 floor waves (S1-10 x W1-3 at paceMul 1.0, no carry) carry a0a3845's quota and cap (22 .. 40 s; duration 3 x cap) with the table stream (spawnMul 1, alive +0, speed x1, empty-field rule 1 alive); a wave at 1.75 keeps its Z5 cap",
   table.n === 30 && table.bad.length === 0 && table.extended >= 1 && table.above.floor === false && table.above.cap === table.above.z5, table);
 
+// ---- 1b. the floor wave's spawn schedule is a0a3845's: the rate the spawner really accumulates ----
+// a0a3845's waveSpawnRate (git show a0a3845:assets/js/core/20-constants.js, its mix from 30-content.js's length window;
+// a0a3845 had no WORDS waveTextLen) per sector / wave: [rate at 0 kills, kills = floor(quota / 2), the rate there]
+const LIVE_RATE = [[[0.653445, 4, 0.72605], [0.568421, 5, 0.631579], [0.446197, 6, 0.495775]], [[0.713472, 5, 0.792746], [0.6375, 6, 0.708333], [0.525938, 7, 0.584375]],
+  [[0.69, 6, 0.766667], [0.636923, 7, 0.707692], [0.552, 8, 0.613333]], [[0.792047, 7, 0.880052], [0.692308, 8, 0.769231], [0.581213, 9, 0.645793]],
+  [[0.762595, 7, 0.841679], [0.688017, 9, 0.764463], [0.599509, 10, 0.662949]], [[0.814737, 8, 0.905263], [0.744231, 9, 0.822571], [0.662568, 11, 0.736187]],
+  [[0.76239, 8, 0.842117], [0.713592, 10, 0.79288], [0.652016, 11, 0.721313]], [[0.760823, 9, 0.845359], [0.722628, 10, 0.799096], [0.67243, 12, 0.747144]],
+  [[0.699532, 9, 0.773167], [0.677541, 11, 0.752823], [0.644426, 12, 0.713165]], [[0.690945, 10, 0.767717], [0.676301, 12, 0.751445], [0.651646, 14, 0.724051]]];
+const rate = await P.g(({ LIVE_RATE }) => {
+  const g = window.game;
+  const keep = { li: g.levelIndex, wave: g.wave, wt: g.waveTuning, kills: g.waveKills, acc: g.spawnAcc, hungryT: g.hungryT, enemies: g.enemies };
+  // one spawner tick of 10 ms on an empty field with the empty-field timer held: spawnAcc grows by dt x the stream rate
+  const measure = (i, w, kills, tuning) => {
+    g.levelIndex = i; g.wave = w; g.waveTuning = Object.assign({}, tuning, { levelIndex: i, wave: w });
+    g.enemies = []; g.waveKills = kills; g.spawnAcc = 0; g.hungryT = -1e9;
+    g.tickSpawner(0.01, LEVELS[i]);
+    return g.spawnAcc / 0.01;
+  };
+  const bad = [];
+  let maxDev = 0, minWordsDev = Infinity;
+  const r6 = (x) => Math.round(x * 1e6) / 1e6;
+  try {
+    for (let i = 0; i < 10; i++) for (let w = 0; w < 3; w++) {
+      const t = g.pacePlan(i, w, 0, 1).tuning;
+      const [r0, h, rh] = LIVE_RATE[i][w];
+      const a = measure(i, w, 0, t), b = measure(i, w, h, t);
+      const dev = Math.max(Math.abs(a / r0 - 1), Math.abs(b / rh - 1));
+      maxDev = Math.max(maxDev, dev);
+      if (!(t.floor === true && dev < 1e-4)) bad.push({ S: i + 1, W: w + 1, floor: t.floor, rate: r6(a), live: r0, devPct: Math.round(dev * 1e4) / 100 });
+      const words = waveSpawnRate(LEVELS[i], w, 0, t.quota);   // WORDS' stream (cfg.waveTextLen), what a carried 1.0 wave gets
+      minWordsDev = Math.min(minWordsDev, Math.abs(words / r0 - 1));
+    }
+    // a 1.0 wave with 2 carried plates is not a floor wave: it keeps WORDS' stream (S3 W2: 6.2 % above a0a3845's)
+    const ct = paceApplyTuning({ levelIndex: 2, wave: 1, quota: 1, spawnMul: 1, maxEnemiesAdd: 0, speedMul: 1, hungryMinAlive: HUNGRY_MIN_ALIVE, cap: 26, pressureCap: pressureCap(LEVELS[2]) }, LEVELS[2], 1, 1, 2);
+    const carried = { floor: ct.floor, rate: r6(measure(2, 1, 0, ct)), words: r6(waveSpawnRate(LEVELS[2], 1, 0, ct.quota)), live: LIVE_RATE[2][1][0] };
+    return { bad, maxDevPct: Math.round(maxDev * 1e6) / 1e4, minWordsDevPct: Math.round(minWordsDev * 1e4) / 100, carried };
+  } finally {
+    g.levelIndex = keep.li; g.wave = keep.wave; g.waveTuning = keep.wt; g.waveKills = keep.kills; g.spawnAcc = keep.acc; g.hungryT = keep.hungryT; g.enemies = keep.enemies;
+  }
+}, { LIVE_RATE });
+P.check("1b. Z13: on all 30 floor waves the spawner accumulates a0a3845's stream rate (its waveSpawnRate at 0 kills and at half the quota, within 0.01 %; WORDS' waveTextLen mix differs from it by >= 0.03 % on every wave); a carried 1.0 wave keeps WORDS' rate",
+  rate.bad.length === 0 && rate.maxDevPct < 0.01 && rate.minWordsDevPct >= 0.03 && rate.carried.floor === false &&
+  Math.abs(rate.carried.rate / rate.carried.words - 1) < 1e-4 && rate.carried.rate > rate.carried.live * 1.05, rate);
+
 // ---- 2. a fresh pilot's S1 W1 runs as a floor wave ----
 const s1 = await P.g(() => { const g = window.game, t = g.waveTuningNow(), s = g.paceSnapshot(); return { level: g.levelIndex + 1, wave: g.wave, floor: t && t.floor, cap: t && t.cap, quota: g.waveQuota(), mul: s.state.applied && s.state.applied.mul, last: s.last }; });
 P.check("2. fresh save, Start: S1 W1 at paceMul 1.0 with no carry is a floor wave (waveTuning.floor, _paceLast.floor) with a0a3845's 22 s cap and quota 8",
