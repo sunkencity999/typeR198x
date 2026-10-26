@@ -11,7 +11,8 @@ This README describes the web build after the 2026 overhaul, the training update
 WPM, typo feedback, rank lines, the pilot profile and Flight log, the first-run flight check, everyday words and
 two-word targets aimed at weak keys, the Counter-Signal boss attack and Overdrive, a stream that follows the pilot's
 speed with timed-out waves, hull carry and Cadet pace, and the daily sortie, drill and endless drift) and its pace
-follow-up (release `20261025a`: the pace also counts how quickly the pilot finds the next target). Release steps
+follow-up (release `20261025a`: the pace also counts how quickly the pilot finds the next target, and a wave at the
+standard pace plays by the original wave rules). Release steps
 live in [DEPLOY.md](./DEPLOY.md);
 the play-test harness has its own [tools/playtest/README.md](./tools/playtest/README.md).
 
@@ -613,23 +614,48 @@ remixes are welcome.
 
 ### 2026-10 pace follow-up (release token `20261025a`)
 
+**Standard-pace waves play by the original rules again.** When the game has not sped the stream up (the standard
+pace, nothing carried over from a timed-out wave), a wave runs as it did before the pace existed: it lasts as long as
+the sector's table says, plates still flying when it ends stay in play for a few seconds (shoot them down or take the
+hit), and a wave without damage is a perfect wave, even when its time ran out. The stream-sized time limit, `WAVE
+TIMED OUT · N ESCAPED`, the escaping plates and the carry into the next wave are now only for sped-up waves (and for
+Cadet pace and the daily sortie), where they keep a fast pilot from being swamped.
+
+**The pace settles from your first targets.** The time you take to find the next target used to come from your
+Flight log until the run had timed ten of them. Now every one the run times moves the value a tenth of the way toward
+your own, so a slower day stored in the log (or another pilot on the same save) gives way sooner. Only a target change
+with another plate already on screen is timed, so a quiet first sector can still fly on the stored value.
+
 **The pace now also counts how quickly you find the next target.** Since `20261024b` the stream follows your hand
 speed, which only times the keys inside a word. A pilot who also takes a moment to spot each new plate could be sent
 more than they could clear: waves ran out of time with nothing missed (`WAVE TIMED OUT · N ESCAPED`) and the sector
 clock cut them short. The game now also measures how long you take to find your next target, from the moment a
 target ends (destroyed, let go or leaked) while another is on screen to the first correct key of your next lock
-(pauses over 1.5 s, boss fights and the flight check do not count). It uses this run's average after ten targets,
-else your Flight log's, else 300 ms, and the longer you take, the gentler the stream, most of all in the early
-sectors where targets are short. The stream still never drops below the standard pace on its own.
+(pauses over 1.5 s, boss fights and the flight check do not count). It uses this run's average from the tenth
+target, before that a blend with your Flight log's value (300 ms without one), and the longer you take, the gentler
+the stream, most of all in the early sectors where targets are short. The stream still never drops below the standard
+pace on its own.
 
-**A clean timeout slows the next wave.** If a wave runs out of time although nothing got past you, the next wave of
-that sector comes in one step slower than the one that timed out (never below the standard pace).
+**A clean timeout slows the next wave.** If a sped-up wave runs out of time although nothing got past you, the next
+wave of that sector comes in one step slower than the one that timed out (never below the standard pace).
+
+**Privacy.** The privacy policy (effective 26 October 2026) names the new stored value among the typing statistics:
+how long you usually take to find your next target.
 
 **Under the hood.** `32-typist.js` keeps the acquisition average (the lifetime value is `profile.acqEma` in the
-save, absent until a run has ten samples, held between 120 and 900 ms) and `42-pacing.js` paces on `L / (L / hand
-speed + acquisition)` with L the sector's mean target length in characters (lead ruling Z12). With a 300 ms
-acquisition the harness typists at 55 and 80 WPM now clear Sectors 2-3 with no sector-clock cut, no wave timed out
-without a leak and every PERFECT WAVE, as on `20261016a`; numbers in `tools/playtest/balance.md`.
+save, absent until a run has ten samples, held between 120 and 900 ms; before ten samples `typistAcquireMs()` returns
+(n x run average + (10 - n) x lifetime, else 300) / 10, lead ruling Z14) and `42-pacing.js` paces on `L / (L / hand
+speed + acquisition)` with L the sector's mean target length in characters (lead ruling Z12). A campaign wave at
+exactly paceMul 1.0 with no carry is a floor wave (`waveTuning.floor`, lead ruling Z13): the table quota, stream and
+cap of `20261016a`, ended by the cap whatever is on the field, PERFECT WAVE as there, its plates left in the drain; the
+empty-field spawn (0.1 s) and roll-in (10-30 px) of `20261024b` stay on at every pace, because `20261016a`'s spawner
+would put the 55 / 80 WPM harness typists' fresh Sector 1 back at 39-48 % idle. With a 300 ms acquisition the harness typists at 55 and 80 WPM
+clear Sectors 2-3 with no sector-clock cut, no wave timed out without a leak and every PERFECT WAVE, as on `20261016a`.
+The 35 WPM typist with that latency now flies every Sector 1-3 wave on the `20261016a` rule: no timeout and PERFECT
+WAVE in 39 of 40 Sector 2-3 cases (`20261016a` 31 of 32), but 3 of its 20 runs took damage from plates left at a
+Sector 3 wave's end (`20261016a` 0 of 16), and a returning fast pilot whose save holds a slow 900 ms still idles
+above 15 % in Sector 1 in most runs, because a sparse Sector 1 yields no sample to blend; both are open for the lead.
+Numbers in `tools/playtest/balance.md`.
 
 ### 2026-10 training update (release token `20261024b`, art token unchanged)
 
