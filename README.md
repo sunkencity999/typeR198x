@@ -652,17 +652,19 @@ how long you usually take to find your next target.
 absent until a run has ten samples, held between 120 and 900 ms; before ten samples `typistAcquireMs()` returns (n x
 run average + (10 - n) x lifetime, else 300) / 10, lead ruling Z14) and `42-pacing.js` paces on `L / (L / hand speed +
 acquisition)` with L the sector's mean target length in characters (lead ruling Z12). A campaign wave at exactly
-paceMul 1.0 with no carry is a floor wave (`waveTuning.floor`, lead ruling Z13): the table quota, stream and cap of
-`20261016a`, ended by the cap whatever is on the field, PERFECT WAVE as there, its plates left in the drain; the
+paceMul 1.0 with no carry is a floor wave (`waveTuning.floor`, lead ruling Z13): the table quota, spawn rate and cap
+of `20261016a`, ended by the cap whatever is on the field, PERFECT WAVE as there, its plates left in the drain; the
 empty-field spawn (0.1 s) and roll-in (10-30 px) of `20261024b` stay on at every pace, because `20261016a`'s spawner
-would put the 55 / 80 WPM harness typists' fresh Sector 1 back at 39-48 % idle. With a 300 ms acquisition the harness
-typists at 55 and 80 WPM clear Sectors 2-3 with no sector-clock cut, no wave timed out without a leak and every
-PERFECT WAVE, as on `20261016a`. The 35 WPM typist with that latency flies every Sector 2-3 wave and most Sector 1
-waves on the `20261016a` rule (a returning pilot's Sector 1 wave 1 runs at 1.35, and wave 3 sometimes steps to
-1.01-1.14; none of those timed out): no timeout and PERFECT WAVE in 39 of 40 Sector 2-3 cases (`20261016a` 31 of 32),
-but 3 of its 20 runs took damage from plates left at a Sector 3 wave's end (`20261016a` 0 of 16), and a returning fast
-pilot whose save holds a slow 900 ms still idles above 15 % in Sector 1 in most runs, because a sparse Sector 1 yields
-no sample to blend; both are open for the lead. Numbers in `tools/playtest/balance.md`.
+would put the 55 / 80 WPM harness typists' fresh Sector 1 back above lead ruling Q1's 30 % idle bound (21-48 %, 10 of
+12 runs over it). With a 300 ms acquisition the harness typists at 55 and 80 WPM clear Sectors 2-3 with no
+sector-clock cut, no wave timed out without a leak and every PERFECT WAVE, as on `20261016a`. The 35 WPM typist with
+that latency flies every Sector 2-3 wave and most Sector 1 waves on the `20261016a` rule (a returning pilot's Sector 1
+wave 1 runs at 1.35, and wave 3 sometimes steps to 1.01-1.14; none of those timed out): no timeout and PERFECT WAVE in
+27 of 28 Sector 2-3 cases (`20261016a` 39 of 40), but 1 of its 14 runs took damage from plates left at a Sector 3
+wave's end (`20261016a` 0 of 20), and a returning fast pilot whose save holds a slow 900 ms still idles above 15 % in
+Sector 1 in most runs, because the run's first wave is paced from the stored value alone (no sample yet) and a
+one-plate Sector 1 yields few samples to blend; both are open for the lead, with two smaller questions (Cadet waves,
+the privacy policy's purposes). Numbers in `tools/playtest/balance.md`.
 
 ### 2026-10 training update (release token `20261024b`, art token unchanged)
 

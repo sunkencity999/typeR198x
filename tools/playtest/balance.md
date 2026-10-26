@@ -9,17 +9,115 @@ sector-10 clear) as the end of the sector and idled there until its wall cap whi
 itself ran at 60 fps / 0.97 during those runs (checked separately: sector 10 with an 80 WPM typist, `out/fpstype`). The
 final probe stops on `victory` and paces the typist by `game.playClock`, so its WPM is honest at any frame rate.
 
+## Training update follow-up 2, verification of `b6a00e3`: the floor spawn rate and four questions for the lead
+
+Measured on 2026-10-26 (03:32-04:48 PDT) on `wt/pace-acq` with the game code of `a519a4a` (`b6a00e3` plus the floor
+spawn-rate fix below; the later commits touch copy, docs and the harness only), headless Chrome, DPR 1, 1440 x 900, at
+most two harness browsers at a time, every typist paced by `game.playClock`. Every run kept play / wall 0.93-0.97 (a
+seeded `t-pace-balance` S1 reads 1.00-1.03, its wall clock starting after the run start), so **no run was discarded**
+(threshold 0.9; 38 balance runs and 2 b10 reproduction runs, 0 re-run). Live `a0a3845` comparison: the 20 runs of 35 /
+.90 with `--acquire-ms 300` already measured on live exports (`ZL-` 6 in `out/b10/`, the review's `V-L-` 6, the
+verifiers' `VB-L-` 6 and `F2-L-` 2), none re-run. JSON: `out/b10/FX-*.json`, `out/t-pace-balance/*-fx1.json`,
+`*-fx2.json`, `*-acq300-fx1.json`, `*-acq300-fx2.json`, `FX-Z14-*.json`; the verifiers' runs on `b6a00e3` that the
+open questions below cite are copied to `out/verify-b6a00e3/f1/`, `f2/`, `f3/` (their exports were in the session
+scratchpad).
+
+**Fixed within Z12-Z15 as written** (each reproduced first, one commit each):
+- **The floor wave's spawn rate (verification VC-1).** Z13 asks for a0a3845's spawn schedule on floor waves. Their
+  quota, cap and wave end were a0a3845's, but the spawner ran at WORDS' rate: `waveCharsPerEnemy` reads
+  `cfg.waveTextLen` (lead ruling R30, attached by `lexiconAttachLevel`), which a0a3845 did not have, so a floor wave
+  sent -6.3 .. +10.4 % plates per second against live (S1 W1 -2.6 %, S1 W2 -3.6 %, S2 W3 +3.9 %, S3 W1 / W2 / W3
+  +3.5 / +6.2 / +4.4 %, S10 W2 +10.4 %; all other inputs of the rate, letter share, length window, `spawnRate`,
+  `WAVE_SPAWN_MUL`, `WAVE_RAMP`, quota, are a0a3845's). `tickSpawner` now asks `waveSpawnRate(..., windowMix)` for the
+  length-window mix alone when `waveTuning.floor` is set (`a519a4a`): every floor wave spawns at a0a3845's rate, so
+  with WORDS' plates its characters per second differ from the target by the content, which is where Z13 (the later,
+  specific ruling) overrides R30's "delivered cps equal the target on all 30 waves" for floor waves; every other wave,
+  Z12's mean length L and the Z5 cap keep WORDS' mix. `t-pace-floor` 1b measures what the spawner accumulates on all
+  30 floor waves against a0a3845's `waveSpawnRate` table (0 kills and half the quota, within 0.01 %; it failed on
+  `b6a00e3`) and that a carried 1.0 wave keeps WORDS' rate. On the S3 W3 stream of the 35 / .90 latency typist:
+  2.40 cps here (12 b10 runs), 2.54 on `b6a00e3` (16), 2.25 on live (6), the rest being heavier WORDS plates.
+- **b10 lost a returning pilot's S1 W1 (VC-3).** The seeded save's S1 W1 starts while `startRun` still waits 2.5 s
+  for a story card that never shows, and b10 cleared its recorders at the first sector's loop top, after that start
+  (`perWave[0]` null in every seeded b10 run). Fixed in `c781c98`; b10 now checks that every wave of each cleared
+  sector is recorded and notes which waves ran at the floor. It shows the 35 / .90 seeded fixture's S1 W1 at 1.35
+  (profile 32 WPM, the 300 ms default: not a floor wave) in both seeded runs.
+- Copy: the help manual's standard-pace and perfect-wave sentences now name the carried 1.0 wave as a D3 / Z5 case
+  (VC-2 / DOC-3, `t-pace-floor` 9); the README's architecture paragraph and module map name the floor wave's cap rule
+  (DOC-1); the README no longer says a floor wave "runs as it did before the pace existed" but that it lasts and ends
+  so, new plates still rolling in sooner (DOC-4); the Z14 changelog paragraph describes the blend as it behaves (DOC-5);
+  "every wave of this typist runs at the floor" is restated in this file and the README (DOC-2 / VC-3).
+
+### Z13 target on this tree: 35 / .90 with `--acquire-ms 300`, S1-3 (b10 10 fresh + 2 seeded, latency matrix p35 x 2)
+
+| run set | runs | runs with wave damage | 0-leak timeouts | PERFECT WAVE 3 in S2 / S3 | clock cuts S2 / S3 | deaths | boss damage (runs) | floor cap ends (plates up) | waves at the floor | to boss S1 / S2 / S3 s | ranks S1-S3 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| this tree, b10 fresh `FX-w35-acq-r1..10` | 10 | **1** (r1, 22) | 0 | 19 of 20 (r10 S3: 2, clock cut) | 1 of 20 | 0 | 1 (14) | 12 (1-5 up) | 89 of 90 (r2 S1 W3 1.04) | 40-54 / 55-62 / 61-83 | A / B |
+| this tree, b10 seeded `FX-w35-seed-acq-r1..2` | 2 | 0 | 0 | 4 of 4 | 0 of 4 | 0 | 0 | 3 (1-5 up) | 16 of 18 (S1 W1 1.35 x2) | 42-47 / 58-63 / 75-79 | BAB AAB |
+| this tree, latency matrix p35 `w35-fresh-acq300-fx1 / fx2` | 2 | 0 | 0 | 4 of 4 | 0 of 4 | 0 | 0 | 2 (fx2 S3) | 18 of 18 | 47-55 / 57-62 / 74-78 | BBB BAA |
+| **this tree, all** | **14** | **1** | **0** | **27 of 28** | **1 of 28** | **0** | 1 | 17 | 123 of 126 | | |
+| `b6a00e3` (the section below, the verifiers' `VB-H-` 10 and `F2-H-` 2) | 32 | 4 | 0 | 62 of 64 | 0 of 64 | 0 | 0 | 42 | (below) | 38-53 / 47-66 / 62-83 | A / B |
+| live `a0a3845` (`ZL-`, `V-L-`, `VB-L-`, `F2-L-`) | 20 | 0 | 0 (none judged) | 39 of 40 | 1 of 40 | 0 | 8 | (59 cap ends) | | 56-63 / 61-74 / 76-83 | B / C |
+
+**Z13's targets on this tree:** 0-leak timeouts **met** (0 in 14 runs, as live); PERFECT WAVE in S2 / S3 **met** (27 of
+28 sectors at 3, live 39 of 40; the one 2 is a floor S3 whose wave 3 the sector clock cut after a W2 cap end, as live
+allows); deaths 0; S1-3 wave damage **not met** under the strict reading: 1 of 14 runs against live's 0 of 20 (Fisher's
+exact p ~ .41; `b6a00e3` 4 of 32). It is the same event as before: r1's S3 W3 reached its 26 s cap with 5 plates up
+(16 plates at 4.19 characters a plate) and one of them reached the ship in the 6 s
+drain (22 damage, after PERFECT WAVE was paid). r9 and seeded r1 also ended S3 W3 with 5 up and did not leak. With the
+spawn rate now a0a3845's, what still differs from live in a floor wave is the content and D2's 0.1 s empty-field spawn
+and 10-30 px roll-in, whose literal a0a3845 values break Q1 (question F2 below). Which waves ran at the floor: every
+S2 / S3 wave of every run; S1 W3 stepped to 1.04 once (fresh r2) and the seeded fixture's S1 W1 always runs at 1.35;
+none of those three timed out.
+
+### Q1 / R26 matrix without latency (`t-pace-balance`, the five profiles, rounds fx1 / fx2: 20 pass / 0 fail each)
+
+| profile | S1 idle fx1 / fx2 (target) | S2 idle | S3 idle | longest idle gap | to S1 boss | deaths / damage | ranks fx1; fx2 | paceMul S1 (fx1; fx2) | `b6a00e3` z1 / z2 S1 |
+|---|---|---|---|---|---|---|---|---|---|
+| 35 / .90 fresh | 10 / 12 % (not harder) | 13 / 10 % | 3 / 2 % | <= 0.59 s | 43 / 42 s | 0 / 0 | A A B; A B A | 1/1/1.35; 1/1/1 | 15 / 12 % |
+| 55 / .93 fresh | 23 / 14 % (<= 30) | 9 / 13 % | 9 / 11 % | <= 0.55 s | 31 / 37 s | 0 / 0 | A S A; A A A | 1/1/1; 1/1/1.35 | 16 / 13 % |
+| 80 / .97 fresh | 29 / 28 % (<= 30) | 11 / 5 % | 7 / 4 % | <= 0.57 s | 29 / 29 s | 0 / 0 | S S S; S S S | 1/1/1; 1/1/1 | 27 / 28 % |
+| 55 / .93 seeded | 7 / 7 % (<= 15) | 3 / 5 % | 12 / 9 % | <= 0.55 s | 39 / 43 s | 0 / 0 | A S A; S A S | 1.35/1.7/1.99; 1.35/1.7/1.9 | 7 / 3 % |
+| 80 / .97 seeded | 13 / 11 % (<= 15) | 8 / 7 % | 4 / 8 % | <= 0.47 s | 32 / 33 s | 0 / 0 | S S S; S S S | 1.35/1.7/2.05 x2 | 10 / 13 % |
+
+Every Q1 / R26 target holds in both rounds; no wave timed out, no damage. 55 fresh fx1's 23 % is a run whose S1 W3
+stayed at the floor (the 20-interval run gate had not opened at its start); `b6a00e3`'s runs with all three S1 waves at
+the floor read 24-25 % (the verifiers' `VB-T-w55-fresh-r1..4`), so it is the gate, not the spawn rate. The 80 fresh S1
+margin stays 28-29 % against 30 %, as on `b6a00e3` (17-30 % in 6 runs).
+
+### Z12 targets with `--acquire-ms 300` (latency matrix rounds acq300-fx1 / fx2: 22 pass / 0 fail each)
+
+| profile | S2-3 idle fx1 / fx2 | S2-3 waves timed out with 0 leaks | clock cuts S2-3 | PERFECT WAVE S2-3 | deaths | paceMul S2 · S3 |
+|---|---|---|---|---|---|---|
+| 55 / .93 fresh | 7 / 4 %, 7 / 2 % | 0 | 0 of 4 | 3 3 3 3 | 0 | 1-1.05 · 1 (floor) |
+| 55 / .93 seeded | 11 / 5 %, 6 / 2 % | 0 | 0 of 4 | 3 3 3 3 | 0 | 1.02-1.09 · 1 (floor) |
+| 80 / .97 fresh | 2 / 8 %, 9 / 1 % | 0 | 0 of 4 | 3 3 3 3 | 0 | 1.31-1.41 · 1.11-1.15 |
+| 80 / .97 seeded | 3 / 9 %, 1 / 6 % | 0 | 0 of 4 | 3 3 3 3 | 0 | 1.3-1.37 · 1.12-1.16 |
+| 35 / .90 fresh | 4 / 1 %, 3 / 3 % | 0 | 0 of 4 | 3 3 3 3 | 0 | 1 (floor) · 1 (floor) |
+
+Every Z12 target for 55 / 80 holds in these 8 runs: no S2 / S3 wave timed out with 0 leaks, no clock cut, S2-3 idle
+1-11 %, 0 deaths, PERFECT WAVE 3 everywhere.
+
+### Z14 target on this tree (stored `profile.acqEma` 900, seeded fixture, no latency; `FX-Z14-*`, 3 + 3 runs)
+
+| profile | run | S1 idle (<= 15 %) | S2 idle (<= 15 %) | S3 idle | acq PACE used S1 W1/W2/W3 | paceMul S1 | pass |
+|---|---|---|---|---|---|---|---|
+| 55 / .93 | r1 / r2 / r3 | **22 / 29 / 22 %** | **18 / 17 / 17 %** | 11 / 11 / 13 % | 900/780/780, 900/900/900, 900/774/666 | 1.08-1.18, 1.08 x3, 1.08-1.29 | 0 of 3 |
+| 80 / .97 | r1 / r2 / r3 | **21 / 25** / 15 % | 5 / 9 / 8 % | 4 / 7 / 6 % | 900/900/763, 900/900/900, 900/643/388 | 1.23-1.38, 1.22-1.23, 1.23-1.9 | 1 of 3 |
+
+Not met, as on `b6a00e3` (no Z14 code changed; question F1 below). Every run's S1 W1 used the stored 900 exactly.
+
 ## Training update follow-up 2: floor waves and a stale stored acquisition time (lead rulings Z13 / Z14, `wt/pace-acq`)
 
-Measured on 2026-10-25 (20:27-22:55 PDT) on `wt/pace-acq` with the Z13 / Z14 / Z15 commits on `d28653f`, headless
-Chrome, DPR 1, 1440 x 900, at most two harness browsers at a time, every typist paced by `game.playClock`. Every run
-kept play / wall clock 0.93-0.98 (the S1 row of a seeded `t-pace-balance` run reads 1.01-1.02 because its wall clock
-starts after the run start), so **no run was discarded** (threshold 0.9; the queue re-ran nothing). Comparison sets:
-live `a0a3845` = this branch's 4 `L-` runs and the review's 6 `V-L-` runs (the Z12 exports) plus 6 new `ZL-` runs
-with this branch's `b10.mjs` in a live export's `probes-t/`; `d28653f` = the 24 runs of "this code, all" in the Z12
-section below plus 3 + 3 new stored-900 runs (`D-Z14-*`, this probe in a `d28653f` export). JSON: `out/b10/Z-*.json`,
-`ZL-*.json`, `ZX-*.json`, `out/t-pace-balance/*-z1.json`, `*-z2.json`, `*-acq300-z1.json`, `*-acq300-z2.json`,
-`Z14-*.json`, `D-Z14-*.json`, `X-*.json` (the export runs copied in; the exports were removed).
+(The numbers of this section are `b6a00e3`'s code, whose floor waves still spawned at WORDS' rate: see the section
+above.) Measured on 2026-10-25 (20:27-22:55 PDT) on `wt/pace-acq` with the Z13 / Z14 / Z15 commits on `d28653f`,
+headless Chrome, DPR 1, 1440 x 900, at most two harness browsers at a time, every typist paced by `game.playClock`.
+Every run kept play / wall clock 0.93-0.98 (the S1 row of a seeded `t-pace-balance` run reads 1.01-1.02 because its
+wall clock starts after the run start), so **no run was discarded** (threshold 0.9; the queue re-ran nothing).
+Comparison sets: live `a0a3845` = this branch's 4 `L-` runs and the review's 6 `V-L-` runs (the Z12 exports) plus 6
+new `ZL-` runs with this branch's `b10.mjs` in a live export's `probes-t/`; `d28653f` = the 24 runs of "this code,
+all" in the Z12 section below plus 3 + 3 new stored-900 runs (`D-Z14-*`, this probe in a `d28653f` export). JSON:
+`out/b10/Z-*.json`, `ZL-*.json`, `ZX-*.json`, `out/t-pace-balance/*-z1.json`, `*-z2.json`, `*-acq300-z1.json`,
+`*-acq300-z2.json`, `Z14-*.json`, `D-Z14-*.json`, `X-*.json` (the export runs copied in; the exports were removed).
 
 **What live `a0a3845` does with a wave** (`git show a0a3845:assets/js/game/40-combat.js`, `core/20-constants.js`):
 - start, `beginWave` 227-242: waveKills / waveT / waveDmg 0, hungryT 0, spawnAcc = SPAWN_ACC_PRIME .85, phase spawn,
@@ -39,15 +137,16 @@ section below plus 3 + 3 new stored-900 runs (`D-Z14-*`, this probe in a `d28653
 
 **Z13 on this branch.** A campaign wave whose paceMul after the step rule (and any back-off, or a probe pin) is
 exactly 1.0 with no escaped carry is a floor wave (`waveTuning.floor`, `42-pacing.js`): the table quota, stream and
-cap (no Z5 extension), the cap ends it whatever is on the field (`40-combat.js`), PERFECT WAVE and the sting as
-live, its plates stay in the drain as live; no WAVE TIMED OUT, escape, carry or back-off. A replayed wave (Continue)
-stays a floor wave unless its stored quota holds a carry. Waves above 1.0, carried waves, Cadet (0.75) and the modes
-keep D3 / Z5 / Z12. **One interpretation, not a literal copy of live:** D2's stream constants (the 0.1 s empty-field
-spawn, the 10-30 px roll-in, both in `tickSpawner` / `spawnEnemy`) stay on at the floor. With a0a3845's .5 s / 10-90 px
-on floor waves (an experiment on an export, not shipped) a fresh pilot's S1, which is all floor waves until the
-20-interval run gate, read **43 / 48 % idle at 55 WPM and 39 / 40 % at 80** (`X-*`, two S1 runs each; this branch
-13-16 % and 27-28 %): Q1's fresh bound is 30 %. Probes: `t-pace-floor` (new, 12 checks), `t-pace-stakes` above the
-floor (17 / 17).
+cap (no Z5 extension), the cap ends it whatever is on the field (`40-combat.js`), PERFECT WAVE and the sting as live,
+its plates stay in the drain as live; no WAVE TIMED OUT, escape, carry or back-off. A replayed wave (Continue) stays a
+floor wave unless its stored quota holds a carry. Waves above 1.0, carried waves, Cadet (0.75) and the modes keep D3 /
+Z5 / Z12. **One interpretation, not a literal copy of live:** D2's stream constants (the 0.1 s empty-field spawn, the
+10-30 px roll-in, both in `tickSpawner` / `spawnEnemy`) stay on at the floor (and, on this code, WORDS' spawn rate,
+which the verification found and `a519a4a` replaced with a0a3845's: section above; the spawner constants are question
+F2 there). With a0a3845's .5 s / 10-90 px on floor waves (an experiment on an export, not shipped) a fresh pilot's S1,
+which is all floor waves until the 20-interval run gate, read **43 / 48 % idle at 55 WPM and 39 / 40 % at 80** (`X-*`,
+two S1 runs each; this branch 13-16 % and 27-28 %): Q1's fresh bound is 30 %. Probes: `t-pace-floor` (new, 12 checks),
+`t-pace-stakes` above the floor (17 / 17).
 
 ### Z13 target: 35 / .90 with `--acquire-ms 300`, S1-3 (b10, 16 fresh + 2 seeded runs, and the latency matrix's 2)
 
@@ -74,15 +173,16 @@ heaviest S3 W3 measured; z1: 5 up; r13: 5 up after one leak inside the wave, hen
 plates reached the ship during the 6 s drain, as a0a3845's drain allows (2, 1 and 2 drain leaks; 50, 26 and 68
 damage). Live has the same cap ends with as many plates up (ZL r5: 6 up, r6: 5 up, both full 6 s drains) and none of
 its 16 runs leaked. What still differs in a floor wave: the content (WORDS' S3 W3 plates average 4.0 characters here,
-3.8 on live; the stream is calibrated to the same characters per second) and D2's spawner: with a 10-30 px roll-in
-each plate reaches the ship ~.3 s (up to .65 s) sooner after its spawn than with 10-90 px, while the cap and the 6 s
-drain run on the spawn clock, so a leftover has a little less drain before it arrives. The 4 experiment runs with
-live's spawner had no wave damage either (live spawner 0 of 20 runs, this branch 3 of 20), too few to separate that
-from chance. Next to live the pilot reaches each boss sooner (S1 10-15 s, S2 5-10 s) and ranks about one letter
-higher; next to `d28653f` the 0-leak timeouts (6) and the lost PERFECT WAVEs (8 sectors) are gone. For the lead: (a)
-accept (live's rule, variance); (b) floor waves also take a0a3845's 10-90 px roll-in (untested against the fresh S1
-idle bound: S1's plates are slow, so about +.4 s per refill of an empty field); (c) the full a0a3845 spawner at the
-floor (measured above: it breaks Q1's fresh S1 idle bound).
+3.8 on live), the spawn rate (WORDS' `waveTextLen` mix, S3 W3 +4.4 % plates per second over a0a3845's; not "the same
+characters per second" as this sentence first said: fixed in `a519a4a`) and D2's spawner: with a 10-30 px roll-in each
+plate reaches the ship ~.3 s (up to .65 s) sooner after its spawn than with 10-90 px, while the cap and the 6 s drain
+run on the spawn clock, so a leftover has a little less drain before it arrives. The 4 experiment runs with live's
+spawner had no wave damage either (live spawner 0 of 20 runs, this branch 3 of 20), too few to separate that from
+chance. Next to live the pilot reaches each boss sooner (S1 10-15 s, S2 5-10 s) and ranks about one letter higher;
+next to `d28653f` the 0-leak timeouts (6) and the lost PERFECT WAVEs (8 sectors) are gone. For the lead: (a) accept
+(live's rule, variance); (b) floor waves also take a0a3845's 10-90 px roll-in (untested against the fresh S1 idle
+bound: S1's plates are slow, so about +.4 s per refill of an empty field); (c) the full a0a3845 spawner at the floor
+(measured above: it breaks Q1's fresh S1 idle bound).
 
 ### Z14 target: stored `profile.acqEma` 900, no latency, seeded R26 fixture (`t-pace-balance --seed-profile auto --seed-acq 900`)
 
@@ -104,14 +204,15 @@ floor (measured above: it breaks Q1's fresh S1 idle bound).
 **Z14 is implemented as ruled and its target is not met:** the first three runs of each profile pass 1 of 3 (55: r2;
 80: r2), all five 2 of 5 and 1 of 5 (`d28653f`: 0 of 3 and 1 of 3; the review's runs of that rule 1 of 4 and 0 of 2).
 The blend works whenever samples arrive (55 r4: S1 W2 426 ms after five or six samples, where the lifetime value alone
-would still read ~600-630;
-`t-measure-api` 9d, `t-measure-profile` 16), but in the failing runs S1 produced **no sample at all** for two or
-three waves (the PACE value stays exactly 900; one sample under 900 would already lower it): at a stored 900 the
-returning pilot's S1 runs at paceMul 1.08 (55) / 1.23 (80), under 1.35, so the field holds one plate at a time and a
-kill never leaves another lockable target up, which is what the unchanged sampling rule needs. With n = 0 the blend is
-the lifetime value, so the run stays at 900 until S2 brings the first samples. The lever the ruling did not take is
-the review's option (2): also sample the spawn-to-first-key gap when a plate arrives on an empty field (or blend
-toward 300 rather than the stored value while n = 0); a lead decision.
+would still read ~600-630; `t-measure-api` 9d, `t-measure-profile` 16), but in the failing runs S1 produced **no
+sample at all** for two or three waves (the PACE value stays exactly 900; one sample under 900 would already lower
+it): at a stored 900 the returning pilot's S1 runs at paceMul 1.08 (55) / 1.23 (80), under 1.35, so the field holds
+one plate at a time and a kill never leaves another lockable target up, which is what the unchanged sampling rule
+needs. With n = 0 the blend is the lifetime value, so the run stays at 900 until S2 brings the first samples. The
+lever the ruling did not take is the review's option (2): also sample the spawn-to-first-key gap when a plate arrives
+on an empty field (or blend toward 300 rather than the stored value while n = 0); a lead decision. The verification
+adds that option (2) alone cannot change S1 W1, whose pace is computed at its start with n = 0 (question F1 in the
+section above).
 
 ### Q1 / R26 matrix without latency (`t-pace-balance`, the five profiles, rounds z1 / z2: 20 pass / 0 fail each)
 
