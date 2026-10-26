@@ -317,8 +317,9 @@ Extra one-off scripts live in `probes/` (shipped) or `out/` (ignored). They can 
   `waveTextLen`, while a carried 1.0 wave keeps WORDS' rate; a fresh S1 W1; at the cap with plates up it ends into the drain with the clear sting and PERFECT
   WAVE for no damage and a kill, the plates stay and can be typed or leak and hurt, the 6 s drain end detonates the
   rest; an empty field still ends it; no `WAVE TIMED OUT`, no escape, no carry, no back-off; the sector clock cutting
-  a floor wave-3 drain), the waves that keep D3 / Z5 (a carried 1.0 wave, a pin at 1.1, Cadet, the Daily Sortie) and
-  Continue (a replayed floor wave stays one, a replayed carried wave does not).
+  a floor wave-3 drain), the waves that keep D3 / Z5 (a carried 1.0 wave, a pin at 1.1, Cadet, the Daily Sortie),
+  Continue (a replayed floor wave stays one, a replayed carried wave does not) and the help manual naming the carried
+  wave among the D3 / Z5 cases (check 9).
 - `probes/t-pace-hull.mjs` — S1-3 refill, S4 220/500 -> S5 432/600 with the card / Level Complete copy, flawless
   stays full, Retry refills, quit at Level Complete + Continue keeps the carried hull and shows the line once, legacy
   fixtures, and the `PACE x2.0` results chip with its announcement (none at the table pace).

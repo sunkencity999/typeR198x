@@ -251,5 +251,18 @@ if (daily.ok) {
   await P.g(() => window.game.stopToMenu(true));
 } else P.note("8. Daily Sortie", `not started: ${JSON.stringify(daily)}`);
 
+// ---- 9. the help manual says which waves are floor waves: a 1.0 wave that carries escaped plates is not one ----
+const help = await P.g(() => {
+  const li = [...document.querySelectorAll("#helpModal li")].map((x) => x.textContent.replace(/\s+/g, " "));
+  return { perfect: li.find((t) => /A perfect wave is a wave without damage/.test(t)) || "", limit: li.find((t) => /^In a campaign sector at the standard pace/.test(t)) || "" };
+});
+const perfectRule = (help.perfect.match(/A perfect wave is a wave without damage;[^.]*\./) || [""])[0];
+const [floorSentence = "", stakesSentence = ""] = help.limit.split(/(?<=\.) (?=When )/);
+P.check("9. help manual (Z13 as check 6 plays it): the standard-pace wave that ends at its time limit is one with nothing carried over, and the perfect-wave quota rule and the escape rule both name the wave that carries escaped targets (with the sped-up pace, Cadet and the daily sortie)",
+  /with nothing carried over from a timed-out wave, a wave ends at its time limit/.test(floorSentence) &&
+  /carries targets escaped/.test(perfectRule) && /sped the stream up/.test(perfectRule) && /Cadet/.test(perfectRule) && /daily sortie/.test(perfectRule) &&
+  /carries escaped targets/.test(stakesSentence) && /sped the stream up/.test(stakesSentence) && /Cadet/.test(stakesSentence) && /daily sortie/.test(stakesSentence) && /WAVE TIMED OUT/.test(stakesSentence),
+  { perfectRule, floorSentence, stakesSentence: stakesSentence.slice(0, 220) });
+
 errorsCheck(P);
 await P.finish();
