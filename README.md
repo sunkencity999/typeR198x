@@ -151,7 +151,10 @@ timed-out wave's pace, floor 1.0), adds `min(3, round(2 (paceMul - 1)))` to the 
 plate speed, and from paceMul 1.35 tops an emptying field up to two plates. An empty field spawns after 0.1 s
 (`HUNGRY_SPAWN_S`) and new plates roll in 10-30 px off-screen (`SPAWN_ROLLIN_PX`). A wave's cap is `max(table cap,
 1.25 x the stream's delivery time for the paced quota + 4 s)` (`paceWaveCap`, lead ruling Z5) and ends the wave only
-while plates are alive; an empty field lifts it and the wave ends by quota.
+while plates are alive; an empty field lifts it and the wave ends by quota. A campaign wave at exactly paceMul 1.0 with
+no carry is a floor wave (`waveTuning.floor`, lead ruling Z13): it keeps the table cap and `20261016a`'s spawn rate,
+and its cap ends it whatever is on the field (plates still up stay in the drain), with no timeout, escape, carry or
+back-off.
 
 Every results card stamps a rank from `rankFor(accPct, wpm, hpPts, level)`: accuracy 50 %, speed 30 %, hull 20 %
 (`RANK` in 20-constants.js, thresholds S 0.90 / A 0.75 / B 0.55 / C 0.35, D below). Speed is hand speed (below) and
@@ -238,7 +241,7 @@ Module map, in `index.html` load order:
 | `assets/js/game/20-run.js` | Run and sector lifecycle, checkpoints, `saveRun`, level complete / game over / victory |
 | `assets/js/game/30-input.js` | Keydown routing, `handleTyped`, lock rules (release, three-miss loss), scoring hooks |
 | `assets/js/game/32-typist.js` | Hand speed (qualifying intervals, live / window / sector / run / lifetime), per-key and bigram profile (`save.profile`), weak keys, sessions and bests, the typo pair / gun pop, HUD ACC / WPM providers, rank line / WEAK SIGNAL / Game Over cause, Flight log, goal line (MEASURE) |
-| `assets/js/game/40-combat.js` | Spawning, lanes, waves (a wave's cap ends it only with plates alive) and approach, kills, powerups, damage, `update(dt)` |
+| `assets/js/game/40-combat.js` | Spawning, lanes, waves (a Z5 cap ends a paced wave only with plates alive; a floor wave's table cap always ends it) and approach, kills, powerups, damage, `update(dt)` |
 | `assets/js/game/42-pacing.js` | Pace controller (`paceMul` per wave from MEASURE's speed and acquisition time into `waveTuning`), floor waves (paceMul 1.0, no carry) on the table's wave rule, perfect wave by quota, computed wave caps, timed-out waves (the escaping plates) and their quota carry, hull carry from sector 4, the Cadet assist and the `diff()` row (PACE) |
 | `assets/js/game/45-feedback.js` | Banner system (sector, wave, boss intro/clear, callouts) and score floaters |
 | `assets/js/game/50-boss.js` | Boss v2: phases, minions, intro and finale; Counter-Signal (surge cadence, `surgeWindow` from the pilot's speed, telegraph, fail reset, counter, DOM charge bar) (ARCADE) |
