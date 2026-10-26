@@ -106,6 +106,29 @@ Every Z12 target for 55 / 80 holds in these 8 runs: no S2 / S3 wave timed out wi
 
 Not met, as on `b6a00e3` (no Z14 code changed; question F1 below). Every run's S1 W1 used the stored 900 exactly.
 
+## Open for the lead: verification findings on `b6a00e3` that need a ruling (code left as ruled)
+
+### F1 (medium): Z14's target cannot be met for S1 W1 under the rule as written
+
+Pace is computed once per wave, at `waveWillStart` (`42-pacing.js` `paceOnWaveWillStart`). At the start of a run's
+S1 W1 the run has 0 acquisition samples, so `typistAcquireMs()` returns the stored value exactly (Z14: "with n = 0,
+lifetime"), for any implementation of the ruling. At a stored 900 ms the returning 55 / 80 pilot's S1 W1 runs at
+paceMul 1.08 / 1.23, under the 1.35 empty-field top-up to two plates, so the field holds one plate at a time, and the
+unchanged sampling rule (a sample only when another target is up at the target change) gets none: S1 W2 / W3 often
+stay at 900 with n = 0 too, and W1 alone is 24-58 % of S1's idle (the verifier's per-wave instrumented runs). Without
+a stored value the same fixture runs W1 at 1.35 and S1 reads 5-13 % idle (`VB-T-w55-seeded-r1..4`,
+`VB-T-w80-seeded-r1..4`). Totals of the Z14 target (3 of 3 required) on `b6a00e3`: 55 passed 4 of 11, 80 passed 1 of
+11 (implementer 5 + 5, verifier 3 + 3, skeptic 3 + 3); on this tree 0 of 3 and 1 of 3. Within the rules: the balance
+knobs at their spec-pace 14.3 limits (`hungryMin2AtMul` 1.3, roll-in 10-20 px) still miss (55 1 of 3, 80 2 of 3:
+`F-B-*`), because 1.3 does not reach 1.08 / 1.23; sampling a spawn on an empty field (the review's option 2) cannot
+change W1, whose pace is fixed before any sample. Counterfactual (not shipped): 300 ms while n = 0, Z14's blend from
+the first sample on: 6 of 6 pass (55 S1 12 / 7 / 6 %, 80 S1 14 / 8 / 9 %, every S2 / S3 <= 12 %, 0 damage, W1 at 1.35,
+samples by W2: `F-C-*`); the rest of the matrix was not re-run with it. Options: (a) a value for n = 0 that the stored
+number cannot dominate (300, or min(lifetime, 300 + k)), which changes Z14's "n = 0: lifetime" clause; (b) restate
+Z14's S1 bound to exclude S1 W1 (or S1); (c) accept the miss (S1 / S2 idle only, no damage or death, recovered by S3).
+Files: `out/verify-b6a00e3/f1/` (`F-A-*` the rule as ruled, `F-B-*` the knobs, `F-C-*` the counterfactual, `VB-Z14-*`,
+`VB-T-*-seeded-*`).
+
 ## Training update follow-up 2: floor waves and a stale stored acquisition time (lead rulings Z13 / Z14, `wt/pace-acq`)
 
 (The numbers of this section are `b6a00e3`'s code, whose floor waves still spawned at WORDS' rate: see the section
