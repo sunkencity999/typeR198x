@@ -627,9 +627,10 @@ stream-sized time limit, `WAVE TIMED OUT · N ESCAPED`, the escaping plates and 
 only for sped-up waves (and for Cadet pace and the daily sortie), where they keep a fast pilot from being swamped.
 
 **The pace settles from your first targets.** The time you take to find the next target used to come from your
-Flight log until the run had timed ten of them. Now every one the run times moves the value a tenth of the way toward
-your own, so a slower day stored in the log (or another pilot on the same save) gives way sooner. Only a target change
-with another plate already on screen is timed, so a quiet first sector can still fly on the stored value.
+Flight log's stored value (from earlier runs on this device) until the run had timed ten targets. Now each target the
+run times shifts the value toward this run's own time, so after about five it is mostly yours and a slower stored
+value (or another pilot on the same save) gives way sooner. The run's first wave still starts on the stored value,
+and only a target change with another plate already on screen is timed, so a quiet first sector can still fly on it.
 
 **The pace now also counts how quickly you find the next target.** Since `20261024b` the stream follows your hand
 speed, which only times the keys inside a word. A pilot who also takes a moment to spot each new plate could be sent
