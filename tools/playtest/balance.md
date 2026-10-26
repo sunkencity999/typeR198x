@@ -163,6 +163,19 @@ cap, PERFECT WAVE at the cap, no escape or carry), a change to Z13's "exactly 1.
 8.zz that Cadet keeps D3 / Z5. Files: `out/verify-b6a00e3/f3/` (`VB-Cc-*` / `F3-cad-*` Cadet, `VB-Cs-*` / `F3-std-*`
 standard, `VB-C-*` 35 / .90 S1-3 under Cadet: every wave by quota, PERFECT WAVE 3).
 
+### DOC-6 (low, copy): the privacy policy's purpose clause does not name pacing
+
+Z15 added "how long you usually take to find your next target" to the policy's typing-statistics list, but the same
+item still ends "kept in the same save so the game can show your Flight log, rate your daily sorties and aim words and
+drills at your weak keys" (`privacy-policy.html`), and README's privacy paragraph repeats those purposes. The value is
+used only to set the stream pace (`typistAcquireMs()` -> `paceAcquireMs()` -> paceMul); the stored hand speed has also
+paced the stream since `20261024b` without that purpose being listed. The data never leaves the device and the policy
+says so correctly, so only a purpose is missing. Z15 limited the change to the list item and the date. Options: (a) add
+"set the pace of the stream" to both purpose lists ("... so the game can set the pace of the stream, show your Flight
+log, rate your daily sorties and aim words and drills at your weak keys."; README: "The game uses that profile on the
+device to pace the stream, rate daily sorties and aim words and drills at weak keys."), effective date unchanged
+(26 October 2026: this release has not been deployed); (b) keep the wording of Z15.
+
 ## Training update follow-up 2: floor waves and a stale stored acquisition time (lead rulings Z13 / Z14, `wt/pace-acq`)
 
 (The numbers of this section are `b6a00e3`'s code, whose floor waves still spawned at WORDS' rate: see the section
