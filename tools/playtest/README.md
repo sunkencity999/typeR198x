@@ -354,7 +354,9 @@ Extra one-off scripts live in `probes/` (shipped) or `out/` (ignored). They can 
   wave `floor` (paceMul exactly 1.0, no carry: live `a0a3845`'s wave rule), `capEnd` (its cap ended it) and
   `leftover` (plates up at a floor wave's cap; they stay in the drain); `timedOut`, `escaped` and the 0-leak timeout
   counts cover the D3 / Z5 judgement of the other waves only, and a floor wave's cap end is not a timeout (live has
-  none either). `t-pace-balance` splits damage into waves and boss and records play / wall per sector; with
+  none either). `b10` checks that every wave of each cleared sector is recorded (a returning pilot's S1 W1 starts
+  while the run start still waits for the story card; it was lost before) and notes per sector which waves ran at
+  the floor (`F`) and the paceMul of the others. `t-pace-balance` splits damage into waves and boss and records play / wall per sector; with
   `--acquire-ms` its p35 run judges Z13 (0 deaths, 0 wave damage, no 0-leak timeout in S1-3; boss damage, rank, floor
   cap ends and PERFECT WAVE reported). `--seed-acq MS` writes `profile.acqEma` into the seeded fixture (Z14: a
   returning pilot whose save holds a slower pilot's value). `t-measure-api` 9d and `t-measure-profile` 16 check

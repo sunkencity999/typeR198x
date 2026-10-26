@@ -72,7 +72,9 @@ async function installHooks() {
     const g = window.game;
     if (window.__b10) return;
     const B = window.__b10 = { spawns: [], leaks: [], damage: [], surges: [], windows: [], phases: [], boss: [], pace: [], ends: [], approaches: [], hullIn: null, lastCard: null,
-      reset() { B.spawns = []; B.leaks = []; B.damage = []; B.surges = []; B.windows = []; B.phases = []; B.boss = []; B.pace = []; B.ends = []; B.approaches = []; B.hullIn = B.lastCard; } };
+      // clear false: keep what was recorded (the first sector's events from the Start click on: a returning pilot's S1 W1
+      // begins while startRun still waits for the story card, so a clear at the loop top lost that wave)
+      reset(clear = true) { if (clear) { B.spawns = []; B.leaks = []; B.damage = []; B.surges = []; B.windows = []; B.phases = []; B.boss = []; B.pace = []; B.ends = []; B.approaches = []; } B.hullIn = B.lastCard; } };
     const ctx = () => ({ t: g.playClock || 0, L: g.levelIndex + 1, wave: g.wave | 0, phase: g.inBoss ? "boss" + (((g.boss && g.boss.phase) | 0) + 1) : g.wavePhase });
     const wrap = (name, after) => {
       const orig = g[name];
@@ -143,9 +145,10 @@ async function installHooks() {
   });
 }
 await installHooks();
+await P.g(() => window.__b10.reset());   // nothing from the title screen
 await P.startRun("B10");
 if (JUMP) {
-  await P.g((i) => { window.__jumpTo = i; window.game.startSector(i); }, JUMP - 1);
+  await P.g((i) => { window.__jumpTo = i; window.__b10.reset(); window.game.startSector(i); }, JUMP - 1);   // S1's start is not the sector
   await waitFor(P, () => window.game && window.game.mode === "playing" && window.game.levelIndex === window.__jumpTo, 8000);
 }
 
@@ -199,7 +202,7 @@ const r1 = (x) => (x === null || x === undefined ? null : Math.round(x * 10) / 1
 const r2 = (x) => (x === null || x === undefined ? null : Math.round(x * 100) / 100);
 
 for (let s = 0; s < SECTORS; s++) {
-  await P.g(() => window.__b10.reset());
+  await P.g((clear) => window.__b10.reset(clear), s > 0);   // the first sector keeps its events since the Start click / jump
   const sectorStart = Date.now();
   const playClock0 = await P.g(() => window.game.playClock || 0);
   const rec = { sector: null, level: null, targetCps: null, secondsToBoss: null, wallSecondsToBoss: null, minHp: Infinity, maxHp: null, death: null, keys: 0, wrongKeys: 0,
@@ -426,6 +429,13 @@ const bandOk = (r) => r.perWave.filter(Boolean).every((w) => w.paceRatio >= 0.85
 const bossLeakRule = (r) => !r.boss || r.boss.leaksPerMin <= Math.max(2, 1.5 * r.waves.leaksPerMin);
 const rankOf = (r) => r.results && (r.results.rankLevelAware || r.results.rank);
 P.note("play / wall clock ratio per sector (typist paced by the play clock; < .9 = the page ran in slow motion)", S.map((r) => `S${r.level}:${r.clockRatio}`).join(" "));
+// Z13: which waves ran at the floor (F, live a0a3845's wave rule) and which above it or carried (their paceMul, + carry)
+const done = S.filter((r) => r.mode === "levelComplete");
+P.check("every wave of each cleared sector is recorded (perWave W1-3; the first sector's W1 included, also for a returning pilot)", done.every((r) => r.perWave.every(Boolean)),
+  done.map((r) => `S${r.level}:${r.perWave.map((w) => (w ? "y" : "MISSING")).join("/")}`));
+const nonFloor = S.flatMap((r) => r.perWave.map((w, i) => (w && !w.floor ? `S${r.level} W${i + 1} ${w.mul}${w.timedOut ? " timed out" : ""}` : null)).filter(Boolean));
+P.note("Z13 floor waves per sector (F = floor; else the paceMul it ran at)", S.map((r) => `S${r.level}:${r.perWave.map((w) => (!w ? "?" : w.floor ? "F" : w.mul)).join("/")}`).join(" ") +
+  ` · ${S.reduce((a, r) => a + r.perWave.filter((w) => w && w.floor).length, 0)} of ${S.reduce((a, r) => a + r.perWave.filter(Boolean).length, 0)} at the floor${nonFloor.length ? ` (not: ${nonFloor.join(", ")})` : ""}`);
 if (EXPECT === "p55") {
   const s1 = byLevel(1);
   if (s1) P.check("55/.93 reaches the sector-1 boss in 25-70 s (play clock)", s1.secondsToBoss !== null && s1.secondsToBoss >= 25 && s1.secondsToBoss <= 70, { secondsToBoss: s1.secondsToBoss });
