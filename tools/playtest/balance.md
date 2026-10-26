@@ -106,7 +106,17 @@ Every Z12 target for 55 / 80 holds in these 8 runs: no S2 / S3 wave timed out wi
 
 Not met, as on `b6a00e3` (no Z14 code changed; question F1 below). Every run's S1 W1 used the stored 900 exactly.
 
-## Open for the lead: verification findings on `b6a00e3` that need a ruling (code left as ruled)
+## Verification findings on `b6a00e3` and lead ruling Z16
+
+**Lead ruling Z16 (2026-10-26).** F1: option (c), accepted. The miss is idle time in S1 / S2 for a pilot whose save
+holds a much slower pilot's acquisition time (a shared save), with no damage or death, recovered by S3; option (a)
+would pace every returning pilot's S1 W1 from 300 ms instead of their own stored value to fix that rare case, so Z14's
+'n = 0: lifetime' stands and its S1 bound is withdrawn. F2: option (a). Z13's 'same spawn schedule' is restated as
+a0a3845's quota, spawn rate, cap and wave end with D2's 0.1 s empty-field spawn and 10-30 px roll-in, because Q1
+binds; the damage target is restated as 'not distinguishable from live' (this tree 1 of 19 latency runs, live 0 of
+24, one-sided Fisher p ~ .44), with 0-leak timeouts 0 and PERFECT WAVE as live, both met. F3: option (b), Cadet keeps
+D3 / Z5 (the escape takes leftovers off without damage, gentler than the floor's drain for a pilot who has died twice
+in the sector). DOC-6: option (a), applied; effective date unchanged (26 October 2026, not yet deployed).
 
 ### F1 (medium): Z14's target cannot be met for S1 W1 under the rule as written
 

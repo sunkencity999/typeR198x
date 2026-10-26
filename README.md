@@ -598,7 +598,7 @@ target, each sector's best speed and accuracy, the count of days played with the
 the last 100 sessions: sector attempts, deaths included, daily sorties, drills and endless drifts), the daily sortie
 results of up to 60 days with the sortie count, streak and that day's attempts, the drill and endless drift run counts
 and bests, and when the Flight Check was finished or skipped; it is never sent anywhere and Reset save erases it.
-The game uses that profile on the device to rate daily sorties and to aim words and drills at weak keys.
+The game uses that profile on the device to pace the stream, rate daily sorties and aim words and drills at weak keys.
 [privacy-policy.html](./privacy-policy.html) says so, effective 26 October 2026. No accounts, analytics, telemetry or
 third-party scripts; the web build makes no network calls while playing beyond fetching its own code, art and music. The footer links
 [privacy-policy.html](./privacy-policy.html); `privacy.html` is a meta-refresh stub for old links.
@@ -645,8 +645,8 @@ pace on its own.
 **A clean timeout slows the next wave.** If a sped-up wave runs out of time although nothing got past you, the next
 wave of that sector comes in one step slower than the one that timed out (never below the standard pace).
 
-**Privacy.** The privacy policy (effective 26 October 2026) names the new stored value among the typing statistics:
-how long you usually take to find your next target.
+**Privacy.** The privacy policy (effective 26 October 2026) names the new stored value among the typing statistics,
+how long you usually take to find your next target, and says that the statistics also set the pace of the stream.
 
 **Under the hood.** `32-typist.js` keeps the acquisition average (the lifetime value is `profile.acqEma` in the save,
 absent until a run has ten samples, held between 120 and 900 ms; before ten samples `typistAcquireMs()` returns (n x
@@ -663,8 +663,10 @@ wave 1 runs at 1.35, and wave 3 sometimes steps to 1.01-1.14; none of those time
 27 of 28 Sector 2-3 cases (`20261016a` 39 of 40), but 1 of its 14 runs took damage from plates left at a Sector 3
 wave's end (`20261016a` 0 of 20), and a returning fast pilot whose save holds a slow 900 ms still idles above 15 % in
 Sector 1 in most runs, because the run's first wave is paced from the stored value alone (no sample yet) and a
-one-plate Sector 1 yields few samples to blend; both are open for the lead, with two smaller questions (Cadet waves,
-the privacy policy's purposes). Numbers in `tools/playtest/balance.md`.
+one-plate Sector 1 yields few samples to blend; the lead accepted both (ruling Z16: the Sector 1 miss costs idle time only, and
+1 damaged run in 19 is not distinguishable from `20261016a`'s 0 in 24), kept Cadet waves on the D3 / Z5 rule (its
+escapes take leftovers off the field without damage) and had the privacy policy name pacing among the statistics'
+uses. Numbers in `tools/playtest/balance.md`.
 
 ### 2026-10 training update (release token `20261024b`, art token unchanged)
 
