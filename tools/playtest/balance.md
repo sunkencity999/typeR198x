@@ -147,6 +147,22 @@ rate, D2's empty-field spawn and roll-in" (the damage target then not shown met)
 and relax Q1's fresh S1 idle bound (to ~50 %); (c) a0a3845's 10-90 px roll-in at the floor with D2's 0.1 s (not
 measured against Q1).
 
+### F3 (low): Cadet waves (paceMul 0.75) keep D3 / Z5
+
+A Cadet wave runs at 0.75 (`42-pacing.js`, source `cadet`), so it is not a floor wave (`paceIsFloor`: exactly 1.0, no
+carry) and keeps the Z5 cap, WAVE TIMED OUT, the escape, the carry and PERFECT WAVE by quota. Z13 defines the floor as
+exactly 1.0 and its keep-D3 / Z5 clause names waves above 1.0 or with a carry; it says nothing about 0.75, though its
+rationale ("where the stream is not sped up, D3 / Z5 has nothing to give") reads as if it would cover it. Measured
+(25 / .85, seeded, jump to S6): Cadet runs timed out W1 / W2 with 2-6 escaped and carried +2 to +6 (W3 quota 23
+against the floor's 22, its cap up to 56 s), hull damage 262 / 182 / 291 / 230; standard runs (all floor waves, cap
+ends with 1-8 plates left) 454 / 630 / 614 / 360. In all four Cadet runs every Cadet wave that timed out also had
+leaks and damage, so PERFECT WAVE by quota cost nothing extra; the escape removes leftovers without damage, which is
+gentler than the floor's drain. Cadet is still clearly easier on the hull: a consistency question, not a balance
+regression. Options: (a) campaign floor = paceMul <= 1.0 with no carry (Cadet waves get a0a3845's wave end: table
+cap, PERFECT WAVE at the cap, no escape or carry), a change to Z13's "exactly 1.0"; (b) keep, and record in CONTRACT
+8.zz that Cadet keeps D3 / Z5. Files: `out/verify-b6a00e3/f3/` (`VB-Cc-*` / `F3-cad-*` Cadet, `VB-Cs-*` / `F3-std-*`
+standard, `VB-C-*` 35 / .90 S1-3 under Cadet: every wave by quota, PERFECT WAVE 3).
+
 ## Training update follow-up 2: floor waves and a stale stored acquisition time (lead rulings Z13 / Z14, `wt/pace-acq`)
 
 (The numbers of this section are `b6a00e3`'s code, whose floor waves still spawned at WORDS' rate: see the section
