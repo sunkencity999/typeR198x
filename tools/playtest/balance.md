@@ -129,6 +129,24 @@ Z14's S1 bound to exclude S1 W1 (or S1); (c) accept the miss (S1 / S2 idle only,
 Files: `out/verify-b6a00e3/f1/` (`F-A-*` the rule as ruled, `F-B-*` the knobs, `F-C-*` the counterfactual, `VB-Z14-*`,
 `VB-T-*-seeded-*`).
 
+### F2 (low): a0a3845's spawner at the floor conflicts with Q1
+
+Z13 says "the same spawn schedule ... do not approximate". The spawn rate is now a0a3845's (above). D2's 0.1 s
+empty-field spawn (`HUNGRY_SPAWN_S`, `tickSpawner`) and 10-30 px roll-in (`SPAWN_ROLLIN_PX`, `spawnEnemy`) stay on at
+the floor, where a0a3845 had 0.5 s and 10-90 px, so an emptied floor field refills about 0.4 s sooner (0.100-0.117 s
+against 0.500-0.517 s, the verifier's probe) and plates start closer. The literal version conflicts with lead ruling
+Q1: a fresh pilot's S1 is all floor waves until the run gate opens, and with a0a3845's 0.5 s / 10-90 px on floor waves
+10 of 12 fresh S1 runs at 55 / 80 WPM exceed Q1's 30 % idle bound, all 6 at 80 (three independent experiments: `X-*`
+in `out/t-pace-balance/`, `VB-X-*` and `F2-X-*` in `out/verify-b6a00e3/f2/`: 21-48 % against 13-30 % with D2's
+spawner). Against Z13's damage target the evidence leans the other way but is thin: with D2's spawner at the floor, 35
+/ .90 latency runs took wave damage in 4 of 32 on `b6a00e3` and 1 of 14 on this tree; with a0a3845's spawner at the
+floor 0 of 6 (`ZX-`, `VB-X-`), live 0 of 24 (the 20 above and the Z12 section's 4 `L-` runs; one-sided Fisher p ~ .10
+for 4 of 32 against 0 of 24); with a 10-30 px roll-in a leftover plate reaches the ship ~0.3 s (up to 0.65 s) sooner
+after its spawn. Options: (a) accept D2's spawner at the floor and restate Z13's "same spawn schedule" as "a0a3845's
+rate, D2's empty-field spawn and roll-in" (the damage target then not shown met); (b) a0a3845's spawner at the floor
+and relax Q1's fresh S1 idle bound (to ~50 %); (c) a0a3845's 10-90 px roll-in at the floor with D2's 0.1 s (not
+measured against Q1).
+
 ## Training update follow-up 2: floor waves and a stale stored acquisition time (lead rulings Z13 / Z14, `wt/pace-acq`)
 
 (The numbers of this section are `b6a00e3`'s code, whose floor waves still spawned at WORDS' rate: see the section
