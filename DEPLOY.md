@@ -1,14 +1,15 @@
 # Type-R 198X release procedure (web build)
 
-Run from the repo root on the release branch (for 20261024b: `training`, or its merge into `main`; the partial
-release 20261024a was `release/20261024a`).
+Run from the repo root on the release branch (for 20261025a: `wt/pace-acq`, or its merge into `training` / `main`;
+20261024b was `training`, and the partial release 20261024a was `release/20261024a`).
 Every step is a command the owner runs by hand; nothing here is automated end to end on purpose. The FTP password is only ever
 passed through the `TYPER_FTP_PASSWORD` environment variable (or `--password-file`); never paste it into a
 file, a commit or a shell history you keep.
 
-Background: the live site serves release `20261016a`, or `20261024a` (the first part of the training update) if
-the owner deployed that one first; 20261024b follows either. Its `/` answers `no-cache` (the `.htaccess` policy works
-there), but the host's NGINX direct delivery still answers `/index.html` and the other pages with
+Background: the live site serves release `20261024b` (the training update) once the owner's deploy of it is done,
+else `20261016a` or `20261024a` (the first part of the training update); 20261025a follows any of them. Its `/`
+answers `no-cache` (the `.htaccess` policy works there), but the host's NGINX direct delivery still answers
+`/index.html` and the other pages with
 `Cache-Control: max-age=15552000` and every other static file with `max-age=31536000`, and ignores the query string
 when it resolves a file (audit G025; checked 2026-10-24). Steps 1, 4 and 6 exist to make sure returning players
 actually receive this release. The stale-shell guard in `game.js` reloads an older shell once into the new one only
@@ -21,7 +22,7 @@ host ignores the query) and runs old and new code together. Resume can do nothin
 can stop taking damage, with `[TypeR] frame error` in the console, until the player reloads once (the reload
 revalidates `/index.html` and the new shell's `?v=` URLs are all new).
 On its first visit to `/` the new shell revalidates `/index.html`, `privacy-policy.html`, `support.html` and
-`info.html` (after the first keystroke, or 30 s after load), and the in-site links carry `?v=20261024b`, so from then
+`info.html` (after the first keystroke, or 30 s after load), and the in-site links carry `?v=20261025a`, so from then
 on it gets this release.
 
 ## 0. Preconditions
@@ -36,8 +37,8 @@ node --version                          # 18+
 ## 1. Bump the shell token
 
 ```bash
-tools/bump-version.sh 20261024b         # YYYYMMDDx; omit the argument for today + next letter
-tools/bump-version.sh 20261024b --dry-run   # same token again: must report "no changes"
+tools/bump-version.sh 20261025a         # YYYYMMDDx; omit the argument for today + next letter
+tools/bump-version.sh 20261025a --dry-run   # same token again: must report "no changes"
 git diff --stat                         # index/info/support/privacy pages + game.js only
 ```
 
@@ -67,7 +68,7 @@ the change, 2.34 after).
 node tools/deploy/deploy.mjs --dry-run --user <ftp-user>
 ```
 
-Prints the local set in upload order (about 200 files, 199 for 20261024b as for 20261024a, ~370 MB listed; on a real run the
+Prints the local set in upload order (about 200 files, 199 for 20261025a as for 20261024b and 20261024a, ~370 MB listed; on a real run the
 ~341 MB of PNG/WAV masters are skipped when the remote size matches) and exits without connecting, so no password
 is needed. Check that `index.html` is last, `assets/opt/manifest.js` just before it, the other pages (`info.html`,
 `privacy-policy.html`, `privacy.html`, `support.html`) just before that and after `style.css`, and that
@@ -108,8 +109,8 @@ Right after the upload, flush the dynamic cache in Site Tools (Speed → Caching
 dynamic cache stores 404 responses keyed by the full URL (measured 2026-10-24: a GET of a missing `?v=` URL answered
 404 MISS, then 404 HIT), so a GET of a new release URL before its file was uploaded can leave a cached 404 behind.
 Existing files are served from disk by direct delivery and are not affected, so this is a precaution; step 5
-fetches every script the served shell references and fails on a 404. Verifiers: do not GET `?v=20261024b` URLs on
-the live host before the deploy (nor `?v=20261024a` ones while that release has not been deployed).
+fetches every script the served shell references and fails on a 404. Verifiers: do not GET `?v=20261025a` URLs on
+the live host before the deploy (nor `?v=20261024b` or `?v=20261024a` ones while that release has not been deployed).
 
 ## 5. Go/no-go
 
@@ -148,7 +149,7 @@ Spot checks by hand:
 curl -sI https://typer198x.com/index.html | grep -i cache-control
 curl -sI https://typer198x.com/privacy-policy.html | grep -i cache-control
 curl -s  https://typer198x.com/ | grep -o 'v=[0-9a-z]*' | sort | uniq -c
-curl -s  https://typer198x.com/privacy-policy.html | grep 'Effective date'    # 25 October 2026
+curl -s  https://typer198x.com/privacy-policy.html | grep 'Effective date'    # 26 October 2026
 ```
 
 ## 7. After the deploy
@@ -156,11 +157,12 @@ curl -s  https://typer198x.com/privacy-policy.html | grep 'Effective date'    # 
 - Open `https://typer198x.com/` (the bare root, served no-cache; not `/index.html`) in a browser that played
   before. The title shows the DAILY SORTIE tile and the PRACTICE panel (DRILL · 60 S, ENDLESS DRIFT) under the
   Start / New run button. In the console, `document.querySelector('meta[name=asset-version]').content` and
-  `ASSET_VERSION` both read `20261024b`. `localStorage['typesmup198x.save.v1']` keeps the old progress (Resume /
+  `ASSET_VERSION` both read `20261025a`. `localStorage['typesmup198x.save.v1']` keeps the old progress (Resume /
   Continue offered when a run was saved). The loading bar and title cabinet look the same as in 20261016a and
-  20261024a, so they do not identify the build. `/index.html` in that same browser may still show the previous build
-  (no deck on 20261016a, the deck hidden on 20261024a) until one reload or the next visit to `/`: that is the
-  cached-whole-build case in Background, expected.
+  20261024a, and the whole title screen as in 20261024b, so only the token identifies this build. `/index.html` in
+  that same browser may still show the previous build (no deck on 20261016a, the deck hidden on 20261024a, no visible
+  difference on 20261024b) until one reload or the next visit to `/`: that is the cached-whole-build case in
+  Background, expected.
 - Tag the release commit and record the token in the README changelog heading if it was left generic.
 
 ## Rollback

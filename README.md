@@ -7,10 +7,12 @@ target to lock on, finish the word to fire, and clear ten sectors of word-bosses
 (plain HTML, CSS and classic JavaScript, no bundler, no runtime dependencies) that plays at
 **[https://typer198x.com](https://typer198x.com)** and can be served from any static host.
 
-This README describes the web build after the 2026 overhaul and the training update (release `20261024b`: hand-speed
+This README describes the web build after the 2026 overhaul, the training update (release `20261024b`: hand-speed
 WPM, typo feedback, rank lines, the pilot profile and Flight log, the first-run flight check, everyday words and
 two-word targets aimed at weak keys, the Counter-Signal boss attack and Overdrive, a stream that follows the pilot's
-speed with timed-out waves, hull carry and Cadet pace, and the daily sortie, drill and endless drift). Release steps
+speed with timed-out waves, hull carry and Cadet pace, and the daily sortie, drill and endless drift) and its pace
+follow-up (release `20261025a`: the pace also counts how quickly the pilot finds the next target, and a wave at the
+standard pace lasts and ends by the original wave rules). Release steps
 live in [DEPLOY.md](./DEPLOY.md);
 the play-test harness has its own [tools/playtest/README.md](./tools/playtest/README.md).
 
@@ -70,14 +72,18 @@ the play-test harness has its own [tools/playtest/README.md](./tools/playtest/RE
   of `COMET` with `Space` and take the nearer `LASER`. Nothing can hit you, nothing scores and nothing reaches the
   records; `Esc` or **Skip** goes straight to the sector, and returning pilots never see it. The mission briefing
   opens on three lines (lock, fire, let go) with the full story behind *Read the full briefing*.
-- **Pace follows you.** At every wave the game compares your measured hand speed (this run, else your profile) with
-  the sector's stream and scales it up to 2.5x: more plates at once, a little faster, a bigger quota. It never drops
-  below the table on its own. A wave's time cap always leaves room for its whole stream, and it times the wave out only
-  while plates are still flying: they warp away without damage, the wave pays no perfect-wave bonus and the callout
-  reads `WAVE TIMED OUT · N ESCAPED`; after wave 1 or 2 those N join the next wave. From Sector 4 a clear repairs half
-  of the missing hull and the rest carries (`HULL 72% · REPAIRED +28%` on the next sector card). Two deaths in one
-  sector add **Fly at Cadet pace** to Game Over: 75 % stream and damage, 80 % score, tagged CADET, until that sector
-  is cleared.
+- **Pace follows you.** At every wave the game compares your measured hand speed (this run, else your profile), plus
+  the time you take to find each new target, with the sector's stream and scales it up to 2.5x: more plates at once, a
+  little faster, a bigger quota. It never drops below the table on its own. A campaign wave at the table pace (nothing
+  carried in) lasts and ends as it did before the pace existed (new plates still roll in a moment sooner and an empty
+  field refills sooner): it ends at the table's time cap, plates still flying stay in play for a few seconds (shoot
+  them or take the hit) and a wave without damage is a perfect wave. A sped-up wave, a
+  wave with a carry, Cadet pace and the daily sortie get a time cap that always leaves room for the whole stream, and
+  it times the wave out only while plates are still flying: they warp away without damage, the wave pays no
+  perfect-wave bonus (that needs the quota met without damage) and the callout reads `WAVE TIMED OUT · N ESCAPED`;
+  after wave 1 or 2 those N join the next wave. From Sector 4 a clear repairs half of the missing hull and the rest
+  carries (`HULL 72% · REPAIRED +28%` on the next sector card). Two deaths in one sector add **Fly at Cadet pace** to
+  Game Over: 75 % stream and damage, 80 % score, tagged CADET, until that sector is cleared.
 - **Daily sortie, drill, endless drift.** Under Start, the **Daily sortie** flies one sector a day (picked from your
   top three unlocked by the local date), three waves and no boss. Your first finished or failed attempt of the day
   counts; later ones are practice. Its rating is speed x (accuracy / 100)^2 and the medal compares it with the median
@@ -137,13 +143,19 @@ speed (run, else lifetime, else 30 WPM; `surgeWindow`, lead ruling Z6). Boss par
 so the time bonus is a tie-breaker that follows the sector's pace. Word kills use a smaller explosion (the medium
 frames at .55) whose smoke sits under the plates.
 
-The table is the floor: `assets/js/game/42-pacing.js` multiplies each wave's spawn rate and quota by `paceMul =
-clamp(0.85 x pilotCps / targetCps, 1.0, 2.5)` (moving at most 0.35 per wave; pilotCps = this run's hand speed after
-20 intervals, else the profile's after 60, else the table), adds `min(3, round(2 (paceMul - 1)))` to the alive cap and
-`0.15 (paceMul - 1)` to plate speed, and from paceMul 1.35 tops an emptying field up to two plates. An empty field
-spawns after 0.1 s (`HUNGRY_SPAWN_S`) and new plates roll in 10-30 px off-screen (`SPAWN_ROLLIN_PX`). A wave's cap is
-`max(table cap, 1.25 x the stream's delivery time for the paced quota + 4 s)` (`paceWaveCap`, lead ruling Z5) and ends
-the wave only while plates are alive; an empty field lifts it and the wave ends by quota.
+The table is the floor: `assets/js/game/42-pacing.js` multiplies each wave's spawn rate and quota by
+`paceMul = clamp(0.85 x pilotCpsEff / targetCps, 1.0, 2.5)` (moving at most 0.35 per wave; pilotCps = this run's hand
+speed after 20 intervals, else the profile's after 60, else the table; `pilotCpsEff = L / (L / pilotCps + acq / 1000)`
+with L the sector's mean target length and acq MEASURE's `typistAcquireMs()`, lead ruling Z12, see the changelog; a
+wave that times out with no leak in it sets the next wave's target 0.35 below the slower of its own target and the
+timed-out wave's pace, floor 1.0), adds `min(3, round(2 (paceMul - 1)))` to the alive cap and `0.15 (paceMul - 1)` to
+plate speed, and from paceMul 1.35 tops an emptying field up to two plates. An empty field spawns after 0.1 s
+(`HUNGRY_SPAWN_S`) and new plates roll in 10-30 px off-screen (`SPAWN_ROLLIN_PX`). A wave's cap is `max(table cap,
+1.25 x the stream's delivery time for the paced quota + 4 s)` (`paceWaveCap`, lead ruling Z5) and ends the wave only
+while plates are alive; an empty field lifts it and the wave ends by quota. A campaign wave at exactly paceMul 1.0 with
+no carry is a floor wave (`waveTuning.floor`, lead ruling Z13): it keeps the table cap and `20261016a`'s spawn rate,
+and its cap ends it whatever is on the field (plates still up stay in the drain), with no timeout, escape, carry or
+back-off.
 
 Every results card stamps a rank from `rankFor(accPct, wpm, hpPts, level)`: accuracy 50 %, speed 30 %, hull 20 %
 (`RANK` in 20-constants.js, thresholds S 0.90 / A 0.75 / B 0.55 / C 0.35, D below). Speed is hand speed (below) and
@@ -230,8 +242,8 @@ Module map, in `index.html` load order:
 | `assets/js/game/20-run.js` | Run and sector lifecycle, checkpoints, `saveRun`, level complete / game over / victory |
 | `assets/js/game/30-input.js` | Keydown routing, `handleTyped`, lock rules (release, three-miss loss), scoring hooks |
 | `assets/js/game/32-typist.js` | Hand speed (qualifying intervals, live / window / sector / run / lifetime), per-key and bigram profile (`save.profile`), weak keys, sessions and bests, the typo pair / gun pop, HUD ACC / WPM providers, rank line / WEAK SIGNAL / Game Over cause, Flight log, goal line (MEASURE) |
-| `assets/js/game/40-combat.js` | Spawning, lanes, waves (a wave's cap ends it only with plates alive) and approach, kills, powerups, damage, `update(dt)` |
-| `assets/js/game/42-pacing.js` | Pace controller (`paceMul` per wave from MEASURE's speed into `waveTuning`), perfect wave by quota, computed wave caps, timed-out waves (the escaping plates) and their quota carry, hull carry from sector 4, the Cadet assist and the `diff()` row (PACE) |
+| `assets/js/game/40-combat.js` | Spawning, lanes, waves (a Z5 cap ends a paced wave only with plates alive; a floor wave's table cap always ends it) and approach, kills, powerups, damage, `update(dt)` |
+| `assets/js/game/42-pacing.js` | Pace controller (`paceMul` per wave from MEASURE's speed and acquisition time into `waveTuning`), floor waves (paceMul 1.0, no carry) on the table's wave rule, perfect wave by quota, computed wave caps, timed-out waves (the escaping plates) and their quota carry, hull carry from sector 4, the Cadet assist and the `diff()` row (PACE) |
 | `assets/js/game/45-feedback.js` | Banner system (sector, wave, boss intro/clear, callouts) and score floaters |
 | `assets/js/game/50-boss.js` | Boss v2: phases, minions, intro and finale; Counter-Signal (surge cadence, `surgeWindow` from the pilot's speed, telegraph, fail reset, counter, DOM charge bar) (ARCADE) |
 | `assets/js/game/52-modes.js` | Daily Sortie (date seed, per-wave mulberry32 through `this.rand()`, medal, streak, share line), Endless Drift and Drill streams (`waveTuning`, own text picker), the title deck, the mode results screen, `save.modes` (MODES) |
@@ -259,7 +271,7 @@ come from `PALETTE` / CSS variables rather than literals.
    is its only writer:
 
    ```bash
-   tools/bump-version.sh 20261024b            # rewrite every shell token (index, info, support, privacy pages, game.js)
+   tools/bump-version.sh 20261025a            # rewrite every shell token (index, info, support, privacy pages, game.js)
    tools/bump-version.sh                      # today's date + next letter
    tools/bump-version.sh --dry-run            # report only
    tools/bump-version.sh --add-missing        # also stamp script/stylesheet tags that have no ?v= yet (never the font preload)
@@ -424,12 +436,13 @@ flight check was passed or skipped, 0 = not yet; written once, never on quit-to-
 `levelStats`, `spd`, `pace`).
 
 Schema 3 adds `profile` (created on the first key): `keys` (`a`..`z` -> `{n, err, ms}`, attempts, miss EMA .05,
-latency EMA .15), `bigrams` (top 200 by attempts), `speedEma` / `thrEma` / `speedN`, `sessions` (last 100 as rows
+latency EMA .15), `bigrams` (top 200 by attempts), `speedEma` / `thrEma` / `speedN`, `acqEma` (the lifetime
+acquisition EMA in ms, absent until a run reaches 10 samples), `sessions` (last 100 as rows
 `[t, mode, sector, speed, acc, rank, score, misses, steady, weak]`, read through `typistSessions()`; one per campaign
 sector cleared or lost and one per finished daily sortie, drill or endless drift, `speed` 0 under 10 intervals, `acc`
 null under 10 keys), `sectorBest` (campaign clears only), `bests` (`speed`, the campaign Best WPM; `ceiling`, the best
 endless ceiling; `drill`, the best-rated drill `{speed, acc}`) and `days`. The profile is capped at 16,384 B of JSON
-(oldest sessions dropped first; worst case measured 13,088 B). Run records carry `run.spd` and
+(oldest sessions dropped first; worst case measured 13,102 B). Run records carry `run.spd` and
 `levelStats.spdN/spdMs/spdSq/hits`.
 
 `modes` (MODES, created by the first finished mode run, at most 8 KB; 7,129 B measured after 61 days): `daily`
@@ -439,7 +452,8 @@ keyed `YYYYMMDD`, `flown` = counted sorties, `streak {n, last}`), `endless {best
 ends; its session (mode `daily` / `endless` / `drill`) and the ceiling / drill bests go into `profile` through MEASURE.
 
 `run.pace` (PACE, < 400 B, normalised on first read): `{v, mul, cpMul, applied {level, wave, mul, quota} | null,
-carry, carryTo {level, wave} | null, waveMuls[<=3], cadetLevel, usedCadet, deaths {level, n}, hullNote {level, pct,
+carry, carryTo {level, wave} | null, backoffTo {level, wave} | null, waveMuls[<=3], cadetLevel, usedCadet,
+deaths {level, n}, hullNote {level, pct,
 rep, shown} | null}`; `run.hp` after a clear of sectors 4-9 is the repaired hull. Records rows of a run that flew
 Cadet pace carry `difficulty: "cadet"` and `tags: ["CADET"]`; a sector best set at Cadet pace keeps its `tags`.
 ARCADE adds `overdriveMs`, `csCountered` and `csFired` to the run stats and `overdriveMs` / `surgesFired` to the level
@@ -511,7 +525,7 @@ Full flag, field and fixture tables: [tools/playtest/README.md](./tools/playtest
 The full, ordered procedure is in [DEPLOY.md](./DEPLOY.md). In short:
 
 ```bash
-tools/bump-version.sh 20261024b                               # 1. new shell token (never deploy the old one)
+tools/bump-version.sh 20261025a                               # 1. new shell token (never deploy the old one)
 (cd tools/playtest && bash run-matrix.sh)                      # 2. matrix green
 node tools/deploy/deploy.mjs --dry-run --user <ftp-user>       # 3. what would upload (about 200 files, ~370 MB listed; unchanged binaries skipped by size)
 TYPER_FTP_PASSWORD=... node tools/deploy/deploy.mjs --user <ftp-user> --htaccess   # 4. backup, upload, cache policy, verify
@@ -579,13 +593,13 @@ folder reference, configure signing and bundle identifiers, test on hardware, ar
 
 Everything the game stores lives on the player's device under `typesmup198x.save.v1` (plus a one-session
 rotate-hint flag on phones), including the typing profile behind the Flight log (per-key speed and misses, timing for
-the up to 200 most-typed letter pairs, the average and best speeds, each sector's best speed and accuracy, the count of
-days played with the last date, a dated summary of each of the last 100 sessions: sector attempts, deaths included,
-daily sorties, drills and endless drifts), the daily sortie results of up to 60 days with the sortie count, streak and
-that day's attempts, the drill and endless drift run counts and bests, and when the Flight Check was finished or
-skipped; it is never sent anywhere and Reset save erases it.
-The game uses that profile on the device to rate daily sorties and to aim words and drills at weak keys.
-[privacy-policy.html](./privacy-policy.html) says so, effective 25 October 2026. No accounts, analytics, telemetry or
+the up to 200 most-typed letter pairs, the average and best speeds, how long the pilot usually takes to find the next
+target, each sector's best speed and accuracy, the count of days played with the last date, a dated summary of each of
+the last 100 sessions: sector attempts, deaths included, daily sorties, drills and endless drifts), the daily sortie
+results of up to 60 days with the sortie count, streak and that day's attempts, the drill and endless drift run counts
+and bests, and when the Flight Check was finished or skipped; it is never sent anywhere and Reset save erases it.
+The game uses that profile on the device to pace the stream, rate daily sorties and aim words and drills at weak keys.
+[privacy-policy.html](./privacy-policy.html) says so, effective 26 October 2026. No accounts, analytics, telemetry or
 third-party scripts; the web build makes no network calls while playing beyond fetching its own code, art and music. The footer links
 [privacy-policy.html](./privacy-policy.html); `privacy.html` is a meta-refresh stub for old links.
 [info.html](./info.html) and [support.html](./support.html) carry the same icon/meta block as the game
@@ -601,6 +615,58 @@ If you stream, teach or hack on typing games, fork the project and share improve
 remixes are welcome.
 
 ## Changelog
+
+### 2026-10 pace follow-up (release token `20261025a`)
+
+**Standard-pace waves end by the original rules again.** When the game has not sped the stream up (the standard
+pace, nothing carried over from a timed-out wave), a wave lasts and ends as it did before the pace existed (as since
+`20261024b`, new plates roll in a moment sooner and an empty field refills sooner): it lasts as long as the sector's
+table says, its plates come at the same rate, plates still flying when it ends stay in play for a few seconds (shoot
+them down or take the hit), and a wave without damage is a perfect wave, even when its time ran out. The
+stream-sized time limit, `WAVE TIMED OUT · N ESCAPED`, the escaping plates and the carry into the next wave are now
+only for sped-up waves (and for Cadet pace and the daily sortie), where they keep a fast pilot from being swamped.
+
+**The pace settles from your first targets.** The time you take to find the next target used to come from your
+Flight log's stored value (from earlier runs on this device) until the run had timed ten targets. Now each target the
+run times shifts the value toward this run's own time, so after about five it is mostly yours and a slower stored
+value (or another pilot on the same save) gives way sooner. The run's first wave still starts on the stored value,
+and only a target change with another plate already on screen is timed, so a quiet first sector can still fly on it.
+
+**The pace now also counts how quickly you find the next target.** Since `20261024b` the stream follows your hand
+speed, which only times the keys inside a word. A pilot who also takes a moment to spot each new plate could be sent
+more than they could clear: waves ran out of time with nothing missed (`WAVE TIMED OUT · N ESCAPED`) and the sector
+clock cut them short. The game now also measures how long you take to find your next target, from the moment a
+target ends (destroyed, let go or leaked) while another is on screen to the first correct key of your next lock
+(pauses over 1.5 s, boss fights and the flight check do not count). It uses this run's average from the tenth
+target, before that a blend with your Flight log's value (300 ms without one), and the longer you take, the gentler
+the stream, most of all in the early sectors where targets are short. The stream still never drops below the standard
+pace on its own.
+
+**A clean timeout slows the next wave.** If a sped-up wave runs out of time although nothing got past you, the next
+wave of that sector comes in one step slower than the one that timed out (never below the standard pace).
+
+**Privacy.** The privacy policy (effective 26 October 2026) names the new stored value among the typing statistics,
+how long you usually take to find your next target, and says that the statistics also set the pace of the stream.
+
+**Under the hood.** `32-typist.js` keeps the acquisition average (the lifetime value is `profile.acqEma` in the save,
+absent until a run has ten samples, held between 120 and 900 ms; before ten samples `typistAcquireMs()` returns (n x
+run average + (10 - n) x lifetime, else 300) / 10, lead ruling Z14) and `42-pacing.js` paces on `L / (L / hand speed +
+acquisition)` with L the sector's mean target length in characters (lead ruling Z12). A campaign wave at exactly
+paceMul 1.0 with no carry is a floor wave (`waveTuning.floor`, lead ruling Z13): the table quota, spawn rate and cap
+of `20261016a`, ended by the cap whatever is on the field, PERFECT WAVE as there, its plates left in the drain; the
+empty-field spawn (0.1 s) and roll-in (10-30 px) of `20261024b` stay on at every pace, because `20261016a`'s spawner
+would put the 55 / 80 WPM harness typists' fresh Sector 1 back above lead ruling Q1's 30 % idle bound (21-48 %, 10 of
+12 runs over it). With a 300 ms acquisition the harness typists at 55 and 80 WPM clear Sectors 2-3 with no
+sector-clock cut, no wave timed out without a leak and every PERFECT WAVE, as on `20261016a`. The 35 WPM typist with
+that latency flies every Sector 2-3 wave and most Sector 1 waves on the `20261016a` rule (a returning pilot's Sector 1
+wave 1 runs at 1.35, and wave 3 sometimes steps to 1.01-1.14; none of those timed out): no timeout and PERFECT WAVE in
+27 of 28 Sector 2-3 cases (`20261016a` 39 of 40), but 1 of its 14 runs took damage from plates left at a Sector 3
+wave's end (`20261016a` 0 of 20), and a returning fast pilot whose save holds a slow 900 ms still idles above 15 % in
+Sector 1 in most runs, because the run's first wave is paced from the stored value alone (no sample yet) and a
+one-plate Sector 1 yields few samples to blend; the lead accepted both (ruling Z16: the Sector 1 miss costs idle time only, and
+1 damaged run in 19 is not distinguishable from `20261016a`'s 0 in 24), kept Cadet waves on the D3 / Z5 rule (its
+escapes take leftovers off the field without damage) and had the privacy policy name pacing among the statistics'
+uses. Numbers in `tools/playtest/balance.md`.
 
 ### 2026-10 training update (release token `20261024b`, art token unchanged)
 

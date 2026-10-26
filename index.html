@@ -7,15 +7,15 @@
   <meta name="description" content="Neon arcade typing shoot-'em-up. Type the first letter to lock on, finish the word to fire, and clear ten sectors of word-bosses. Free in your browser." />
   <meta name="color-scheme" content="dark" />
   <meta name="theme-color" content="#0B1030" />
-  <meta name="asset-version" content="20261024b" />
+  <meta name="asset-version" content="20261025a" />
   <link rel="canonical" href="https://typer198x.com/" />
   <link rel="icon" href="./assets/ui/mark.svg" type="image/svg+xml" sizes="any" />
   <link rel="icon" type="image/png" sizes="32x32" href="./assets/icons/generated/macos/Icon-App-32.png" />
   <link rel="icon" type="image/png" sizes="16x16" href="./assets/icons/generated/macos/Icon-App-16.png" />
   <link rel="apple-touch-icon" sizes="180x180" href="./assets/ui/apple-touch-icon.png" />
   <link rel="preload" as="font" type="font/woff2" href="./assets/fonts/Orbitron-Variable.woff2" crossorigin />
-  <link rel="stylesheet" href="./assets/style/tokens.css?v=20261024b" />
-  <link rel="stylesheet" href="./style.css?v=20261024b" />
+  <link rel="stylesheet" href="./assets/style/tokens.css?v=20261025a" />
+  <link rel="stylesheet" href="./style.css?v=20261025a" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Type-R 198X" />
   <meta property="og:title" content="Type-R 198X — neon typing shoot-'em-up" />
@@ -423,9 +423,9 @@
     </div>
 
     <footer class="footer small">
-      <a href="./privacy-policy.html?v=20261024b" target="_blank" rel="noopener">Privacy Policy</a>
+      <a href="./privacy-policy.html?v=20261025a" target="_blank" rel="noopener">Privacy Policy</a>
       <span aria-hidden="true">·</span>
-      <a href="./support.html?v=20261024b" target="_blank" rel="noopener">Support</a>
+      <a href="./support.html?v=20261025a" target="_blank" rel="noopener">Support</a>
     </footer>
 
     <div id="loadingOverlay" role="status" aria-live="polite" aria-busy="true">
@@ -521,8 +521,8 @@
                 <li>Letters pay 50 pts, words 60 + 12 per character (the gap in a two-word target counts), and a word typed without a miss pays ×1.2. Minions pay 40, pickups 100, boss letters 10, a boss segment 30 per letter and a boss phase 300 × sector. Kills made by SPREAD, PIERCE or RAPID pay half.</li>
                 <li>Combo tiers: ×2 at 10, ×3 at 25, ×4 at 50, ×5 at 100. MULTI adds two tiers (cap ×7). A hard miss or real hull damage resets the combo.</li>
                 <li>Overdrive: type 5% faster than your usual hand speed (never below 25 WPM) without a miss and a white arc fills around your ship; full after 2 s, your beams run white-hot and every kill, boss letter and boss segment pays +25% (pickups and bonuses excluded). A hard miss, a leak, a surge hit or a second below 90% of that pace vents it. Drills never charge it.</li>
-                <li>Sector clear pays 1,500 + 350 × sector, plus bonuses for time under par, accuracy (90 / 95 / 98%), perfect waves, a flawless boss and every counter-signal you counter. Retrying a sector scales the clear, time, accuracy, flawless-boss and perfect-wave bonuses down 25% per retry (counter-signal and phase bonuses are not reduced). A perfect wave pays only when its quota is met without damage.</li>
-                <li>A wave’s time limit always leaves room for its whole stream, so a wave you keep clear never times out. If time runs out with targets still flying, they warp away without hurting you (<em>WAVE TIMED OUT · N ESCAPED</em>), the wave pays no perfect-wave bonus, and after wave 1 or 2 they join the next wave’s quota.</li>
+                <li>Sector clear pays 1,500 + 350 × sector, plus bonuses for time under par, accuracy (90 / 95 / 98%), perfect waves, a flawless boss and every counter-signal you counter. Retrying a sector scales the clear, time, accuracy, flawless-boss and perfect-wave bonuses down 25% per retry (counter-signal and phase bonuses are not reduced). A perfect wave is a wave without damage; when the pace has sped the stream up, in a wave that carries targets escaped from the wave before, at Cadet pace and in the daily sortie its quota must be met too.</li>
+                <li>In a campaign sector at the standard pace, with nothing carried over from a timed-out wave, a wave ends at its time limit, as it always has: targets still flying stay in play for a few seconds and can still be shot down or get through. When the pace has sped the stream up, in a wave that carries escaped targets, at Cadet pace and in the daily sortie, the limit always leaves room for the whole stream, so a wave you keep clear never times out; if time runs out with targets still flying, they warp away without hurting you (<em>WAVE TIMED OUT · N ESCAPED</em>), the wave pays no perfect-wave bonus, and after wave 1 or 2 they join the next wave’s quota.</li>
                 <li>Your rank (S, A, B, C, D) weighs accuracy 50%, speed 30% and hull 20%; the line under it names the one that held you back (on Game Over, what ended the run).</li>
                 <li>WPM is your hand speed: the time between correct keys inside a word or boss segment. The first key of each target and pauses over 1.5 s are left out; wrong keys count against you. Best WPM counts a cleared sector with at least 60 timed keys. Records → Flight log keeps your speed, misses and slowest keys on this device only.</li>
                 <li>Weak signal, under the tiles of each results card: the key you missed most, your slowest letter pair with its average time, and Steady, how even your rhythm was (higher is steadier).</li>
@@ -556,7 +556,7 @@
                 <li><strong>Resume</strong> continues a saved run. <strong>Replay</strong> restarts the sector you died in from its checkpoint. <strong>Retry boss</strong> restarts the boss from the phase you reached.</li>
                 <li>Sector select replays any unlocked sector. Only runs started from Sector 1 can set the high score; replays record a sector best instead.</li>
                 <li>Reset save on the title screen erases everything after a confirmation.</li>
-                <li>The stream follows you: at each wave the game compares your hand speed (this run’s, else your Flight log’s) with the sector’s pace and sends up to 2.5 × as many enemies, a little faster. It never drops below the standard pace on its own.</li>
+                <li>The stream follows you: at each wave the game compares your hand speed (this run’s, else your Flight log’s), plus the time you take to find each new target, with the sector’s pace and sends up to 2.5 × as many enemies, a little faster. It never drops below the standard pace on its own.</li>
                 <li>Sectors 1–3 refill your hull on a clear. From Sector 4 on, a clear repairs half of the missing hull and the rest carries into the next sector. Retry and Continue after a death restore a full hull.</li>
                 <li>Two deaths in the same sector add <strong>Fly at Cadet pace</strong> to Game Over: 75% stream and damage, 80% score, until that sector is cleared. Cards and records show a CADET tag.</li>
                 <li><strong>Daily sortie</strong>: one sector a day, picked by the date from your top three unlocked; three waves, no boss. Your first finished or failed attempt counts; later ones are practice. Its rating is speed × accuracy²; the medal compares it with the median of your rated sorties from the previous seven days (gold from 110%, silver from 95%), or goes by accuracy until there are three of those (97% gold, 93% silver; the card shows accuracy rounded down). A sortie that ends in death earns silver at most.</li>
@@ -664,36 +664,36 @@
     });
   })();
   </script>
-  <script src="./assets/opt/manifest.js?v=20261024b"></script>
-  <script src="./assets/audio/sfx.js?v=20261024b"></script>
-  <script src="./assets/js/core/00-util.js?v=20261024b"></script>
-  <script src="./assets/js/core/10-tokens.js?v=20261024b"></script>
-  <script src="./assets/js/core/20-constants.js?v=20261024b"></script>
-  <script src="./assets/js/core/25-lexicon.js?v=20261024b"></script>
-  <script src="./assets/js/core/30-content.js?v=20261024b"></script>
-  <script src="./assets/js/core/40-save.js?v=20261024b"></script>
-  <script src="./assets/js/core/50-assets.js?v=20261024b"></script>
-  <script src="./assets/js/core/60-entities.js?v=20261024b"></script>
-  <script src="./assets/js/core/70-canvas.js?v=20261024b"></script>
-  <script src="./game.js?v=20261024b"></script>
-  <script src="./assets/js/game/05-boot.js?v=20261024b"></script>
-  <script src="./assets/js/game/10-ui.js?v=20261024b"></script>
-  <script src="./assets/js/game/15-screens.js?v=20261024b"></script>
-  <script src="./assets/js/game/17-onboarding.js?v=20261024b"></script>
-  <script src="./assets/js/game/20-run.js?v=20261024b"></script>
-  <script src="./assets/js/game/30-input.js?v=20261024b"></script>
-  <script src="./assets/js/game/32-typist.js?v=20261024b"></script>
-  <script src="./assets/js/game/40-combat.js?v=20261024b"></script>
-  <script src="./assets/js/game/42-pacing.js?v=20261024b"></script>
-  <script src="./assets/js/game/45-feedback.js?v=20261024b"></script>
-  <script src="./assets/js/game/50-boss.js?v=20261024b"></script>
-  <script src="./assets/js/game/52-modes.js?v=20261024b"></script>
-  <script src="./assets/js/game/60-hud.js?v=20261024b"></script>
-  <script src="./assets/js/game/70-render.js?v=20261024b"></script>
-  <script src="./assets/js/game/75-fx-draw.js?v=20261024b"></script>
-  <script src="./assets/js/game/80-fx.js?v=20261024b"></script>
-  <script src="./assets/js/game/82-overdrive.js?v=20261024b"></script>
-  <script src="./assets/js/game/85-attract.js?v=20261024b"></script>
-  <script src="./assets/js/99-boot.js?v=20261024b"></script>
+  <script src="./assets/opt/manifest.js?v=20261025a"></script>
+  <script src="./assets/audio/sfx.js?v=20261025a"></script>
+  <script src="./assets/js/core/00-util.js?v=20261025a"></script>
+  <script src="./assets/js/core/10-tokens.js?v=20261025a"></script>
+  <script src="./assets/js/core/20-constants.js?v=20261025a"></script>
+  <script src="./assets/js/core/25-lexicon.js?v=20261025a"></script>
+  <script src="./assets/js/core/30-content.js?v=20261025a"></script>
+  <script src="./assets/js/core/40-save.js?v=20261025a"></script>
+  <script src="./assets/js/core/50-assets.js?v=20261025a"></script>
+  <script src="./assets/js/core/60-entities.js?v=20261025a"></script>
+  <script src="./assets/js/core/70-canvas.js?v=20261025a"></script>
+  <script src="./game.js?v=20261025a"></script>
+  <script src="./assets/js/game/05-boot.js?v=20261025a"></script>
+  <script src="./assets/js/game/10-ui.js?v=20261025a"></script>
+  <script src="./assets/js/game/15-screens.js?v=20261025a"></script>
+  <script src="./assets/js/game/17-onboarding.js?v=20261025a"></script>
+  <script src="./assets/js/game/20-run.js?v=20261025a"></script>
+  <script src="./assets/js/game/30-input.js?v=20261025a"></script>
+  <script src="./assets/js/game/32-typist.js?v=20261025a"></script>
+  <script src="./assets/js/game/40-combat.js?v=20261025a"></script>
+  <script src="./assets/js/game/42-pacing.js?v=20261025a"></script>
+  <script src="./assets/js/game/45-feedback.js?v=20261025a"></script>
+  <script src="./assets/js/game/50-boss.js?v=20261025a"></script>
+  <script src="./assets/js/game/52-modes.js?v=20261025a"></script>
+  <script src="./assets/js/game/60-hud.js?v=20261025a"></script>
+  <script src="./assets/js/game/70-render.js?v=20261025a"></script>
+  <script src="./assets/js/game/75-fx-draw.js?v=20261025a"></script>
+  <script src="./assets/js/game/80-fx.js?v=20261025a"></script>
+  <script src="./assets/js/game/82-overdrive.js?v=20261025a"></script>
+  <script src="./assets/js/game/85-attract.js?v=20261025a"></script>
+  <script src="./assets/js/99-boot.js?v=20261025a"></script>
 </body>
 </html>

@@ -85,27 +85,30 @@ function waveIndex(wave) {
 }
 
 // Characters per enemy a wave really delivers: its letter share (WAVE_LETTER_MUL) and its length window
-// (waveLengthWindow, 30-content.js; falls back to the sector mean before that file has loaded).
-function waveCharsPerEnemy(cfg, wave) {
+// (waveLengthWindow, 30-content.js; falls back to the sector mean before that file has loaded). windowMix: the length
+// window alone, without WORDS' waveTextLen (live a0a3845's mix; PACE's floor waves, lead ruling Z13).
+function waveCharsPerEnemy(cfg, wave, windowMix = false) {
   const lr = waveLetterRatio(cfg, wave);
   let avg = cfg.avgWordLen;
   if (typeof waveLengthWindow === "function") {
     const win = waveLengthWindow(cfg, wave);
     avg = (win.min + win.max) / 2;
   }
-  const textLen = cfg.waveTextLen && cfg.waveTextLen[waveIndex(wave)];
+  const textLen = !windowMix && cfg.waveTextLen && cfg.waveTextLen[waveIndex(wave)];
   if (textLen > 0) avg = textLen;   // WORDS: the mixed pools' real mean (common / themed / two-word)
   return lr + (1 - lr) * avg;
 }
 
 // Enemies per second so that the wave's stream carries targetCps x WAVE_SPAWN_MUL[w] characters per second
 // whatever its mix (B10: paced by cfg.spawnRate alone, wave 3's longer words made it 1.5-2x the target).
-function waveSpawnRate(cfg, wave, waveKills = 0, quota = 0) {
+// windowMix (lead ruling Z13): a floor wave spawns on live a0a3845's schedule, its mix from the length window alone, so
+// with WORDS' plates its characters per second differ from the target by the content (S1-10: -6 .. +10 %).
+function waveSpawnRate(cfg, wave, waveKills = 0, quota = 0, windowMix = false) {
   const w = waveIndex(wave);
   const q = quota > 0 ? quota : (cfg.quota[w] || 1);   // PACE / MODES: the ramp runs over the wave's effective quota
   const ramp = lerp(WAVE_RAMP[0], WAVE_RAMP[1], clamp(waveKills / q, 0, 1));
   const nominalChars = cfg.letterRatio + (1 - cfg.letterRatio) * cfg.avgWordLen;
-  const mix = nominalChars / Math.max(1, waveCharsPerEnemy(cfg, wave));
+  const mix = nominalChars / Math.max(1, waveCharsPerEnemy(cfg, wave, windowMix));
   return cfg.spawnRate * mix * WAVE_SPAWN_MUL[w] * ramp;
 }
 

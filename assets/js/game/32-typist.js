@@ -1,8 +1,9 @@
 // Type-R 198X — MEASURE track (D1 / D4 / D5 / D6): honest hand speed (qualifying intervals), the per-key / bigram pilot
 // profile (save.profile, schema 3), weak keys, sessions and bests, the inline typo pair, the rank line / WEAK SIGNAL /
 // Game Over cause, the HUD ACC / WPM providers and the Flight Log. Loads after 30-input.js. Hooks consumed: keyCorrect,
-// keyMiss, modeChange, sectorStart, sectorEnd, results, resultsRender, leak, hullDamage, menuRender, recordsOpen,
-// renderOverlay, saveMigrate, saveStore; emitted: typistInterval. Top-level names TYPIST_* / typist* / SPEED_GAP_MAX_MS.
+// keyMiss, modeChange, sectorStart, sectorEnd, results, resultsRender, leak, lockRelease, hullDamage, menuRender,
+// recordsOpen, renderOverlay, saveMigrate, saveStore; emitted: typistInterval. Top-level names TYPIST_* / typist* /
+// SPEED_GAP_MAX_MS.
 // Per key and per frame: typed arrays, reused objects, no allocation, no save write.
 //
 // D1 speed: an interval is the wall-clock ms between two consecutive CORRECT keys on the same target (plate, capsule,
@@ -11,6 +12,13 @@
 // HUD), window (ARCADE / MODES), sector (this segment), run (save.run.spd), lifetime (profile.speedEma).
 // D6 profile: lifetime per-key {n, err EMA .05, ms EMA .15} and 676 bigrams live in typed arrays (this._ty) and are
 // folded into save.profile only inside storeSave (saveStore); sessions are positional rows (CONTRACT R04).
+// Acquisition gap (lead ruling Z12): the ms from the moment the pilot's target ends (kill, release, leak) while another
+// lockable target is on the field to the first correct key of the next lock; boss fights and the Flight Check never
+// feed it; counted from TYPIST_GAP_MIN_MS (D1's touch / IME burst floor) to SPEED_GAP_MAX_MS. A run EMA (alpha .1,
+// this._ty) and a lifetime EMA (profile.acqEma, written from the first run that reaches 10 samples); typistAcquireMs()
+// gives PACE (D2) the run EMA from 10 samples and before that (lead ruling Z14) the sample-weighted blend
+// (n x run EMA + (10 - n) x lifetime EMA) / 10 (n = this run's samples; 300 ms in place of a lifetime value the profile
+// does not have yet, so a run with no sample reads the lifetime value, else 300), clamped to 120 .. 900 ms.
 
 // ----------------------------- Constants -----------------------------
 const SPEED_GAP_MAX_MS = 1500;          // D1: an interval above this is a pause, not typing
@@ -47,6 +55,13 @@ const TYPIST_SPARK_N = 20;
 const TYPIST_SPARK_MIN_SPAN = 10;       // sparkline speed scale is at least 10 WPM tall (a 2 WPM wobble does not fill it)
 const TYPIST_GOAL_N = 5;
 const TYPIST_PROFILE_MAX_BYTES = 16384;
+// Z12 acquisition gap: EMA alpha (run and lifetime), samples before the run EMA counts, default and clamp of
+// typistAcquireMs() (the numbers the balance pass may retune).
+const TYPIST_ACQ_ALPHA = 0.1;
+const TYPIST_ACQ_MIN_N = 10;
+const TYPIST_ACQ_DEFAULT_MS = 300;
+const TYPIST_ACQ_MIN_MS = 120;
+const TYPIST_ACQ_MAX_MS = 900;
 const TYPIST_RANK_LINE_AT_MS = 700;     // fallback for 15-screens.js RESULTS_RANK_AT_MS: the rank line fades in with the stamp
 const TYPIST_SESSION_FIELDS = Object.freeze(["t", "mode", "sector", "speed", "acc", "rank", "score", "misses", "steady", "weak"]);
 const TYPIST_MODES = Object.freeze(["campaign", "daily", "endless", "drill"]);
@@ -118,6 +133,12 @@ function typistNum(v, lo = 0) {
   return Number.isFinite(n) && n >= lo ? n : lo;
 }
 
+// Z12: a stored acquisition EMA (ms): a finite number > 0, rounded and capped to the range a counted gap can have
+// (TYPIST_GAP_MIN_MS .. SPEED_GAP_MAX_MS); anything else -> 0 (the profile leaves the field out).
+function typistNormaliseAcq(v) {
+  return typeof v === "number" && Number.isFinite(v) && v > 0 ? clamp(Math.round(v), TYPIST_GAP_MIN_MS, SPEED_GAP_MAX_MS) : 0;
+}
+
 // One stored session row (TYPIST_SESSION_FIELDS order) or null when it does not validate. Object rows (a hand edit)
 // are converted by field name.
 function typistNormaliseRow(row) {
@@ -184,6 +205,8 @@ function typistMigrateProfile(raw) {
   out.bests = { speed: Math.round(typistNum(b.speed)), ceiling: Math.round(typistNum(b.ceiling)), drill: { speed: Math.round(typistNum(d.speed)), acc: typistRound(Math.min(100, typistNum(d.acc)), 1) } };
   const days = raw.days && typeof raw.days === "object" ? raw.days : {};
   out.days = { n: Math.floor(typistNum(days.n)), last: Math.floor(typistNum(days.last)) };
+  const acq = typistNormaliseAcq(raw.acqEma);   // Z12, additive: absent until a run has 10 acquisition samples
+  if (acq > 0) out.acqEma = acq;
   return out;
 }
 
@@ -198,6 +221,9 @@ function typistNewState() {
     // ring of the last 128 qualifying intervals
     rMs: new Float32Array(TYPIST_RING), rEnd: new Float64Array(TYPIST_RING), rHead: 0, rCount: 0,
     runId: null, runN: 0, runMs: 0,
+    // Z12 acquisition gap: aqAt = when the pending gap opened (0: none), aqCur = the target being typed, the run EMA
+    // (keyed by run id) and the unrounded lifetime EMA behind profile.acqEma
+    aqAt: 0, aqCur: null, aqRunId: null, aqRunN: 0, aqRunEma: 0, aqLife: 0,
     // segment scope (one sector attempt or one practice segment)
     segKind: "sector", sN: 0, sMs: 0, sSq: 0, sKeys: 0, sMiss: 0, sHits: 0,
     sKeyN: new Uint16Array(26), sKeyMiss: new Uint16Array(26), sBiN: new Uint16Array(676), sBiMs: new Float32Array(676),
@@ -239,11 +265,13 @@ Object.assign(Game.prototype, {
     ty.kN.fill(0); ty.kErr.fill(0); ty.kMs.fill(0); ty.bN.fill(0); ty.bMs.fill(0);
     ty.keysDirty = false; ty.bigramsDirty = false;
     ty.wKeys = TYPIST_EMPTY; ty.wBigram = null; ty.wAt = -1e9; ty.wStale = true;
+    ty.aqAt = 0; ty.aqCur = null; ty.aqLife = 0;
     ty.bsLevel = 0; ty.bsRunId = null; ty.bsSpeed = 0; ty.bsNew = false; ty.bsApplied = false;
     const s = this.save;
     if (!s || s.profile == null) return;   // fresh saves stay profile: null until the first key (CONTRACT 3.2)
     s.profile = typistMigrateProfile(s.profile);
     const p = s.profile;
+    ty.aqLife = p.acqEma > 0 ? p.acqEma : 0;
     for (let i = 0; i < 26; i++) {
       const e = p.keys[TYPIST_LETTERS[i]];
       if (!e) continue;
@@ -307,6 +335,7 @@ Object.assign(Game.prototype, {
     if (ty.puRef) ty.puRef.leadPulseAt = 0;
     ty.puRef = null; ty.puAt = 0;
     ty.wStale = true; ty.wAt = -1e9;
+    ty.aqAt = 0; ty.aqCur = null;
     return true;
   },
 
@@ -328,6 +357,79 @@ Object.assign(Game.prototype, {
       }
     }
     ty.cRef = e.ref; ty.cSeg = e.seg; ty.cIndex = e.index; ty.cAt = e.t;
+    this.typistAcqKey(ty, e);
+  },
+
+  // ------------------------- Z12: acquisition gap -------------------------
+  // keyCorrect: the first correct key after a pending gap closes it (one sample when 10 ms .. 1.5 s), then a target's
+  // last key ends it and opens the next gap. Boss keys and the Flight Check never feed it. O(1), no allocation.
+  typistAcqKey(ty, e) {
+    if (e.kind === "boss" || this.typistAcqOff()) { ty.aqAt = 0; ty.aqCur = null; return; }
+    if (ty.aqAt > 0) {
+      const ms = e.t - ty.aqAt;
+      ty.aqAt = 0;
+      if (ms >= TYPIST_GAP_MIN_MS && ms <= SPEED_GAP_MAX_MS) this.typistAddAcquire(ty, ms);
+    }
+    if (e.last) { ty.aqCur = null; this.typistAcqArm(ty, e.t, e.ref); }
+    else ty.aqCur = e.ref;
+  },
+
+  // Not measured: a boss fight (segments follow at once, minions are a side task) and the Flight Check (W4).
+  typistAcqOff() {
+    return !!this.inBoss || (typeof this.isFlightCheckActive === "function" && !!this.isFlightCheckActive());
+  },
+
+  // A target ended at t (kill: `ended` is still alive this frame; release: null, the plate stays lockable): the gap opens
+  // only while at least one lockable target is on the field.
+  typistAcqArm(ty, t, ended) {
+    ty.aqAt = !this.typistAcqOff() && this.typistAcqTargetUp(ended) ? t : 0;
+  },
+
+  // A lockable plate or capsule other than `ended` with a character left. <= 14 plates, no allocation.
+  typistAcqTargetUp(ended) {
+    const en = this.enemies;
+    for (let i = 0; i < en.length; i++) {
+      const o = en[i];
+      if (o !== ended && this.isTargetable(o) && o.nextChar()) return true;
+    }
+    const pw = this.powerups;
+    for (let i = 0; i < pw.length; i++) {
+      const o = pw[i];
+      if (o !== ended && this.isTargetable(o) && o.nextChar()) return true;
+    }
+    return false;
+  },
+
+  // One sample: the run EMA (alpha .1; a new run id restarts it) and the lifetime EMA (profile.acqEma), which appears
+  // the first time a run reaches 10 samples (seeded with its run EMA) and then takes one EMA step per sample. Writes the
+  // in-memory profile only; the existing save points persist it.
+  typistAddAcquire(ty, ms) {
+    const key = this.typistRunKey();
+    if (key !== ty.aqRunId) { ty.aqRunId = key; ty.aqRunN = 0; ty.aqRunEma = 0; }
+    ty.aqRunEma = ty.aqRunN > 0 ? ty.aqRunEma + TYPIST_ACQ_ALPHA * (ms - ty.aqRunEma) : ms;
+    ty.aqRunN++;
+    const p = this.save.profile;
+    if (!p) return;
+    const stored = p.acqEma > 0 ? p.acqEma : 0;
+    let life = stored > 0 && Math.abs(ty.aqLife - stored) <= 0.5 ? ty.aqLife : stored;   // the unrounded mirror unless replaced
+    if (life > 0) life += TYPIST_ACQ_ALPHA * (ms - life);
+    else if (ty.aqRunN >= TYPIST_ACQ_MIN_N) life = ty.aqRunEma;
+    else return;
+    ty.aqLife = life;
+    p.acqEma = Math.round(life);
+  },
+
+  // Z12 API (PACE D2): the pilot's acquisition time in ms: this run's EMA from 10 samples; before that (lead ruling Z14,
+  // a stale stored value must not hold a returning pilot's pace for a sector or two) the blend
+  // (n x run EMA + (10 - n) x base) / 10 of this run's n samples with base = the lifetime EMA when present, else 300
+  // (n = 0: the base alone); clamped to 120 .. 900. Any time, no allocation.
+  typistAcquireMs() {
+    const ty = this.typistState();
+    const n = ty.aqRunId === this.typistRunKey() ? Math.min(ty.aqRunN, TYPIST_ACQ_MIN_N) : 0;
+    const p = this.save && this.save.profile;
+    const base = p && p.acqEma > 0 ? p.acqEma : TYPIST_ACQ_DEFAULT_MS;
+    const ms = n >= TYPIST_ACQ_MIN_N ? ty.aqRunEma : (n * ty.aqRunEma + (TYPIST_ACQ_MIN_N - n) * base) / TYPIST_ACQ_MIN_N;
+    return clamp(ms, TYPIST_ACQ_MIN_MS, TYPIST_ACQ_MAX_MS);
   },
 
   // Per-attempt bookkeeping on the expected key (code -1: only the segment totals move).
@@ -1305,7 +1407,9 @@ Object.assign(Game.prototype, {
       cause: this.typistCauseParts().text,
       hit: { src: ty.hitSrc, wave: ty.hitWave, phase: ty.hitPhase },
       leaks: { wave: Array.from(ty.lkWave), letters: Array.from(ty.lkWaveLetters), minion: Array.from(ty.lkMinion), surge: Array.from(ty.lkSurge) },
-      stash: { level: ty.bsLevel, runId: ty.bsRunId, speed: ty.bsSpeed, isNew: ty.bsNew, applied: ty.bsApplied }
+      stash: { level: ty.bsLevel, runId: ty.bsRunId, speed: ty.bsSpeed, isNew: ty.bsNew, applied: ty.bsApplied },
+      acq: { pending: ty.aqAt > 0, at: ty.aqAt, cur: ty.aqCur ? (ty.aqCur.text || ty.aqCur.label || null) : null, runId: ty.aqRunId, n: ty.aqRunN,
+        ema: Math.round(ty.aqRunEma * 100) / 100, life: this.save && this.save.profile && this.save.profile.acqEma > 0 ? this.save.profile.acqEma : null, ms: this.typistAcquireMs() }
     };
   }
 });
@@ -1316,7 +1420,7 @@ if (typeof onGameHook === "function") {
   onGameHook("keyMiss", function (e) { this.typistOnMiss(e); });
   onGameHook("modeChange", function () {
     const ty = this._ty;
-    if (ty) { ty.cRef = null; ty.cSeg = -1; ty.cIndex = -1; ty.cAt = 0; }   // pause, blur, screens: the chain restarts
+    if (ty) { ty.cRef = null; ty.cSeg = -1; ty.cIndex = -1; ty.cAt = 0; ty.aqAt = 0; ty.aqCur = null; }   // pause, blur, screens: the chain and any acquisition gap restart
   });
   onGameHook("sectorStart", function (e) {
     const ty = this.typistState();
@@ -1338,6 +1442,15 @@ if (typeof onGameHook === "function") {
       ty.lkWave[w]++;
       if (e && e.len === 1) ty.lkWaveLetters[w]++;
     }
+    if (e && e.en && e.en === ty.aqCur) { ty.aqCur = null; this.typistAcqArm(ty, nowMs(), e.en); }   // Z12: the target being typed leaked
+  });
+  // Z12: a manual release (Space / Backspace) or a lost lock ends the target being typed; the released plate stays
+  // lockable, so it counts for the "another target on the field" rule. A "dead" release (the target left) opens nothing.
+  onGameHook("lockRelease", function (e) {
+    const ty = this._ty;
+    if (!ty) return;
+    ty.aqCur = null;
+    if (e && (e.reason === "manual" || e.reason === "lost")) this.typistAcqArm(ty, nowMs(), null);
   });
   onGameHook("hullDamage", function (e) {
     const ty = this.typistState();
