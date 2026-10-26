@@ -7,10 +7,11 @@ target to lock on, finish the word to fire, and clear ten sectors of word-bosses
 (plain HTML, CSS and classic JavaScript, no bundler, no runtime dependencies) that plays at
 **[https://typer198x.com](https://typer198x.com)** and can be served from any static host.
 
-This README describes the web build after the 2026 overhaul and the training update (release `20261024b`: hand-speed
+This README describes the web build after the 2026 overhaul, the training update (release `20261024b`: hand-speed
 WPM, typo feedback, rank lines, the pilot profile and Flight log, the first-run flight check, everyday words and
 two-word targets aimed at weak keys, the Counter-Signal boss attack and Overdrive, a stream that follows the pilot's
-speed with timed-out waves, hull carry and Cadet pace, and the daily sortie, drill and endless drift). Release steps
+speed with timed-out waves, hull carry and Cadet pace, and the daily sortie, drill and endless drift) and its pace
+follow-up (release `20261025a`: the pace also counts how quickly the pilot finds the next target). Release steps
 live in [DEPLOY.md](./DEPLOY.md);
 the play-test harness has its own [tools/playtest/README.md](./tools/playtest/README.md).
 
@@ -141,12 +142,12 @@ The table is the floor: `assets/js/game/42-pacing.js` multiplies each wave's spa
 `paceMul = clamp(0.85 x pilotCpsEff / targetCps, 1.0, 2.5)` (moving at most 0.35 per wave; pilotCps = this run's hand
 speed after 20 intervals, else the profile's after 60, else the table; `pilotCpsEff = L / (L / pilotCps + acq / 1000)`
 with L the sector's mean target length and acq MEASURE's `typistAcquireMs()`, lead ruling Z12, see the changelog; a
-wave that times out with no leak in it lowers the next wave's target by 0.35), adds `min(3, round(2 (paceMul - 1)))`
-to the alive cap and `0.15 (paceMul - 1)` to plate speed, and from paceMul 1.35 tops an emptying field up to two
-plates. An empty field spawns after 0.1 s (`HUNGRY_SPAWN_S`) and new plates roll in 10-30 px off-screen
-(`SPAWN_ROLLIN_PX`). A wave's cap is `max(table cap, 1.25 x the stream's delivery time for the paced quota + 4 s)`
-(`paceWaveCap`, lead ruling Z5) and ends the wave only while plates are alive; an empty field lifts it and the wave
-ends by quota.
+wave that times out with no leak in it sets the next wave's target 0.35 below the slower of its own target and the
+timed-out wave's pace, floor 1.0), adds `min(3, round(2 (paceMul - 1)))` to the alive cap and `0.15 (paceMul - 1)` to
+plate speed, and from paceMul 1.35 tops an emptying field up to two plates. An empty field spawns after 0.1 s
+(`HUNGRY_SPAWN_S`) and new plates roll in 10-30 px off-screen (`SPAWN_ROLLIN_PX`). A wave's cap is `max(table cap,
+1.25 x the stream's delivery time for the paced quota + 4 s)` (`paceWaveCap`, lead ruling Z5) and ends the wave only
+while plates are alive; an empty field lifts it and the wave ends by quota.
 
 Every results card stamps a rank from `rankFor(accPct, wpm, hpPts, level)`: accuracy 50 %, speed 30 %, hull 20 %
 (`RANK` in 20-constants.js, thresholds S 0.90 / A 0.75 / B 0.55 / C 0.35, D below). Speed is hand speed (below) and
@@ -262,7 +263,7 @@ come from `PALETTE` / CSS variables rather than literals.
    is its only writer:
 
    ```bash
-   tools/bump-version.sh 20261024b            # rewrite every shell token (index, info, support, privacy pages, game.js)
+   tools/bump-version.sh 20261025a            # rewrite every shell token (index, info, support, privacy pages, game.js)
    tools/bump-version.sh                      # today's date + next letter
    tools/bump-version.sh --dry-run            # report only
    tools/bump-version.sh --add-missing        # also stamp script/stylesheet tags that have no ?v= yet (never the font preload)
@@ -516,7 +517,7 @@ Full flag, field and fixture tables: [tools/playtest/README.md](./tools/playtest
 The full, ordered procedure is in [DEPLOY.md](./DEPLOY.md). In short:
 
 ```bash
-tools/bump-version.sh 20261024b                               # 1. new shell token (never deploy the old one)
+tools/bump-version.sh 20261025a                               # 1. new shell token (never deploy the old one)
 (cd tools/playtest && bash run-matrix.sh)                      # 2. matrix green
 node tools/deploy/deploy.mjs --dry-run --user <ftp-user>       # 3. what would upload (about 200 files, ~370 MB listed; unchanged binaries skipped by size)
 TYPER_FTP_PASSWORD=... node tools/deploy/deploy.mjs --user <ftp-user> --htaccess   # 4. backup, upload, cache policy, verify
@@ -607,18 +608,25 @@ remixes are welcome.
 
 ## Changelog
 
-### Pace and target acquisition (follow-up to `20261024b`, to ship as `20261025a`)
+### 2026-10 pace follow-up (release token `20261025a`)
 
-**Pace counts how quickly you find the next target.** Hand speed only times the keys inside a word, so a pilot who
-also takes a moment to spot each new plate was sent a stream faster than they could clear: waves ran out of time
-with nothing missed and the sector clock cut them short. The game now also measures your acquisition time, from the
-moment a target ends (kill, release, leak) while another one is on screen to the first correct key of your next lock
-(up to 1.5 s, never in boss fights or the flight check; this run's average after ten targets, else your Flight log's,
-else 300 ms, held between 120 and 900 ms; `32-typist.js`, `profile.acqEma`), and paces on `L / (L / hand speed +
-acquisition)` with L the sector's mean target length in characters, about 2 in Sector 1 to 8 in Sector 10
-(`42-pacing.js`, lead ruling Z12). As a safety net, a wave that times out although nothing leaked lowers the next
-wave's pace by one step. With a 300 ms acquisition the harness typists at 55 and 80 WPM now finish Sectors 2-3 with
-no sector-clock cut and every PERFECT WAVE, as on `20261016a`; numbers in `tools/playtest/balance.md`.
+**The pace now also counts how quickly you find the next target.** Since `20261024b` the stream follows your hand
+speed, which only times the keys inside a word. A pilot who also takes a moment to spot each new plate could be sent
+more than they could clear: waves ran out of time with nothing missed (`WAVE TIMED OUT · N ESCAPED`) and the sector
+clock cut them short. The game now also measures how long you take to find your next target, from the moment a
+target ends (destroyed, let go or leaked) while another is on screen to the first correct key of your next lock
+(pauses over 1.5 s, boss fights and the flight check do not count). It uses this run's average after ten targets,
+else your Flight log's, else 300 ms, and the longer you take, the gentler the stream, most of all in the early
+sectors where targets are short. The stream still never drops below the standard pace on its own.
+
+**A clean timeout slows the next wave.** If a wave runs out of time although nothing got past you, the next wave of
+that sector comes in one step slower than the one that timed out (never below the standard pace).
+
+**Under the hood.** `32-typist.js` keeps the acquisition average (the lifetime value is `profile.acqEma` in the
+save, absent until a run has ten samples, held between 120 and 900 ms) and `42-pacing.js` paces on `L / (L / hand
+speed + acquisition)` with L the sector's mean target length in characters (lead ruling Z12). With a 300 ms
+acquisition the harness typists at 55 and 80 WPM now clear Sectors 2-3 with no sector-clock cut, no wave timed out
+without a leak and every PERFECT WAVE, as on `20261016a`; numbers in `tools/playtest/balance.md`.
 
 ### 2026-10 training update (release token `20261024b`, art token unchanged)
 
