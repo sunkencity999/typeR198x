@@ -66,22 +66,26 @@ def frame(size_px, kind, t, seed):
     if kind == "fire":
         R = 0.30 + 0.66 * t
         r_e = R * (0.80 + 0.40 * nz)
-        hollow = max(0.0, (t - 0.32)) / 0.68
-        r_in = hollow * R * 0.78 * (0.78 + 0.35 * nz2)
+        hollow = max(0.0, (t - 0.2)) / 0.8
+        r_in = hollow * R * 0.92 * (0.78 + 0.35 * nz2)
         mask = (d < r_e) & (d > r_in)
+        if t > 0.3:                                                          # porous shell: the blast tears open
+            mask &= ~(nz2 > (0.95 - 0.3 * t))
         s = np.clip((d - r_in) / np.maximum(1e-3, (r_e - r_in)), 0, 1)     # 0 inner edge, 1 outer edge
         s = np.clip(s + 0.22 * (nz2 - 0.5), 0, 0.999)                       # jagged band borders
         streak = np.abs(np.sin(ang * 7 + nz * 4.0)) ** 8 > 0.45              # radial streaks lift a band
         s = np.where(streak, np.clip(s - 0.25, 0, 0.999), s)
         band = np.floor(s * 4).astype(int)                                  # 4 posterised bands
-        if t < 0.45:
+        if t < 0.4:
             cols = [PAL["white"], PAL["cyan"], PAL["magenta"], PAL["violet"]]
-        elif t < 0.7:
+        elif t < 0.58:
             cols = [PAL["cyan"], PAL["magenta"], PAL["violet"], PAL["indigo"]]
         else:
-            cols = [PAL["magenta"], PAL["violet"], PAL["indigo"], PAL["smoke"]]
+            cols = [PAL["violet"], PAL["indigo"], PAL["indigo"], PAL["smoke"]]      # cooling plasma: magenta only as embers
         for i in range(4):
             paint(out, mask & (band == i), cols[i])
+        if t >= 0.58:
+            paint(out, mask & (nz2 > 0.62) & (band <= 1), PAL["magenta"])
         # sparkle pixels inside the shell
         spark = mask & (nz2 > 0.82) & (t < 0.6)
         paint(out, spark, PAL["white"])
@@ -102,7 +106,7 @@ def frame(size_px, kind, t, seed):
     if kind == "smoke":
         R = 0.92
         fade = 1.0 - max(0.0, (t - 0.72)) / 0.3
-        alpha = max(0.0, min(1.0, 0.9 * fade))
+        alpha = max(0.0, min(1.0, 0.8 * fade))
         puffs = np.zeros((n, n), bool)
         k = 8
         for i in range(k):
@@ -113,7 +117,7 @@ def frame(size_px, kind, t, seed):
             puffs |= np.hypot(xx - px, yy - py) < pr * (0.86 + 0.28 * nz2)
         puffs |= d < 0.3 * R * (0.9 + 0.2 * nz)
         hole = d < (0.18 + 0.5 * max(0.0, t - 0.75) / 0.25) * R * (0.8 + 0.4 * nz2) if t > 0.75 else np.zeros_like(puffs)
-        body = puffs & ~hole
+        body = puffs & ~hole & ~(nz2 > 0.74)                                 # torn smoke, never a solid disc
         paint(out, body, PAL["indigo"], alpha)
         inner = body & (nz2 < 0.45)
         paint(out, inner, PAL["smoke"], alpha)
@@ -151,7 +155,7 @@ def put(idx, size, kind, t, seed):
 
 for i, (k, t) in zip([2, 1, 0], SMALL): put(i, 160, k, t, SEED + i)
 for i, (k, t) in zip([9, 7, 6, 5, 4, 3, 8], MEDIUM): put(i, 300, k, t, SEED + 20 + i)
-for i, (k, t) in zip([15, 14, 12, 11, 13, 19, 17], LARGE): put(i, 520, k, t, SEED + 40 + i)
+for i, (k, t) in zip([15, 14, 12, 11, 13, 19, 17], LARGE): put(i, 440, k, t, SEED + 40 + i)
 frames[16] = up(frame(96, "debris", 0, SEED + 99))
 for i in (10, 18, 20): frames[i] = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
 
@@ -161,15 +165,15 @@ rects = {}
 def place(idx, x, y):
     im = frames[idx]; sheet.alpha_composite(im, (x, y)); rects[idx] = {"x": x, "y": y, "w": im.width, "h": im.height}
 x = 0
-for idx in [15, 14, 12, 11]: place(idx, x, 0); x += 520
+for idx in [15, 14, 12, 11]: place(idx, x, 0); x += 440
 for idx in [2, 1, 0]: place(idx, x, 0); x += 160
 place(16, x, 0)
 x = 0
-for idx in [13, 19, 17]: place(idx, x, 520); x += 520
-for idx in [9, 7, 6, 5]: place(idx, x, 520); x += 300
+for idx in [13, 19, 17]: place(idx, x, 440); x += 440
+for idx in [9, 7, 6, 5]: place(idx, x, 440); x += 300
 x = 0
-for idx in [4, 3, 8]: place(idx, x, 1040); x += 300
-for idx in [10, 18, 20]: place(idx, x, 1040); x += 16
+for idx in [4, 3, 8]: place(idx, x, 880); x += 300
+for idx in [10, 18, 20]: place(idx, x, 880); x += 16
 
 os.makedirs(OUT, exist_ok=True)
 sheet.save(os.path.join(OUT, "explosions.png"), optimize=True)

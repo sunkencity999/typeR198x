@@ -13,27 +13,27 @@ const EXPLOSION_SHEET = {
 // Indices are stable: frames 10, 18 and 20 are unused 16 px blanks and 16 is the debris chunk (drawDebris), so no set
 // references them (F012); they stay in the table so the numbering does not shift.
 const EXPLOSION_FRAMES = [
-  { x: 2400, y: 0, w: 160, h: 160 },
-  { x: 2240, y: 0, w: 160, h: 160 },
   { x: 2080, y: 0, w: 160, h: 160 },
-  { x: 300, y: 1040, w: 300, h: 300 },
-  { x: 0, y: 1040, w: 300, h: 300 },
-  { x: 2460, y: 520, w: 300, h: 300 },
-  { x: 2160, y: 520, w: 300, h: 300 },
-  { x: 1860, y: 520, w: 300, h: 300 },
-  { x: 600, y: 1040, w: 300, h: 300 },
-  { x: 1560, y: 520, w: 300, h: 300 },
-  { x: 900, y: 1040, w: 16, h: 16 },
-  { x: 1560, y: 0, w: 520, h: 520 },
-  { x: 1040, y: 0, w: 520, h: 520 },
-  { x: 0, y: 520, w: 520, h: 520 },
-  { x: 520, y: 0, w: 520, h: 520 },
-  { x: 0, y: 0, w: 520, h: 520 },
-  { x: 2560, y: 0, w: 96, h: 96 },
-  { x: 1040, y: 520, w: 520, h: 520 },
-  { x: 916, y: 1040, w: 16, h: 16 },
-  { x: 520, y: 520, w: 520, h: 520 },
-  { x: 932, y: 1040, w: 16, h: 16 }
+  { x: 1920, y: 0, w: 160, h: 160 },
+  { x: 1760, y: 0, w: 160, h: 160 },
+  { x: 300, y: 880, w: 300, h: 300 },
+  { x: 0, y: 880, w: 300, h: 300 },
+  { x: 2220, y: 440, w: 300, h: 300 },
+  { x: 1920, y: 440, w: 300, h: 300 },
+  { x: 1620, y: 440, w: 300, h: 300 },
+  { x: 600, y: 880, w: 300, h: 300 },
+  { x: 1320, y: 440, w: 300, h: 300 },
+  { x: 900, y: 880, w: 16, h: 16 },
+  { x: 1320, y: 0, w: 440, h: 440 },
+  { x: 880, y: 0, w: 440, h: 440 },
+  { x: 0, y: 440, w: 440, h: 440 },
+  { x: 440, y: 0, w: 440, h: 440 },
+  { x: 0, y: 0, w: 440, h: 440 },
+  { x: 2240, y: 0, w: 96, h: 96 },
+  { x: 880, y: 440, w: 440, h: 440 },
+  { x: 916, y: 880, w: 16, h: 16 },
+  { x: 440, y: 440, w: 440, h: 440 },
+  { x: 932, y: 880, w: 16, h: 16 }
 ];
 
 // Frame order per set: flash (additive) -> fireball shell -> smoke; the generator lays the sheet out in this order.
