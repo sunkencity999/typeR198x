@@ -1,5 +1,5 @@
 {
- "version": "202610161134",
+ "version": "202611010433",
  "music": [
   "./assets/opt/audio/galactic_high_score_1.mp3",
   "./assets/opt/audio/galactic_high_score_2.mp3",
@@ -286,26 +286,26 @@
     "h": 1536
    },
    "crop": {
-    "x": 80,
+    "x": 108,
     "y": 114,
-    "w": 2549,
+    "w": 2521,
     "h": 1237
    },
    "content": {
-    "x": 104,
+    "x": 132,
     "y": 138,
-    "w": 2501,
+    "w": 2473,
     "h": 1189
    },
    "x1": {
     "src": "./assets/opt/ships/little-dark-one@1x.webp",
     "w": 350,
-    "h": 170
+    "h": 172
    },
    "x2": {
     "src": "./assets/opt/ships/little-dark-one@2x.webp",
     "w": 700,
-    "h": 340
+    "h": 343
    },
    "fallback": "./assets/ships/S_S_littledarkone.png"
   },
@@ -316,15 +316,15 @@
    },
    "crop": {
     "x": 18,
-    "y": 135,
+    "y": 137,
     "w": 2634,
-    "h": 1250
+    "h": 1248
    },
    "content": {
     "x": 42,
-    "y": 159,
+    "y": 161,
     "w": 2586,
-    "h": 1202
+    "h": 1200
    },
    "x1": {
     "src": "./assets/opt/ships/sofrito@1x.webp",
@@ -376,18 +376,18 @@
     "x": 87,
     "y": 82,
     "w": 2614,
-    "h": 1407
+    "h": 1406
    },
    "content": {
     "x": 111,
     "y": 106,
     "w": 2566,
-    "h": 1359
+    "h": 1358
    },
    "x1": {
     "src": "./assets/opt/bosses/1@1x.webp",
     "w": 800,
-    "h": 431
+    "h": 430
    },
    "x2": {
     "src": "./assets/opt/bosses/1@2x.webp",
@@ -402,26 +402,26 @@
     "h": 1536
    },
    "crop": {
-    "x": 618,
+    "x": 648,
     "y": 23,
-    "w": 1703,
-    "h": 1500
+    "w": 1673,
+    "h": 1493
    },
    "content": {
-    "x": 642,
+    "x": 672,
     "y": 47,
-    "w": 1655,
-    "h": 1452
+    "w": 1625,
+    "h": 1445
    },
    "x1": {
     "src": "./assets/opt/bosses/2@1x.webp",
     "w": 800,
-    "h": 705
+    "h": 714
    },
    "x2": {
     "src": "./assets/opt/bosses/2@2x.webp",
     "w": 1600,
-    "h": 1409
+    "h": 1428
    },
    "fallback": "./assets/boss_ships/secondlevelboss.png"
   },
@@ -431,26 +431,26 @@
     "h": 1536
    },
    "crop": {
-    "x": 534,
-    "y": 90,
-    "w": 2038,
-    "h": 1351
+    "x": 535,
+    "y": 98,
+    "w": 2037,
+    "h": 1343
    },
    "content": {
-    "x": 558,
-    "y": 114,
-    "w": 1990,
-    "h": 1303
+    "x": 559,
+    "y": 122,
+    "w": 1989,
+    "h": 1295
    },
    "x1": {
     "src": "./assets/opt/bosses/3@1x.webp",
     "w": 800,
-    "h": 530
+    "h": 527
    },
    "x2": {
     "src": "./assets/opt/bosses/3@2x.webp",
     "w": 1600,
-    "h": 1061
+    "h": 1055
    },
    "fallback": "./assets/boss_ships/thirdlevelboss.png"
   },
@@ -460,26 +460,26 @@
     "h": 1536
    },
    "crop": {
-    "x": 308,
+    "x": 317,
     "y": 115,
-    "w": 2239,
+    "w": 2230,
     "h": 1323
    },
    "content": {
-    "x": 332,
+    "x": 341,
     "y": 139,
-    "w": 2191,
+    "w": 2182,
     "h": 1275
    },
    "x1": {
     "src": "./assets/opt/bosses/4@1x.webp",
     "w": 800,
-    "h": 473
+    "h": 475
    },
    "x2": {
     "src": "./assets/opt/bosses/4@2x.webp",
     "w": 1600,
-    "h": 945
+    "h": 949
    },
    "fallback": "./assets/boss_ships/fourthevelboss.png"
   },
@@ -548,25 +548,25 @@
    },
    "crop": {
     "x": 41,
-    "y": 66,
+    "y": 67,
     "w": 2734,
-    "h": 1360
+    "h": 1358
    },
    "content": {
     "x": 65,
-    "y": 90,
+    "y": 91,
     "w": 2686,
-    "h": 1312
+    "h": 1310
    },
    "x1": {
     "src": "./assets/opt/bosses/7@1x.webp",
     "w": 800,
-    "h": 398
+    "h": 397
    },
    "x2": {
     "src": "./assets/opt/bosses/7@2x.webp",
     "w": 1600,
-    "h": 796
+    "h": 795
    },
    "fallback": "./assets/boss_ships/seventhlevelboss.png"
   },
@@ -578,19 +578,19 @@
    "crop": {
     "x": 62,
     "y": 18,
-    "w": 2634,
+    "w": 2633,
     "h": 1493
    },
    "content": {
     "x": 86,
     "y": 42,
-    "w": 2586,
+    "w": 2585,
     "h": 1445
    },
    "x1": {
     "src": "./assets/opt/bosses/8@1x.webp",
     "w": 800,
-    "h": 453
+    "h": 454
    },
    "x2": {
     "src": "./assets/opt/bosses/8@2x.webp",
@@ -606,15 +606,15 @@
    },
    "crop": {
     "x": 72,
-    "y": 259,
-    "w": 2439,
-    "h": 1252
+    "y": 262,
+    "w": 2429,
+    "h": 1247
    },
    "content": {
     "x": 96,
-    "y": 283,
-    "w": 2391,
-    "h": 1204
+    "y": 286,
+    "w": 2381,
+    "h": 1199
    },
    "x1": {
     "src": "./assets/opt/bosses/9@1x.webp",
@@ -634,26 +634,26 @@
     "h": 1536
    },
    "crop": {
-    "x": 627,
-    "y": 31,
-    "w": 1562,
-    "h": 1505
+    "x": 633,
+    "y": 32,
+    "w": 1555,
+    "h": 1504
    },
    "content": {
-    "x": 651,
-    "y": 55,
-    "w": 1514,
-    "h": 1481
+    "x": 657,
+    "y": 56,
+    "w": 1507,
+    "h": 1480
    },
    "x1": {
     "src": "./assets/opt/bosses/10@1x.webp",
-    "w": 781,
-    "h": 753
+    "w": 777,
+    "h": 752
    },
    "x2": {
     "src": "./assets/opt/bosses/10@2x.webp",
-    "w": 1562,
-    "h": 1505
+    "w": 1555,
+    "h": 1504
    },
    "fallback": "./assets/boss_ships/10thlevelboss.png"
   },

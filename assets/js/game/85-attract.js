@@ -44,7 +44,7 @@ const ATTRACT = Object.freeze({
                         // kills land in the gap between the cabinet's two columns, not under the ship cards
   seed: 2,              // ghosts already mid-field when the attract starts (the first frame is never empty)
   seedX: Object.freeze([0.56, 0.80]),
-  glassBlurPx: 4,       // the cabinet's generic 10 px frosted glass hides plates and beams; the menu panel gets
+  glassBlurPx: 1.5,     // the cabinet's generic 10 px frosted glass hides plates and beams; the menu panel gets
                         // this blur while the attract runs (inline fallback until style.css owns a .screen--menu rule)
   fallbackWords: Object.freeze(["type", "lock", "fire", "neon", "warp", "sync", "grid", "beam"])
 });

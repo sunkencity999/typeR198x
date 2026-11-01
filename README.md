@@ -249,7 +249,10 @@ Module map, in `index.html` load order:
 | `assets/js/game/52-modes.js` | Daily Sortie (date seed, per-wave mulberry32 through `this.rand()`, medal, streak, share line), Endless Drift and Drill streams (`waveTuning`, own text picker), the title deck, the mode results screen, `save.modes` (MODES) |
 | `assets/js/game/60-hud.js` | DOM HUD with write-on-change diffing: score, combo and multiplier, HP meter, chips, boss meter |
 | `assets/js/game/70-render.js` | `resizeCanvas`/`renderScale`, plates, capsules and rails, dying and escaping plates, boss art (Counter-Signal glow) and console slab, warp-in, storms, parallax, stars, `render()` in layer order |
+| `assets/js/game/72-atmos.js` | ATMOS: parallax tiles baked once per sector into offscreen canvases with a seam-dissolve edge (the masters do not wrap), a per-sector multiply tint + saturation pull + lane haze, and a hue shift for sectors 6 / 8 / 9 that share art with 3 / 4 / 5 (`ATMOS_GRADES`) |
 | `assets/js/game/75-fx-draw.js` | Ship, beams, rings/bolts/debris, particles, overlays, vignette, active-target redraw |
+| `assets/js/game/76-bloom.js` | BLOOM: the frame so far drawn at quarter resolution, multiplied by itself twice (luminance^3 threshold), blurred by a 1/16 round trip and added back at `BLOOM.alpha`; two offscreen composite sets per frame, self-disables when its own cost stays above `BLOOM.budgetMs` |
+| `assets/js/game/78-bossfx.js` | BOSSFX: overrides `drawBossArt` / `drawBossDissolve` with roll + breathing + phase punch, an emissive pulse extracted from the sprite (luminance^3, no pixel reads), three damage states baked per fight (seeded scorch blotches, cracks, char) with a crossfade, intro slide ghosts, sparks and smoke from the tick hook (`BOSSFX`) |
 | `assets/js/game/80-fx.js` | Effects clock: trauma camera and `shakeOffset`, hit-stop/slow-mo, flash channels, `onKeyFx`/`onKillFx`, ambient step |
 | `assets/js/game/82-overdrive.js` | Overdrive: burst meter relative to the pilot's speed (MEASURE's intervals), the shield-ring arc, white-hot beams / plume, +25 % on kill / boss-letter / segment score, vent / slow exit, card note, `pilotWpm()` (ARCADE) |
 | `assets/js/game/85-attract.js` | Attract mode on the title screen: ghost plates from `LEVELS[0].words`, selected-ship cruise, 20 fps drift after 90 s idle (`startAttract`/`stopAttract`/`updateAttract`/`drawAttract`) |
@@ -314,6 +317,11 @@ rewrites the `<a href>` tokens and the `privacy.html` refresh), so the footer pa
 `assets/opt` token on the shell (the ship cards) differs from the manifest version.
 
 ## Asset pipeline
+
+Since the 2026-10-31 presentation pass the ship and boss masters are themselves pixel art (`tools/art/pixelize.py`
+over the original cel-shaded illustrations: ships at one art pixel per 1.4 logical px, bosses at one per 2 logical px,
+the backdrops' density) and the explosion sheet is generated (`tools/art/gen_explosions.py`). The originals are in git
+history at `v20261025a`; `tools/art/README.md` has the parameters and the revert command.
 
 The browser build never downloads the PNG/WAV masters. `tools/build-web-assets.sh` encodes them into
 `assets/opt/` (committed) and writes the manifest:
@@ -511,6 +519,8 @@ Full flag, field and fixture tables: [tools/playtest/README.md](./tools/playtest
 | Script | Purpose |
 | --- | --- |
 | `tools/build-web-assets.sh` | Masters -> `assets/opt` + manifest (+ og-card); `MANIFEST_ONLY=1`, `OG_ONLY=1`, `SKIP_OG=1` |
+| `tools/art/gen_explosions.py` | Generates the explosion sheet master (neon pixel art, 21 rects in `EXPLOSION_FRAMES` order) + preview; see `tools/art/README.md` |
+| `tools/art/pixelize.py` | Pixel-consistency pass for a sprite master (box downsample to the backdrops' art density, k-means palette, hard alpha, edge darkening, nearest upscale back to master size) |
 | `tools/bump-version.sh [token] [--root] [--dry-run] [--add-missing] [--quiet]` | Single writer of the shell token |
 | `tools/deploy-check.sh <url> [--strict] [--local] [--unreferenced-out f]` | Remote header/MIME/token/privacy checks; `--local` adds source checks and the native sync dry run |
 | `tools/deploy/deploy.mjs` | FTP/FTPS deploy with backup, dry run and the `.htaccess` cache policy (see below) |
@@ -615,6 +625,41 @@ If you stream, teach or hack on typing games, fork the project and share improve
 remixes are welcome.
 
 ## Changelog
+
+### 2026-10-31 presentation pass (release token `20261031a`, art token `202611010433`)
+
+The visual integration pass after the art review: one art language, no seams, a world that sits behind the play layer,
+bosses that move and wear damage, neon that blooms. Gameplay, saves, balance and the probes' contracts are unchanged;
+the per-frame budgets hold (composite sets <= 6, shadowBlur 0, no filters, no pixel reads).
+
+**World (ATMOS, `assets/js/game/72-atmos.js`).** None of the ten backdrop masters wraps (left/right edge mismatch 17-62
+of 255), so edge-to-edge tiling scrolled a hard vertical cut across the field every tile width. Each parallax tile is
+now baked once per sector into an offscreen canvas whose left 16 % dissolves over the previous tile (`drawTiledImage`
+lays tiles with that overlap; the untiled vistas fade both side edges). The same bake grades the sector: a multiply
+tint, a saturation pull and a lane haze band push the painting behind the plates (sectors 1 and 7, the cream stations,
+move into the neon family), and sectors 6 / 8 / 9, which reuse the art of 3 / 4 / 5, get a hue shift (teal, ember,
+crimson) and their own HUD accents. Zero per-frame cost beyond at most one extra tile draw.
+
+**Bosses (BOSSFX, `assets/js/game/78-bossfx.js`).** Roll + breathing + a punch on phase clears and damage steps, two
+motion ghosts during the intro slide, an emissive pulse extracted from the sprite without pixel reads (luminance^3,
+clipped to the silhouette, blurred), and three damage states baked per fight (seeded scorch blotches, cracks with an
+amber hot core, a global char) with a crossfade, sparks and smoke while damaged. The dissolve keeps the state the boss
+died in. One composite set per boss frame at most.
+
+**Bloom (`assets/js/game/76-bloom.js`).** The frame so far at quarter resolution, multiplied by itself twice, blurred
+by a 1/16 round trip and added back inside the particle batch, under the text layers. No composite set of its own
+(the offscreen canvas lives in `multiply`); off under reduced motion and on touch; self-disables above 3.5 ms.
+
+**Art.** Ships and bosses run through `tools/art/pixelize.py` (ships 94 art px wide, 36 colours; bosses 282 art px,
+48 colours) so the three rendering languages on screen become one. The explosion sheet is generated
+(`tools/art/gen_explosions.py`): white core, cyan, magenta, violet, indigo smoke on a 4 px art grid, same frame
+indices as before. Masters replaced, `assets/opt` rebuilt (new art token), originals kept in git history.
+
+**Title.** The menu's frosted glass is near clear (1.5 px) and the scrim lighter, so the live attract scene is the
+title's hero shot.
+
+**Probes.** `p2-render` allows up to 9 bg+fg tile draws (overlap tiling). Known baseline failure, not from this pass:
+`p2-render`'s "locked plate drawn last" check (the lock is gone by the snapshot; reproduced on the untouched tree).
 
 ### 2026-10 pace follow-up (release token `20261025a`)
 

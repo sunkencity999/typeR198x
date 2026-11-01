@@ -29,7 +29,10 @@
 //   assets/js/game/52-modes.js       Game.prototype: Daily Sortie, Endless Drift, Drill (MODES)
 //   assets/js/game/60-hud.js         Game.prototype: DOM HUD (diffed writes on a 5 Hz commit cadence), chips, boss bar, live WPM
 //   assets/js/game/70-render.js      Game.prototype: resizeCanvas, plates/capsules/rails, boss art + slab, parallax, stars, render() layer order
+//   assets/js/game/72-atmos.js       Game.prototype: ATMOS seam-dissolve parallax tiles, per-sector grade / lane haze / storm hue (baked once)
 //   assets/js/game/75-fx-draw.js     Game.prototype: ship, beams, rings/bolts/debris, particles, overlays, vignette, active-target redraw
+//   assets/js/game/76-bloom.js       Game.prototype: BLOOM quarter-res luminance^3 halo added over L1-L12 (no filters, no pixel reads)
+//   assets/js/game/78-bossfx.js      Game.prototype: BOSSFX boss motion, emissive pulse, baked damage states, sparks / smoke (overrides drawBossArt)
 //   assets/js/game/80-fx.js          Game.prototype: trauma camera, hit-stop/slow-mo, flash channels, onKeyFx/onKillFx, effect lists, stepAmbient
 //   assets/js/game/82-overdrive.js   Game.prototype: Overdrive, pilotWpm (ARCADE)
 //   assets/js/game/85-attract.js     Game.prototype: attract mode (ghost typist behind the title, PERF-10 idle drift)
@@ -41,7 +44,7 @@
 //
 // native/sync-web.sh patches the withAssetVersion return line below by sed; keep it byte-identical.
 
-const ASSET_VERSION = "20261025a";
+const ASSET_VERSION = "20261031a";
 // Stale-shell guard. A cache can keep serving a previous index.html after a deploy, and the server ignores ?v= when it
 // resolves a file, so the old shell's versioned URLs come back with this release's code:
 //   * a host page cache (SiteGround's dynamic cache did it for "/" on 2026-10-17) or a browser that cached a

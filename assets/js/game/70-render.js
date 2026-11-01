@@ -544,14 +544,18 @@ Object.assign(Game.prototype, {
   // Tiles `img` (a prepared bitmap or the raw image) across the shaken field: tile edges snapped to device
   // pixels, no tile that is fully outside [-SHAKE_PAD, w + SHAKE_PAD], one extra tile on the left so a negative
   // shake never shows the base fill. Returns the number of drawImage calls.
-  drawTiledImage(ctx, img, tileW, tileH, y, offset) {
+  drawTiledImage(ctx, img, tileW, tileH, y, offset, overlap = 0) {
     if (!img || !(tileW > 0) || !(tileH > 0)) return 0;
     const s = this.renderScale || 1;
     const pad = SHAKE_PAD;
-    let startX = -(((offset % tileW) + tileW) % tileW);
-    if (startX > -pad) startX -= tileW;
+    // ATMOS (72-atmos.js): a tile whose left edge dissolves is laid `overlap` closer to the previous one, and the first
+    // tile's faded lead-in stays off-screen so the opaque body of the tile before it is what shows there.
+    const period = overlap > 0 ? Math.max(1, tileW - overlap) : tileW;
+    let startX = -(((offset % period) + period) % period);
+    if (startX > -pad) startX -= period;
+    if (overlap > 0 && startX + overlap > -pad) startX -= period;
     let count = 0;
-    for (let x = startX; x < this.w + pad; x += tileW) {
+    for (let x = startX; x < this.w + pad; x += period) {
       const x0 = Math.round(x * s) / s;
       const x1 = Math.round((x + tileW) * s) / s;
       ctx.drawImage(img, x0, y, x1 - x0, tileH);
@@ -567,12 +571,14 @@ Object.assign(Game.prototype, {
   drawBackground(ctx) {
     const theme = this.currentTheme;
     const art = this.themeArt(theme);
-    const bg = art ? Assets.get("bg/" + art) : null;
+    const rawBg = art ? Assets.get("bg/" + art) : null;
+    const bgTile = (rawBg && typeof this.atmosTile === "function") ? this.atmosTile("bg", art, rawBg) : null;   // ATMOS: graded, seam-dissolved
+    const bg = bgTile ? bgTile.canvas : rawBg;
     this.debug.tileDraws = 0;
     if (bg) {
       const tileH = this.h + 2 * SHAKE_PAD;
       const tileW = tileH * (bg.width / bg.height);
-      this.debug.tileDraws += this.drawTiledImage(ctx, bg, tileW, tileH, -SHAKE_PAD, this.parallax.bgOffset);
+      this.debug.tileDraws += this.drawTiledImage(ctx, bg, tileW, tileH, -SHAKE_PAD, this.parallax.bgOffset, bgTile ? tileW * bgTile.overlapFrac : 0);
     } else {
       // procedural nebula while the sector art is still arriving
       const g1 = ctx.createRadialGradient(this.w * 0.25, this.h * 0.2, 60, this.w * 0.25, this.h * 0.2, 520);
@@ -600,10 +606,14 @@ Object.assign(Game.prototype, {
   drawForegroundParallax(ctx) {
     const theme = this.currentTheme;
     const art = this.themeArt(theme);
-    const fg = art ? Assets.get("fg/" + art) : null;
+    const rawFg = art ? Assets.get("fg/" + art) : null;
+    const untiled = !!(theme && theme.tileFg === false);
+    const fgTile = (rawFg && typeof this.atmosTile === "function")
+      ? this.atmosTile("fg", art, rawFg, { edges: untiled ? (art === "tenth" ? "none" : "both") : "left" }) : null;   // ATMOS
+    const fg = fgTile ? fgTile.canvas : rawFg;
     if (fg) {
       const fgHeight = (theme && theme.fgHeight) || 0.6;
-      if (theme && theme.tileFg === false) {
+      if (untiled) {
         if (art === "tenth") {
           const v = this.vistaBox(theme);
           const drift = this.reduceMotion ? 0 : VISTA_DRIFT_PX * Math.sin(this.starT * Math.PI * 2 * 0.05);
@@ -619,7 +629,7 @@ Object.assign(Game.prototype, {
       } else {
         const tileH = Math.round(this.h * fgHeight);
         const tileW = tileH * (fg.width / fg.height);
-        this.debug.tileDraws += this.drawTiledImage(ctx, fg, tileW, tileH, this.h - tileH, this.parallax.fgOffset);
+        this.debug.tileDraws += this.drawTiledImage(ctx, fg, tileW, tileH, this.h - tileH, this.parallax.fgOffset, fgTile ? tileW * fgTile.overlapFrac : 0);
       }
       return;
     }
@@ -1373,7 +1383,8 @@ Object.assign(Game.prototype, {
     if (boss && typeof this.drawBossHazardMeter === "function") this.drawBossHazardMeter(ctx, this.bossHazardRect()); // L10 surge cell
     this.drawShip(ctx);                                        // L11
     this.drawExplosionSprites(ctx);                            // L12 (dying plates, then the additive batch opens with the flash frames; smoke is L6b)
-    this.drawParticles(ctx);
+    this.drawParticles(ctx);                                   // ... which draws the BLOOM halo inside its additive batch (76-bloom.js)
+    if (typeof this.drawBloom === "function" && this._bloomFrame !== this.frameCount) this.drawBloom(ctx);   // no batch this frame: bloom alone
     // dying plates are drawn by drawExplosionSprites before its additive batch (review R13); rings / bolts / debris /
     // muzzles by drawBullets (L7) and drawParticles (L12) in 75-fx-draw.js
     if (typeof this.drawFloaters === "function") this.drawFloaters(ctx); // L13 (D5)

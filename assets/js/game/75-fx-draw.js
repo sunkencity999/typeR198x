@@ -513,6 +513,7 @@ Object.assign(Game.prototype, {
     ctx.lineJoin = "miter";
     ctx.textAlign = "start";
     ctx.textBaseline = "alphabetic";
+    if (typeof this.drawBloom === "function") this.drawBloom(ctx);   // BLOOM inside the batch: no composite set of its own
     this.closeAdditive(ctx);
   },
 

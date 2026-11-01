@@ -604,7 +604,7 @@ body[data-mode="playing"] #hud { background: rgba(5,6,11,0.74); }
 .screen--menu {
   --panel-accent: var(--theme-accent);
   --panel-glow: rgba(57,245,255,0.35);
-  background: linear-gradient(180deg, rgba(5,6,11,0.55), rgba(5,6,11,0.70));
+  background: linear-gradient(180deg, rgba(5,6,11,0.46), rgba(5,6,11,0.62));
 }
 
 .screen--pause {
@@ -2701,10 +2701,11 @@ fieldset.shipGrid > legend {
 }
 :root.reduce-motion .flyLabel { display: none; }
 
-/* Title cabinet: lighter frost so the attract mode (D8) reads through the glass; the scrim is unchanged. */
+/* Title cabinet: near-clear glass so the live attract scene (D8, graded by ATMOS and bloomed) is the title's hero shot;
+   the scrim below is lightened to match (presentation pass 2026-10-31). The menu's own panels keep their backings. */
 .screen--menu {
-  -webkit-backdrop-filter: blur(4px);
-  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(1.5px);
+  backdrop-filter: blur(1.5px);
 }
 
 /* ===== training scaffold: DOM rendered by shared code (results notes, results tags) ===== */

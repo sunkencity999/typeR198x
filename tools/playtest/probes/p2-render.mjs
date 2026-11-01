@@ -78,7 +78,7 @@ const lvl1 = await P.g(() => ({
   theme: document.documentElement.dataset.theme, art: game.currentTheme.art, paletteAccent: PALETTE.accent, resident: TypeRAssets.stats().resident, tileDraws: game.debug.tileDraws
 }));
 P.check("level 1: levelReady + gate open, --theme-accent #39F5FF, data-theme first", lvl1.levelReady && lvl1.gate && lvl1.accent === "#39F5FF" && lvl1.theme === "first", lvl1);
-P.check("bg+fg drawImage calls per frame <= 5 (2 bg tiles + up to 3 fg tiles)", lvl1.tileDraws >= 2 && lvl1.tileDraws <= 5, lvl1.tileDraws);
+P.check("bg+fg drawImage calls per frame <= 9 (ATMOS overlap tiling: up to 4 bg tiles + up to 5 fg tiles)", lvl1.tileDraws >= 2 && lvl1.tileDraws <= 9, lvl1.tileDraws);
 
 // 14 enemies, one locked: plates, metrics, shadowBlur over 180 frames
 await page.waitForFunction(() => window.game.isLevelGateOpen(), null, { timeout: 4000 }).catch(() => {});
