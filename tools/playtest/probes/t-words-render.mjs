@@ -49,7 +49,9 @@ const r1 = await P.g(() => { const g = window.game; const en = g.enemies.find(e 
 P.check("R1 a one-word plate never calls the gap helper; a two-word plate calls it every frame", r0 === 0 && r1.calls >= 10 && r1.text === "warp core", { r0, r1 });
 P.check("R4 two-word plate width = measured text (gap = one glyph advance) + PLATE_PAD; the dot sits inside the plate", r1.plateW === r1.want && r1.dotX > r1.plateL + 14 && r1.dotX < r1.plateR - 14, r1);
 
-// R2 pixel diff: the dot is visible and confined to the gap cell
+// R2 pixel diff: the dot is visible and confined to the gap cell. BLOOM (76-bloom.js) is a screen-space halo over
+// every bright pixel, the dot included, so the pixel diffs run with the harness switch off; R1 / R4 / R6 keep it on.
+await P.g(() => { window.TypeRHarness = Object.assign(window.TypeRHarness || {}, { bloom: false }); });
 const diff = async (label) => P.g(async (label) => {
   const g = window.game, c = g.canvas, s = g.renderScale || 1;
   const L = window.__gap.last; const adv = (L.wd + L.wr) / 9; const cx = L.x0 + 4.5 * adv, cy = L.y;
@@ -76,6 +78,7 @@ await press(P, "Space");
 await sleep(1200);
 const d3 = await diff("done");
 P.check("R3b typed gap: the dim dot (text .25) is still drawn", d3.inCell >= 2 && d3.outCell === 0, d3);
+await P.g(() => { delete window.TypeRHarness.bloom; });
 await P.shot(`warp-core-${RM ? "rm" : "full"}-dpr${DPR}`);
 await press(P, "Backspace");
 

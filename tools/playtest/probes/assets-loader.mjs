@@ -9,8 +9,9 @@
 //   - sprite('ships/coconut',150) matches the manifest crop (B-1); the PNG-fallback path reports the full box
 //   - loadLevel(0) resolves with three drawables; gc keeps the pin set; stats() has the contract shape
 //   - prepare() yields an ImageBitmap of the requested device size at renderScale 2 (+ the canvas fallback)
-//   - levelKeys(i) for i=0..9 never names seventh/eighth/ninth under the LEVEL_THEMES mapping (stubbed if the
-//     content track has not landed) and Assets.url() returns bare paths under the native shell UA (B-17)
+//   - levelKeys(i) for i=0..9 follows the LEVEL_THEMES mapping (ten art ids since the 2026-10-31 vistas for sectors
+//     6 / 8 / 9: seventh / eighth / ninth; stubbed if the content track has not landed) and every key resolves;
+//     Assets.url() returns bare paths under the native shell UA (B-17)
 // Exit code 1 if any check fails. Writes <out>/report.json and <out>/preview.png.
 import { chromium } from "playwright";
 import http from "node:http";
@@ -63,9 +64,9 @@ const check = (name, pass, evidence) => {
   console.log(`${pass ? "PASS" : "FAIL"}  ${name}${evidence !== undefined ? "  -- " + String(evidence) : ""}`);
 };
 const stripQuery = (u) => u.replace(/[?#].*$/, "");
-const EXPECTED_ARTS = ["first", "sixth", "third", "fourth", "fifth", "third", "second", "fourth", "fifth", "tenth"];
+const EXPECTED_ARTS = ["first", "sixth", "third", "fourth", "fifth", "seventh", "second", "eighth", "ninth", "tenth"];   // 2026-10-31 vistas for 6 / 8 / 9
 const LEVEL_THEMES_STUB = `
-const LEVEL_THEMES = [{art:"first"},{art:"sixth"},{art:"third"},{art:"fourth"},{art:"fifth"},{art:"third",storm:true},{art:"second"},{art:"fourth",storm:true},{art:"fifth",storm:true},{art:"tenth"}];
+const LEVEL_THEMES = [{art:"first"},{art:"sixth"},{art:"third"},{art:"fourth"},{art:"fifth"},{art:"seventh",storm:true},{art:"second"},{art:"eighth",storm:true},{art:"ninth",storm:true},{art:"tenth"}];
 const getThemeForLevel = (index) => {
   const m = LEVEL_THEMES[Math.max(0, Math.min(LEVEL_THEMES.length - 1, index | 0))];
   const base = PARALLAX_THEMES.find((t) => t.id === m.art) || PARALLAX_THEMES[0];
@@ -90,10 +91,11 @@ const manifestKeys = Object.keys(manifest.images);
     if (res.status !== 200) missing.push(`${u} -> ${res.status}`);
   }
   check("manifest: every referenced file answers HEAD 200", missing.length === 0, missing.length ? missing.join(", ") : `${urls.size} urls`);
-  const dup = manifestKeys.filter((k) => /^(bg|fg)\/(seventh|eighth|ninth)$/.test(k));
-  check("manifest: no seventh/eighth/ninth keys", dup.length === 0, dup.join(",") || `${manifestKeys.length} keys`);
-  const stale = ["bg", "fg"].flatMap((k) => ["seventh", "eighth", "ninth"].flatMap((t) => [1, 2].map((s) => `assets/opt/${k}/${t}@${s}x.webp`))).filter((f) => fs.existsSync(path.join(ROOT, f)));
-  check("opt tree: duplicate theme files removed", stale.length === 0, stale.join(",") || "none present");
+  const TEN = ["first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth"];
+  const missingTheme = ["bg", "fg"].flatMap((k) => TEN.map((t) => `${k}/${t}`)).filter((k) => !manifestKeys.includes(k));
+  check("manifest: all ten theme ids have bg + fg keys (seventh/eighth/ninth are the 2026-10-31 vistas)", missingTheme.length === 0, missingTheme.join(",") || `${manifestKeys.length} keys`);
+  const missingFiles = ["bg", "fg"].flatMap((k) => TEN.flatMap((t) => [1, 2].map((s) => `assets/opt/${k}/${t}@${s}x.webp`))).filter((f) => !fs.existsSync(path.join(ROOT, f)));
+  check("opt tree: every theme layer file present (40)", missingFiles.length === 0, missingFiles.join(",") || "all present");
 }
 
 // ------------------------------------------------------------------ browser
@@ -295,9 +297,8 @@ try {
     return { rows, outside: [Assets.levelKeys(-1), Assets.levelKeys(10)], missing: rows.flat().filter((k) => !Assets.meta(k)) };
   });
   const arts = lk.rows.map((r) => r[0].slice(3));
-  const noDup = lk.rows.flat().every((k) => !/seventh|eighth|ninth/.test(k));
-  check("levelKeys(0..9): art sequence per CONTRACT §7", JSON.stringify(arts) === JSON.stringify(EXPECTED_ARTS), arts.join(","));
-  check("levelKeys(0..9): never seventh/eighth/ninth; every key in manifest", noDup && lk.missing.length === 0, lk.missing.join(",") || "all keys resolve");
+  check("levelKeys(0..9): art sequence per CONTRACT §7 (2026-10-31 mapping)", JSON.stringify(arts) === JSON.stringify(EXPECTED_ARTS), arts.join(","));
+  check("levelKeys(0..9): every key in manifest", lk.missing.length === 0, lk.missing.join(",") || "all keys resolve");
   check("levelKeys: boss key is bosses/(i+1); [] outside 0..9", lk.rows.every((r, i) => r[2] === `bosses/${i + 1}`) && lk.outside.every((r) => r.length === 0), JSON.stringify(lk.rows[9]));
   const lvl10 = await lkPage.evaluate(async () => { const d = await Assets.loadLevel(9); return d.map(Boolean); });
   check("loadLevel(9): tenth + bosses/10 load", lvl10.length === 3 && lvl10.every(Boolean), JSON.stringify(lvl10));

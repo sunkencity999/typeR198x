@@ -19,9 +19,8 @@
 #   OG_ONLY=1 tools/build-web-assets.sh       only render assets/ui/og-card.jpg (no manifest change)
 #   SKIP_OG=1 ...                             skip the og-card step
 #
-# Themes: PARALLAX_THEMES has ten entries but only seven unique art sets. The seventh/eighth/ninth masters are
-# byte-identical to fourth/fifth/third (verified by md5 on the encoded output), and LEVEL_THEMES maps levels
-# 6-9 onto the unique sets, so those three ids are not encoded and have no manifest keys.
+# Themes: PARALLAX_THEMES has ten entries and, since 2026-10-31, ten art sets: seventh / eighth / ninth are the
+# generated vistas (tools/art/gen_vista.py) for sectors 6 / 8 / 9.
 #
 # The original PNG/WAV masters stay untouched where they are (the native wrappers
 # and this script both read them). Requires: magick (ImageMagick 7), cwebp, ffmpeg.
@@ -97,10 +96,8 @@ resize_png() {
 }
 
 # ---------------------------------------------------------------- layers (bg/fg)
-# Theme ids match PARALLAX_THEMES in assets/js/core/30-content.js. seventh/eighth/ninth are deliberately absent
-# (duplicates of fourth/fifth/third; see header).
-THEMES=(first second third fourth fifth sixth tenth)
-DUPLICATE_THEMES=(seventh eighth ninth)
+# Theme ids match PARALLAX_THEMES in assets/js/core/30-content.js.
+THEMES=(first second third fourth fifth sixth seventh eighth ninth tenth)
 for t in "${THEMES[@]}"; do
   bg="$SRC/backgrounds/${t}levelbg.png"
   fg="$SRC/foregrounds/${t}levelFG.png"
@@ -126,16 +123,6 @@ for t in "${THEMES[@]}"; do
     echo "layer $kind/$t -> $(du -h "$OUT/$kind/${t}@1x.webp" | cut -f1) / $(du -h "$OUT/$kind/${t}@2x.webp" | cut -f1)"
   done
 done
-# Stale output from an older build that still encoded the duplicates is removed so the tree matches the manifest.
-for t in "${DUPLICATE_THEMES[@]}"; do
-  for kind in bg fg; do
-    for scale in 1 2; do
-      stale="$OUT/$kind/${t}@${scale}x.webp"
-      [[ -f "$stale" ]] && { rm -f "$stale"; echo "removed duplicate theme output $kind/${t}@${scale}x.webp"; }
-    done
-  done
-done
-
 # ---------------------------------------------------------------- sprites (trim + alpha)
 # trim_sprite <id> <src.png> <outdir-kind> <max2xWidth> <fallbackRelPath>
 trim_sprite() {
@@ -223,7 +210,7 @@ VERSION="$(date -u +%Y%m%d%H%M)"
   done
   printf '}}\n'
 } > "$OUT/manifest.json"
-# validate + pretty print; refuse to emit a manifest that references a missing file or a duplicate theme
+# validate + pretty print; refuse to emit a manifest that references a missing file
 node -e '
 const fs=require("fs"),path=require("path");
 const p=process.argv[1],root=process.argv[2];
@@ -231,7 +218,6 @@ const j=JSON.parse(fs.readFileSync(p,"utf8"));
 const missing=[];
 const check=(src)=>{ if(src && !fs.existsSync(path.join(root,src))) missing.push(src); };
 for(const [k,e] of Object.entries(j.images)){
-  if(/^(bg|fg)\/(seventh|eighth|ninth)$/.test(k)) { console.error("duplicate theme key in manifest:",k); process.exit(1); }
   check(e.src); check(e.x1&&e.x1.src); check(e.x2&&e.x2.src); check(e.fallback);
 }
 for(const m of j.music) check(m); for(const s of Object.values(j.sfx)) check(s);

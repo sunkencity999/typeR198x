@@ -8,8 +8,8 @@
 //    untiled vistas (tileFg === false) fade both side edges instead, so their rocks no longer end in a vertical line.
 // 2. Sector grade. The same bake applies a per-sector multiply tint, a saturation pull and a lane haze band to the
 //    background (and a lighter tint to the foreground), so the painted world sits behind the play layer: plates,
-//    beams and the ship read first. Sectors 6, 8 and 9 reuse the art of 3, 4 and 5; their grade adds a hue shift
-//    (teal / amber / crimson) so each sector has its own palette.
+//    beams and the ship read first. A grade may carry a hue shift (hue / hueA, fgHue / fgHueA) for a sector that
+//    shares another sector's art; since the generated vistas (tools/art/gen_vista.py) every sector has its own.
 // 3. Cost. Nothing per frame beyond the tile draws 70-render.js already made (one more tile at most, for the overlap).
 //    The bake (one drawImage + four full fills per tile) runs at sectorStart when the drawables are resident, else from
 //    an idle callback the first time a tile is asked for; until then the raw bitmap draws as before. Cache: four tiles,
@@ -34,10 +34,10 @@ const ATMOS_GRADES = [
   { tint: "#160F3A", tintA: 0.34, sat: 0.18, haze: 0.20, fgTintA: 0.14, fgSat: 0.10 },                          // S3 nebula
   { tint: "#15123A", tintA: 0.30, sat: 0.14, haze: 0.18, fgTintA: 0.14, fgSat: 0.08 },                          // S4 grid
   { tint: "#101A3A", tintA: 0.30, sat: 0.12, haze: 0.18, fgTintA: 0.12, fgSat: 0.08 },                          // S5 field
-  { tint: "#0B2A2A", tintA: 0.36, sat: 0.10, hue: "#19D9B0", hueA: 0.60, haze: 0.20, fgTintA: 0.16, fgSat: 0.08, fgHue: "#19D9B0", fgHueA: 0.35 },   // S6 nebula storm -> teal
+  { tint: "#0B2030", tintA: 0.22, sat: 0.06, haze: 0.16, fgTintA: 0.10, fgSat: 0.04 },                          // S6 Abyssal Relay (generated vista)
   { tint: "#20163F", tintA: 0.40, sat: 0.28, haze: 0.20, fgTintA: 0.18, fgSat: 0.14 },                          // S7 refinery: cream -> cool
-  { tint: "#2E1A2A", tintA: 0.32, sat: 0.10, hue: "#FFC14A", hueA: 0.50, haze: 0.18, fgTintA: 0.16, fgSat: 0.08, fgHue: "#FFC14A", fgHueA: 0.25 },   // S8 grid storm -> amber
-  { tint: "#3A0A18", tintA: 0.36, sat: 0.10, hue: "#FF3366", hueA: 0.60, haze: 0.18, fgTintA: 0.16, fgSat: 0.08, fgHue: "#FF3366", fgHueA: 0.35 },   // S9 field storm -> crimson
+  { tint: "#1E1210", tintA: 0.20, sat: 0.04, haze: 0.14, fgTintA: 0.08, fgSat: 0.04 },                          // S8 Logic Foundry (generated vista)
+  { tint: "#1A0A18", tintA: 0.22, sat: 0.06, haze: 0.16, fgTintA: 0.10, fgSat: 0.04 },                          // S9 Night Engine (generated vista)
   { tint: "#1A1040", tintA: 0.26, sat: 0.08, haze: 0.16, fgTintA: 0.10, fgSat: 0.06 }                           // S10 rune city
 ];
 

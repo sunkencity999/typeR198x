@@ -15,18 +15,18 @@ const STAR_TINT_MIX = 0.2;          // a third of the stars take 20 % of the sec
 
 // Plate signature per state (VIS-04 colours). Glow is baked into the cached sprite. Tube strokes are opaque so a
 // stroke pixel is the token colour itself (the .92 step of the ladder is reserved for fills / text).
-const PLATE_STYLES = {
-  idle:   { stroke: "cyan",    strokeA: 1.0, lw: 2.5, glowA: 0.45, blur: 14, fill: "bg0", fillA: 0.92 },
-  locked: { stroke: "lime",    strokeA: 1.0, lw: 3,   glowA: 0.70, blur: 14, fill: "bg0", fillA: 0.92 },
-  danger: { stroke: "danger",  strokeA: 1.0, lw: 2.5, glowA: 0.70, blur: 14, fill: "bg0", fillA: 0.92 },
+const PLATE_STYLES = {   // glow: blur 14 -> 20, alpha +.15 (presentation pass 2026-10-31); baked once per sprite, never per frame
+  idle:   { stroke: "cyan",    strokeA: 1.0, lw: 2.5, glowA: 0.60, blur: 20, fill: "bg0", fillA: 0.92 },
+  locked: { stroke: "lime",    strokeA: 1.0, lw: 3,   glowA: 0.85, blur: 20, fill: "bg0", fillA: 0.92 },
+  danger: { stroke: "danger",  strokeA: 1.0, lw: 2.5, glowA: 0.85, blur: 20, fill: "bg0", fillA: 0.92 },
   dangerBase: { stroke: "danger", strokeA: 1.0, lw: 2.5, glowA: 0, blur: 0, fill: "bg0", fillA: 0.92 },   // solid stroke under the pulsing glow
-  minion: { stroke: "magenta", strokeA: 1.0, lw: 2.5, glowA: 0.45, blur: 14, fill: "bg0", fillA: 0.92 },
-  power:  { stroke: "violet",  strokeA: 1.0, lw: 2,   glowA: 0.45, blur: 14, fill: "bg0", fillA: 0.92 },
+  minion: { stroke: "magenta", strokeA: 1.0, lw: 2.5, glowA: 0.60, blur: 20, fill: "bg0", fillA: 0.92 },
+  power:  { stroke: "violet",  strokeA: 1.0, lw: 2,   glowA: 0.60, blur: 20, fill: "bg0", fillA: 0.92 },
   boss:   { stroke: "magenta", strokeA: 0.92, lw: 2,  glowA: 0.45, blur: 26, fill: "bg0", fillA: 0.92 }
 };
 const PLATE_CACHE_MAX = 96;
 const PLATE_BUCKET = 8;
-const GLOW_PAD = 16;
+const GLOW_PAD = 22;                // room for the 20 px blur (was 16 for 14)
 const SLAB_PAD = 32;
 const SLAB = { x: 32, w: 640, h: 96, r: 16, pad: 16, leftW: 200, centreW: 320, rightW: 88, bottom: 24 };
 const CAPSULE_CHAMFER = 10;
@@ -410,7 +410,9 @@ Object.assign(Game.prototype, {
 
   // Plate font in logical px: 22 at desktop scales, larger on small playfields (CONTRACT section 7).
   plateFontPx() {
-    return clamp(Math.ceil(14 / (this.cssScale || 1)), 22, 28);
+    // Presentation pass 2026-10-31: the floor rose from 22 to 25 px (plates ~14 % larger, PLATE_H 40 -> 45 through
+    // plateGeometry's k) so the play layer leads the graded world; the ceiling keeps the same 6 px span.
+    return clamp(Math.ceil(14 / (this.cssScale || 1)), 25, 31);
   },
 
   // Plate geometry for this playfield: enemy 40 x font 22, minion 36 x font 20 (both scale with plateFontPx / 22).
@@ -684,7 +686,7 @@ Object.assign(Game.prototype, {
     const pad = SHAKE_PAD;
     ctx.save();
     ctx.globalCompositeOperation = "multiply";
-    ctx.fillStyle = PALETTE.rgba("magenta", STORM_TINT_ALPHA);
+    ctx.fillStyle = PALETTE.rgba((theme.accent && PALETTE.has(theme.accent)) ? theme.accent : "magenta", STORM_TINT_ALPHA);   // the sector's accent: teal / amber / crimson storms
     ctx.fillRect(-pad, -pad, this.w + 2 * pad, this.h + 2 * pad);
     const frames = this.stormBoltFrames | 0;
     if (frames > 0 && !this.reduceMotion) {

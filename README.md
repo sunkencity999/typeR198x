@@ -328,7 +328,7 @@ The browser build never downloads the PNG/WAV masters. `tools/build-web-assets.s
 
 | Output | Contents |
 | --- | --- |
-| `assets/opt/bg/<id>@1x.webp`, `@2x` | Backgrounds 1408 / 2816 px wide (seven unique sets; `seventh/eighth/ninth` are byte-identical duplicates and are not encoded) |
+| `assets/opt/bg/<id>@1x.webp`, `@2x` | Backgrounds 1408 / 2816 px wide (ten sets; `seventh/eighth/ninth` are the generated vistas for sectors 6 / 8 / 9, `tools/art/gen_vista.py`) |
 | `assets/opt/fg/<id>@1x.webp`, `@2x` | Foreground parallax layers with alpha |
 | `assets/opt/bosses/<n>@1x.webp`, `@2x` | Trimmed boss art (trim box and opaque box recorded in the manifest) |
 | `assets/opt/ships/<id>@1x.webp`, `@2x` | Trimmed ship art |
@@ -626,7 +626,7 @@ remixes are welcome.
 
 ## Changelog
 
-### 2026-10-31 presentation pass (release token `20261031a`, art token `202611010433`)
+### 2026-10-31 presentation pass (release token `20261031a`, art token `202611010527`)
 
 The visual integration pass after the art review: one art language, no seams, a world that sits behind the play layer,
 bosses that move and wear damage, neon that blooms. Gameplay, saves, balance and the probes' contracts are unchanged;
@@ -653,13 +653,28 @@ by a 1/16 round trip and added back inside the particle batch, under the text la
 **Art.** Ships and bosses run through `tools/art/pixelize.py` (ships 94 art px wide, 36 colours; bosses 282 art px,
 48 colours) so the three rendering languages on screen become one. The explosion sheet is generated
 (`tools/art/gen_explosions.py`): white core, cyan, magenta, violet, indigo smoke on a 4 px art grid, same frame
-indices as before. Masters replaced, `assets/opt` rebuilt (new art token), originals kept in git history.
+indices as before. Masters replaced, `assets/opt` rebuilt (new art token), originals kept in git history at `v20261025a`.
 
 **Title.** The menu's frosted glass is near clear (1.5 px) and the scrim lighter, so the live attract scene is the
 title's hero shot.
 
-**Probes.** `p2-render` allows up to 9 bg+fg tile draws (overlap tiling). Known baseline failure, not from this pass:
-`p2-render`'s "locked plate drawn last" check (the lock is gone by the snapshot; reproduced on the untouched tree).
+**Second pass (same release).** Plates 14 % larger (`plateFontPx` floor 22 -> 25 px, so `PLATE_H` 40 -> 45 through
+`plateGeometry`) with a heavier baked glow (blur 14 -> 20, +.15 alpha). Three generated vistas replace the storm
+reruns: sector 6 Abyssal Relay (teal: ringed gas giant, relay spires, data cables), sector 8 Logic Foundry (amber: low
+furnace sun, lava planet, stacks, gears, molten pools, horizon grid), sector 9 Night Engine (crimson: dying red giant,
+Dyson-ring fragment, asteroid field, turbines); `tools/art/gen_vista.py`, horizontally seamless, mapped as the
+`seventh` / `eighth` / `ninth` art ids, so all ten theme ids are now encoded and the storm tint takes the sector
+accent. The four ship masters lost their painted exhaust (`tools/art/deflame.py`) and `THRUSTER_OFFSET` moved the
+nozzles to the hull's rear edge, so the animated plume is the only exhaust. Bloom's halo radius halved (`blurDown`
+4 -> 2) so plate interiors stay dark, and a `window.TypeRHarness.bloom === false` switch lets a probe isolate a draw
+(`t-words-render` uses it around its gap-dot pixel diffs). Art token `202611010527`.
+
+**Probes.** `p2-render` allows up to 9 bg+fg tile draws (overlap tiling); `assets-loader` and `content-tables` carry
+the ten-id theme mapping; `t-words-render` turns bloom off (`window.TypeRHarness.bloom = false`) around its gap-dot
+pixel diffs. Known baseline failures, not from this pass: `p2-render`'s "locked plate drawn last" check (the lock is
+gone by the snapshot and the probe then stops on a null lock; reproduced on the untouched tree) and `d1`'s low-HP
+corner pulse (phase-dependent sample of a 1.2 Hz pulse, listed as a baseline failure since a0a3845). `b1`'s sector 8
+duplicate-first-letter rate is a statistical sample near its 5 % threshold (5.7 % once, 0 % and 2.2 % on re-runs).
 
 ### 2026-10 pace follow-up (release token `20261025a`)
 

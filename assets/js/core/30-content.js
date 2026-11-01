@@ -197,22 +197,24 @@ const PARALLAX_THEMES = [
   }
 ];
 
-// Sector -> art mapping (VIS-09 / F020). Only seven art sets are distinct (seventh/eighth/ninth duplicate
-// fourth/fifth/third), so the back half revisits familiar skies as "storm passes" and the finale gets the crystal city.
+// Sector -> art mapping (VIS-09 / F020). Ten art sets since 2026-10-31: seventh / eighth / ninth are the generated
+// vistas (tools/art/gen_vista.py: Abyssal Relay, Logic Foundry, Night Engine) for sectors 6 / 8 / 9, which used to
+// revisit 3 / 4 / 5 as storm passes; the storm flag stays (its tint now takes the sector accent) and the finale gets
+// the crystal city.
 const LEVEL_THEMES = [
   { art: "first" },
   { art: "sixth" },
   { art: "third" },
   { art: "fourth" },
   { art: "fifth" },
-  { art: "third", storm: true, accent: "cyan" },      // ATMOS grade shifts the shared art to teal
+  { art: "seventh", storm: true, accent: "cyan" },    // S6 Abyssal Relay (teal)
   { art: "second" },
-  { art: "fourth", storm: true, accent: "amber" },    // ATMOS: amber
-  { art: "fifth", storm: true, accent: "magenta" },   // ATMOS: crimson
+  { art: "eighth", storm: true, accent: "amber" },    // S8 Logic Foundry (amber)
+  { art: "ninth", storm: true, accent: "magenta" },   // S9 Night Engine (crimson)
   { art: "tenth" }
 ];
 // PALETTE token names (10-tokens.js); the presentation track maps them to hex for --theme-accent.
-const THEME_ACCENT = { first: "cyan", sixth: "amber", third: "magenta", fourth: "violet", fifth: "cyan", second: "amber", tenth: "violet" };
+const THEME_ACCENT = { first: "cyan", sixth: "amber", third: "magenta", fourth: "violet", fifth: "cyan", second: "amber", tenth: "violet", seventh: "cyan", eighth: "amber", ninth: "magenta" };
 const STORM_SPEED_MUL = 1.25;
 
 // One merged view per sector: the PARALLAX_THEMES entry (id/bg/fg/bgSpeed/fgSpeed/fgHeight/tileFg, which the

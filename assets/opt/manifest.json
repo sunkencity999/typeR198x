@@ -1,5 +1,5 @@
 {
- "version": "202611010433",
+ "version": "202611010527",
  "music": [
   "./assets/opt/audio/galactic_high_score_1.mp3",
   "./assets/opt/audio/galactic_high_score_2.mp3",
@@ -217,6 +217,108 @@
    },
    "fallback": "./assets/foregrounds/sixthlevelFG.png"
   },
+  "bg/seventh": {
+   "orig": {
+    "w": 2816,
+    "h": 1504
+   },
+   "x1": {
+    "src": "./assets/opt/bg/seventh@1x.webp",
+    "w": 1408,
+    "h": 752
+   },
+   "x2": {
+    "src": "./assets/opt/bg/seventh@2x.webp",
+    "w": 2816,
+    "h": 1504
+   },
+   "fallback": "./assets/backgrounds/seventhlevelbg.png"
+  },
+  "fg/seventh": {
+   "orig": {
+    "w": 2816,
+    "h": 1504
+   },
+   "x1": {
+    "src": "./assets/opt/fg/seventh@1x.webp",
+    "w": 1408,
+    "h": 752
+   },
+   "x2": {
+    "src": "./assets/opt/fg/seventh@2x.webp",
+    "w": 2816,
+    "h": 1504
+   },
+   "fallback": "./assets/foregrounds/seventhlevelFG.png"
+  },
+  "bg/eighth": {
+   "orig": {
+    "w": 2816,
+    "h": 1504
+   },
+   "x1": {
+    "src": "./assets/opt/bg/eighth@1x.webp",
+    "w": 1408,
+    "h": 752
+   },
+   "x2": {
+    "src": "./assets/opt/bg/eighth@2x.webp",
+    "w": 2816,
+    "h": 1504
+   },
+   "fallback": "./assets/backgrounds/eighthlevelbg.png"
+  },
+  "fg/eighth": {
+   "orig": {
+    "w": 2816,
+    "h": 1504
+   },
+   "x1": {
+    "src": "./assets/opt/fg/eighth@1x.webp",
+    "w": 1408,
+    "h": 752
+   },
+   "x2": {
+    "src": "./assets/opt/fg/eighth@2x.webp",
+    "w": 2816,
+    "h": 1504
+   },
+   "fallback": "./assets/foregrounds/eighthlevelFG.png"
+  },
+  "bg/ninth": {
+   "orig": {
+    "w": 2816,
+    "h": 1504
+   },
+   "x1": {
+    "src": "./assets/opt/bg/ninth@1x.webp",
+    "w": 1408,
+    "h": 752
+   },
+   "x2": {
+    "src": "./assets/opt/bg/ninth@2x.webp",
+    "w": 2816,
+    "h": 1504
+   },
+   "fallback": "./assets/backgrounds/ninthlevelbg.png"
+  },
+  "fg/ninth": {
+   "orig": {
+    "w": 2816,
+    "h": 1504
+   },
+   "x1": {
+    "src": "./assets/opt/fg/ninth@1x.webp",
+    "w": 1408,
+    "h": 752
+   },
+   "x2": {
+    "src": "./assets/opt/fg/ninth@2x.webp",
+    "w": 2816,
+    "h": 1504
+   },
+   "fallback": "./assets/foregrounds/ninthlevelFG.png"
+  },
   "bg/tenth": {
    "orig": {
     "w": 2816,
@@ -257,26 +359,26 @@
     "h": 1536
    },
    "crop": {
-    "x": 386,
-    "y": 90,
-    "w": 2203,
-    "h": 1326
+    "x": 416,
+    "y": 137,
+    "w": 2173,
+    "h": 1279
    },
    "content": {
-    "x": 410,
-    "y": 114,
-    "w": 2155,
-    "h": 1278
+    "x": 440,
+    "y": 161,
+    "w": 2125,
+    "h": 1231
    },
    "x1": {
     "src": "./assets/opt/ships/coconut@1x.webp",
     "w": 350,
-    "h": 211
+    "h": 206
    },
    "x2": {
     "src": "./assets/opt/ships/coconut@2x.webp",
     "w": 700,
-    "h": 421
+    "h": 412
    },
    "fallback": "./assets/ships/S_S_Coconut.png"
   },
@@ -286,26 +388,26 @@
     "h": 1536
    },
    "crop": {
-    "x": 108,
+    "x": 610,
     "y": 114,
-    "w": 2521,
+    "w": 2019,
     "h": 1237
    },
    "content": {
-    "x": 132,
+    "x": 634,
     "y": 138,
-    "w": 2473,
+    "w": 1971,
     "h": 1189
    },
    "x1": {
     "src": "./assets/opt/ships/little-dark-one@1x.webp",
     "w": 350,
-    "h": 172
+    "h": 214
    },
    "x2": {
     "src": "./assets/opt/ships/little-dark-one@2x.webp",
     "w": 700,
-    "h": 343
+    "h": 429
    },
    "fallback": "./assets/ships/S_S_littledarkone.png"
   },
@@ -315,26 +417,26 @@
     "h": 1536
    },
    "crop": {
-    "x": 18,
-    "y": 137,
-    "w": 2634,
-    "h": 1248
+    "x": 479,
+    "y": 138,
+    "w": 2173,
+    "h": 1247
    },
    "content": {
-    "x": 42,
-    "y": 161,
-    "w": 2586,
-    "h": 1200
+    "x": 503,
+    "y": 162,
+    "w": 2125,
+    "h": 1199
    },
    "x1": {
     "src": "./assets/opt/ships/sofrito@1x.webp",
     "w": 350,
-    "h": 166
+    "h": 201
    },
    "x2": {
     "src": "./assets/opt/ships/sofrito@2x.webp",
     "w": 700,
-    "h": 332
+    "h": 402
    },
    "fallback": "./assets/ships/S_S_Sofrito.png"
   },

@@ -41,9 +41,11 @@ const SHIP_COCKPIT_DX = 18;       // vector fallback only
 // sprites (coconut: two bells top-left; little dark one: twin cylinders; sofrito: single painted flame nozzle;
 // honeybee: two cones). The muzzle sits on the player's centre line at the hull's nose.
 const THRUSTER_OFFSET = Object.freeze({
-  coconut:           { nozzles: [{ fx: 0.07, fy: 0.24 }, { fx: 0.04, fy: 0.41 }], muzzleFx: 0.86 },
-  "little-dark-one": { nozzles: [{ fx: 0.22, fy: 0.34 }, { fx: 0.22, fy: 0.64 }], muzzleFx: 0.95 },
-  sofrito:           { nozzles: [{ fx: 0.23, fy: 0.47 }], muzzleFx: 0.98 },
+  // 2026-10-31: the masters lost their painted exhaust (tools/art/deflame.py), so the trimmed boxes changed; the
+  // nozzles sit on the hull's rear edge at the old rows (deflame.py prints them) and the muzzles were re-derived.
+  coconut:           { nozzles: [{ fx: 0.135, fy: 0.24 }, { fx: 0.135, fy: 0.41 }], muzzleFx: 0.86 },
+  "little-dark-one": { nozzles: [{ fx: 0.02, fy: 0.34 }, { fx: 0.02, fy: 0.64 }], muzzleFx: 0.94 },
+  sofrito:           { nozzles: [{ fx: 0.05, fy: 0.47 }], muzzleFx: 0.975 },
   honeybee:          { nozzles: [{ fx: 0.06, fy: 0.32 }, { fx: 0.06, fy: 0.73 }], muzzleFx: 0.92 },
   default:           { nozzles: [{ fx: 0.04, fy: 0.5 }], muzzleFx: 0.96 }
 });

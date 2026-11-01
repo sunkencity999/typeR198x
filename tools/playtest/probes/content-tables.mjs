@@ -159,8 +159,8 @@ check("bossSegmentCount(10) === 33", G("bossSegmentCount(10)") === 33);
 check("surgeDuration(6, 2) === 2.4 (D10 window 0.6 + 6 x .30)", Math.abs(G("surgeDuration(6, 2)") - 2.4) < 1e-9, G("surgeDuration(6, 2)"));
 
 // ---- F020 themes ----
-check("LEVEL_THEMES", eq(G("LEVEL_THEMES.map(t => t.art)"), ["first", "sixth", "third", "fourth", "fifth", "third", "second", "fourth", "fifth", "tenth"]));
-check("THEME_ACCENT", eq(G("THEME_ACCENT"), { first: "cyan", sixth: "amber", third: "magenta", fourth: "violet", fifth: "cyan", second: "amber", tenth: "violet" }));
+check("LEVEL_THEMES", eq(G("LEVEL_THEMES.map(t => t.art)"), ["first", "sixth", "third", "fourth", "fifth", "seventh", "second", "eighth", "ninth", "tenth"]));   // 2026-10-31 vistas for 6 / 8 / 9
+check("THEME_ACCENT", eq(G("THEME_ACCENT"), { first: "cyan", sixth: "amber", third: "magenta", fourth: "violet", fifth: "cyan", second: "amber", tenth: "violet", seventh: "cyan", eighth: "amber", ninth: "magenta" }));
 const arts = [], storms = [];
 for (let i = 0; i < 10; i++) {
   const t = G(`getThemeForLevel(${i})`);
@@ -168,7 +168,7 @@ for (let i = 0; i < 10; i++) {
   check(`theme ${i} keeps renderer fields`, typeof t.bg === "string" && typeof t.fg === "string" && t.id === t.art && typeof t.bgSpeed === "number" && typeof t.fgSpeed === "number" && typeof t.fgHeight === "number" && typeof t.accent === "string", t);
   check(`theme ${i} bg/fg paths exist`, fs.existsSync(path.join(ROOT, t.bg)) && fs.existsSync(path.join(ROOT, t.fg)), [t.bg, t.fg]);
 }
-check("theme art sequence", eq(arts, ["first", "sixth", "third", "fourth", "fifth", "third", "second", "fourth", "fifth", "tenth"]), arts);
+check("theme art sequence", eq(arts, ["first", "sixth", "third", "fourth", "fifth", "seventh", "second", "eighth", "ninth", "tenth"]), arts);
 check("storm only 5,7,8", eq(storms, [false, false, false, false, false, true, false, true, true, false]), storms);
 check("tenth tileFg false + violet", G("getThemeForLevel(9).tileFg") === false && G("getThemeForLevel(9).accent") === "violet");
 check("storm speedMul 1.25", G("getThemeForLevel(5).speedMul") === 1.25 && G("getThemeForLevel(0).speedMul") === 1);
