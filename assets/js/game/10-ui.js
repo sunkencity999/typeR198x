@@ -992,6 +992,7 @@ Object.assign(Game.prototype, {
       mute: $("setMute"), crt: $("setCRT"),
       crtInt: $("setCRTIntensity"), crtIntOut: $("setCRTIntensityOut"),
       motion: $("setMotion"), fs2: $("btnFullscreen2"),
+      share: $("setShareScores"),   // LEADERBOARD (54-leaderboard.js): opt-in toggle; its row stays hidden while the board is off
       pauseHost: $("pauseSettingsHost"), menuHost: $("menuSettingsHost"), modal: $("settingsModal")
     };
     return this._settingsEls;
@@ -1015,6 +1016,7 @@ Object.assign(Game.prototype, {
       });
     }
     if (s.fs2) s.fs2.addEventListener("click", () => this.toggleFullscreen());
+    if (s.share) s.share.addEventListener("change", () => this.setSetting("shareDailyScores", !!s.share.checked));   // LEADERBOARD
     if (s.panel) s.panel.addEventListener("submit", (e) => e.preventDefault());
   },
 
@@ -1099,6 +1101,7 @@ Object.assign(Game.prototype, {
       const want = st.reduceMotion === true ? "reduced" : st.reduceMotion === false ? "full" : "system";
       if (s.motion.value !== want) s.motion.value = want;
     }
+    if (s.share && s.share.checked !== !!st.shareDailyScores) s.share.checked = !!st.shareDailyScores;   // LEADERBOARD
     this.resolveMotion();
     this.syncFullscreenButtons();
   },

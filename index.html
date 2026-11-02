@@ -129,6 +129,8 @@
                   <button id="btnEndless" class="modeTile modeTile--endless" type="button"><span class="modeTile__title">Endless drift</span><span id="endlessSub" class="modeTile__sub">Find your ceiling</span></button>
                 </div>
                 <p id="dailyMeta" class="modeDeck__meta small hidden"></p>
+                <!-- LEADERBOARD (54-leaderboard.js): one-line public-board teaser; stays hidden while LEADERBOARD.endpoint is empty -->
+                <p id="dailyBoard" class="modeDeck__board small hidden" aria-live="polite"></p>
               </section>
 
               <section id="sectorSelect" aria-labelledby="sectorTitle">
@@ -258,6 +260,11 @@
               <div class="settingsRow">
                 <label for="btnFullscreen2">Fullscreen</label>
                 <button id="btnFullscreen2" class="btn-arcade" type="button" aria-pressed="false">Enter fullscreen</button>
+              </div>
+              <!-- LEADERBOARD (54-leaderboard.js): opt-in row, shown only when the board endpoint is configured -->
+              <div id="setShareScoresRow" class="settingsRow settingsRow--share hidden">
+                <label for="setShareScores">Share daily sortie scores <span class="settingsRow__hint">(sends your pilot name and today's result to the public board)</span></label>
+                <input id="setShareScores" class="toggleNeon" type="checkbox" role="switch" />
               </div>
             </form>
           </div>
@@ -400,6 +407,8 @@
               <input id="modeShareText" class="shareText mono" type="text" readonly aria-label="Share line" />
               <button id="btnModeCopy" class="btn-arcade" type="button">Copy</button>
             </div>
+            <!-- LEADERBOARD (54-leaderboard.js): today's public board; filled only for a daily sortie when the endpoint is set -->
+            <section id="modesBoard" class="modesBoard hidden" aria-live="polite" aria-labelledby="modesBoardTitle"></section>
           </div>
           <div class="screenActions">
             <button id="btnModeAgain" class="btn-arcade primary" type="button">Fly again</button>
@@ -688,6 +697,7 @@
   <script src="./assets/js/game/45-feedback.js?v=20261031a"></script>
   <script src="./assets/js/game/50-boss.js?v=20261031a"></script>
   <script src="./assets/js/game/52-modes.js?v=20261031a"></script>
+  <script src="./assets/js/game/54-leaderboard.js?v=20261031a"></script>
   <script src="./assets/js/game/60-hud.js?v=20261031a"></script>
   <script src="./assets/js/game/70-render.js?v=20261031a"></script>
   <script src="./assets/js/game/72-atmos.js?v=20261031a"></script>

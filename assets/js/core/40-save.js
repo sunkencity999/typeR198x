@@ -96,7 +96,8 @@ const defaultSave = () => ({
   lastUnlockedLevel: 1, // 1..10
   storySeen: false,
   keyboardHintSeen: false,
-  settings: { muted: false, crt: true, musicVolume: 0.7, sfxVolume: 0.8, crtIntensity: 0.75, reduceMotion: null, renderScaleCap: 2 },
+  settings: { muted: false, crt: true, musicVolume: 0.7, sfxVolume: 0.8, crtIntensity: 0.75, reduceMotion: null, renderScaleCap: 2, shareDailyScores: false },
+  playerToken: "",     // LEADERBOARD (54-leaderboard.js): anonymous UUID for the public daily board, created on first use; Reset save rotates it
   highScores: [],      // top 10: { runId, name, score, levelReached, startLevel, wpm, acc, maxCombo, ship, difficulty, date }
   sectorBests: {},     // "1".."10" -> { score, rank, wpm, acc, maxCombo, date }
   bestWpm: 0,
@@ -190,8 +191,15 @@ function normaliseSettings(s) {
     sfxVolume: num(s.sfxVolume, 0.8, 0, 1),
     crtIntensity: num(s.crtIntensity, 0.75, 0.25, 1),
     reduceMotion: s.reduceMotion === true ? true : s.reduceMotion === false ? false : null,
-    renderScaleCap: num(s.renderScaleCap, 2, 0.5, 2)
+    renderScaleCap: num(s.renderScaleCap, 2, 0.5, 2),
+    shareDailyScores: s.shareDailyScores === true   // LEADERBOARD: opt-in only; anything but a stored true is off
   };
+}
+
+// LEADERBOARD: the anonymous board token is kept only when it is UUID-shaped; anything else starts over as "".
+const PLAYER_TOKEN_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function normalisePlayerToken(v) {
+  return typeof v === "string" && PLAYER_TOKEN_RE.test(v) ? v.toLowerCase() : "";
 }
 
 // Merge any stored blob over the defaults and normalise it to schema 2. Idempotent.
@@ -209,6 +217,7 @@ function migrateSave(obj) {
   save.victories = Number.isFinite(obj.victories) ? obj.victories : 0;
   save.playerName = typeof obj.playerName === "string" ? obj.playerName : "";
   save.selectedShip = typeof obj.selectedShip === "string" && obj.selectedShip ? obj.selectedShip : "coconut";
+  save.playerToken = normalisePlayerToken(obj.playerToken);   // LEADERBOARD
   save.run = migrateRun(obj.run);
   // review R3: a run saved before baselineHigh existed takes the headline as it stands at migration time.
   if (save.run && !Number.isFinite(save.run.baselineHigh)) save.run.baselineHigh = save.highScore;
