@@ -5,6 +5,12 @@
 // tools/audio/*) through a voice pool with per-cue caps and stealing; every cue keeps its synth as the fallback
 // (bank missing or still decoding, legacy manifest, native / file:// shells) or as a parametric layer. A fast music
 // sidechain (musicDuck) dips under explosions, boss hits and the announcer; the master compressor is gentler (3:1).
+// Adaptive music: on desktop Web Audio the sector's track plays as two decoded layers (manifest.musicLayers: the
+// drumless stem + the mono drums stem from tools/audio/split_stems.sh) through AudioBufferSourceNodes with
+// sample-accurate loops at MUSIC_LOOP; setIntensity(0..1) is the drums' level. The streamed HTMLMediaElement
+// transport below is unchanged and remains the path for touch / native / file:// / low-memory devices, for a track
+// whose layers are not decoded yet (the first sector starts on it and hands over at the next loop boundary) and for
+// any decode failure.
 (function (global) {
   "use strict";
 
@@ -68,6 +74,30 @@
   const DUCK_DB = { explosionM: -3.0, explosionL: -4.0, bossHit: -3.0, bossKill: -4.0, damage: -3.0, vo: -4.0 };
   const DUCK_HOLD_S = 0.35;
   const CLIMB_BASE_RATE = 0.75;       // typing tick: playbackRate at progress 0 (2200 Hz sample -> 1650 Hz), x2 at the last glyph
+  const LIMIT_KNEE = 0.6;             // master soft clip after the compressor: identity below this ...
+  const LIMIT_CEIL = 0.94;            // ... then tanh toward this (output never exceeds ~.88 for any input)
+  // WaveShaper curve for the soft clip: linear through the knee so ordinary levels are bit-exact (music peaks ~.3-.4),
+  // a tanh shoulder above it. Five sampled onsets on the same instant run ahead of the compressor's 5 ms attack; this
+  // is what keeps that sum under full scale instead of trimming every cue for the worst case.
+  const LIMIT_CURVE = (() => {
+    const n = 4097, c = new Float32Array(n), k = LIMIT_KNEE, m = LIMIT_CEIL;
+    for (let i = 0; i < n; i++) {
+      const x = (i / (n - 1)) * 2 - 1, a = Math.abs(x);
+      c[i] = a <= k ? x : Math.sign(x) * (k + (m - k) * Math.tanh((a - k) / (m - k)));
+    }
+    return c;
+  })();
+  // Adaptive music layers: desktop Web Audio only; touch-first devices and < 4 GB keep the streamed transport.
+  const LAYERS_ENV_OK = !FORCE_HTML_AUDIO && hasWindow && (() => {
+    try {
+      if (hasNavigator && navigator.deviceMemory != null && navigator.deviceMemory < 4) return false;
+      if (typeof matchMedia === "function" && matchMedia("(pointer: coarse) and (hover: none)").matches) return false;
+      return typeof AudioBuffer !== "undefined";
+    } catch (_) { return false; }
+  })();
+  const LAYER_INTENSITY_TC = 0.25;   // setIntensity time constant (s): the drums come and go over ~1 s, never per key
+  const LAYER_SPLICE_S = 0.012;      // loop splice: the body's last 12 ms blend into the material that leads into loopStart
+  const LAYER_RELEASE_DELAY_MS = 900; // after a level clear: the old pair's fade-out ends before the next pair decodes
   const VO_LINES = ["warning", "boss_incoming", "sector_clear", "signal_lost", "perfect", "overdrive", "new_record", "rank_s", "rank_a", "rank_b", "rank_c", "rank_d", "ready", "go"];
   const perfNow = () => (typeof performance !== "undefined" && performance.now ? performance.now() : Date.now());
 
@@ -140,6 +170,7 @@
       this.ctx = null;
       this.master = null;
       this.compressor = null;
+      this.limiter = null;
       this.sfxGain = null;
       this.musicGain = null;
       this.musicFilter = null;
@@ -204,6 +235,19 @@
       this.lastRank = null;                    // 88-audio-director.js stores results.rank / newHigh for rankStamp()
       this.lastNewHigh = false;
       this.pendingPerfect = false;             // set by the director on a perfect wave; waveClear() announces it
+
+      // Adaptive music layers (SOUND pass)
+      this.layersEnabled = LAYERS_ENV_OK;
+      this.intensity = 1;                      // 0 calm (drums out) .. 1 full mix; setIntensity()
+      this.layers = null;                      // prepared pair { track, base, top, start, len }
+      this._layerBytes = {};                   // track -> { base, top } ArrayBuffers fetched ahead (prefetchMusic)
+      this._layerFetching = {};
+      this._layerPromises = {};
+      this._layerPlay = null;                  // { pair, track, srcBase, srcTop, gBase, gTop, out, startedAt, offset, facade }
+      this._layerParked = null;                // { track, pos } after end / hidden stop, so playMusic(same) resumes there
+      this._prefetchedTrack = -1;
+      this._layerPlanTimer = null;
+      this.layerStats = { decodeMs: 0, residentMB: 0, peakMB: 0, takeovers: 0, starts: 0 };
     }
 
     _applyManifest() {
@@ -212,6 +256,7 @@
       this.sfxSources = m ? { laser: m.sfx.laser, bigExplosion: m.sfx.bigExplosion } : { ...LEGACY_SFX };
       // SOUND pass: the banks are optional manifest members (an older manifest simply has none -> synth cues)
       this.bankSources = { sfx: (m && m.sfxBank && m.sfxBank.src && m.sfxBank.cues) ? m.sfxBank : null, vo: (m && m.voBank && m.voBank.src && m.voBank.cues) ? m.voBank : null };
+      this.musicLayers = (m && Array.isArray(m.musicLayers)) ? m.musicLayers.slice() : [];
     }
 
     // ------------------------------------------------------------------ transport
@@ -276,7 +321,11 @@
       compressor.ratio.value = 3;
       compressor.attack.value = 0.005;
       compressor.release.value = 0.15;
-      compressor.connect(ctx.destination);
+      const limiter = ctx.createWaveShaper();   // soft clip (LIMIT_CURVE): the ceiling the gentle ratio no longer provides
+      limiter.curve = LIMIT_CURVE;
+      try { limiter.oversample = "2x"; } catch (_) {}
+      compressor.connect(limiter);
+      limiter.connect(ctx.destination);
 
       const master = ctx.createGain();
       master.gain.value = this.muted ? 0 : MASTER_BASE;
@@ -303,7 +352,7 @@
       musicFilter.Q.value = 0.7;
       musicFilter.connect(musicGain);
 
-      Object.assign(this, { ctx, compressor, master, sfxGain, musicGain, musicFilter, musicDuck, voGain });
+      Object.assign(this, { ctx, compressor, limiter, master, sfxGain, musicGain, musicFilter, musicDuck, voGain });
       musicGain.gain.value = this._musicTarget();
       this._noiseBuf = null;
       this._duckUntil = 0;
@@ -559,6 +608,34 @@
       if (!this.musicEls.length) { this.pendingTrack = index; return; }
       this._clearEndTimer();
       if (this.musicState === "end") this.setMusicState("wave");
+      // Buffered layers carry the track when its pair is decoded (the no-restart rule applies there too: a parked pair
+      // resumes at its position). Otherwise the element streams now and the pair decodes for the next loop boundary.
+      if (this.layersAvailable(index)) {
+        const L = this._layerPlay;
+        if (L && L.track === index) {
+          this.currentTrack = index;
+          this._applyMusicGain(0.1);
+          this._armLoopTimer();
+          return;
+        }
+        // A live element already streaming this track is never hijacked mid-play (the two carriers cannot be aligned
+        // closer than the element's clock jitter): the next loop boundary hands over. The pair starts now only when
+        // nothing carries the track yet, resuming at the parked pair's or the paused element's position.
+        const slotNow = this.active;
+        const streaming = !!(slotNow && slotNow.index === index && this.currentTrack === index && !slotNow.el.paused);
+        if (this._layersReadyFor(index) && !streaming && !this._hidden) {
+          let pos = this._layerParked && this._layerParked.track === index ? this._layerParked.pos : null;
+          if (pos == null && slotNow && slotNow.index === index && this.currentTrack === index && Number.isFinite(slotNow.el.currentTime)) pos = slotNow.el.currentTime;
+          const prev = this.active;
+          this.currentTrack = index;
+          this._layersStart(this.layers, pos, L ? fade : 0.15);
+          if (prev && !prev.el.paused) this._parkElement(prev, fade);
+          this._applyMusicGain(0.1);
+          this._armLoopTimer();
+          return;
+        }
+        if (!this._layersReadyFor(index)) this._layersPrepare(index);
+      }
       const slot = this.active;
       if (slot && slot.index === index && this.currentTrack === index) {
         // No-restart rule: the same track keeps its element and position (restart, continue, unmute, retry).
@@ -575,6 +652,8 @@
     // offset: seconds past loopStart to begin at (the loop crossfade passes how late it fired).
     _startSlot(slot, index, fade, fromLoopStart, offset = 0) {
       if (!slot) return;
+      if (this._layerPlay) this._layersStop(fade, false);   // a buffered pair of another track fades out under the element
+      if (this._layerParked && this._layerParked.track !== index) this._layerParked = null;
       const prev = this.active;
       const src = this.musicTracks[index];
       const [loopStart] = this._loopFor(index);
@@ -643,7 +722,7 @@
     // crossfade starts within a few ms of loopEnd - LOOP_FADE instead of up to a poll late.
     _loopTick() {
       const slot = this.active;
-      if (!slot || !this.wantMusic || slot.index < 0) return;
+      if (!slot || !this.wantMusic || slot.index < 0 || this._layerPlay) return;
       const el = slot.el;
       if (el.paused || !Number.isFinite(el.currentTime)) return;
       const [, end] = this._loopFor(slot.index);
@@ -671,6 +750,7 @@
       if (!next || next === slot) return;
       const [, end] = this._loopFor(slot.index);
       const late = (slot.el.currentTime || 0) - (end - LOOP_FADE);
+      if (!this._layerPlay && this._layersReadyFor(slot.index)) { this._layersTakeover(slot, late > 0.015 ? late : 0); return; }
       this._startSlot(next, slot.index, LOOP_FADE, true, late > 0.015 ? late : 0);
     }
 
@@ -681,6 +761,8 @@
     prefetchMusic(index) {
       if (!this.musicEls.length || !this.musicTracks.length) return;
       const i = clamp(Math.floor(Number(index) || 0), 0, this.musicTracks.length - 1);
+      this._prefetchedTrack = i;
+      if (this.layersAvailable(i) && !this._layersReadyFor(i)) this._layerFetch(i);   // bytes only; decoded at the level clear
       if (this.active && this.active.index === i) return;
       this._prefetchSlot(this._idleSlot(), i);
     }
@@ -711,6 +793,8 @@
       this.wantMusic = false;
       this.pendingTrack = null;
       this.currentTrack = -1;
+      this._layersStop(0.05, false);
+      this._layerParked = null;
       this._clearEndTimer();
       this._disarmLoopTimer();
       this._clearFadeTimer();
@@ -839,6 +923,12 @@
     }
 
     _resumeMusicElement() {
+      if (this._layerPlay) return;   // the buffered pair carries the track
+      const parked = this._layerParked;
+      if (this.wantMusic && parked && parked.track === this.currentTrack && this._layersReadyFor(parked.track) && !this._hidden && this.musicState !== "end") {
+        this._layersStart(this.layers, parked.pos, 0.1);
+        return;
+      }
       const slot = this.active;
       if (this.wantMusic && slot && slot.index >= 0 && slot.el.paused && !this._hidden && this.musicState !== "end") {
         slot.el.play().catch(() => { this.needsGesture = true; });
@@ -846,6 +936,7 @@
     }
 
     _pauseAll() {
+      this._layersStop(0.02, true);
       for (const slot of this.musicEls) { try { slot.el.pause(); } catch (_) {} }
     }
 
@@ -854,10 +945,52 @@
       this._endTimer = null;
     }
 
-    // Legacy field: the element carrying music, or null when nothing plays.
+    // Legacy field: the element carrying music, a facade { buffered: true, currentTime, paused: false } while the
+    // layer pair carries it, or null when nothing plays.
     get music() {
+      if (this._layerPlay && this.wantMusic) return this._layerPlay.facade;
       const slot = this.active;
       return slot && this.wantMusic && !slot.el.paused ? slot.el : null;
+    }
+
+    // "layers" | "stream" | null: which transport carries the music right now.
+    musicPath() {
+      if (this._layerPlay && this.wantMusic) return "layers";
+      const slot = this.active;
+      return slot && this.wantMusic && !slot.el.paused ? "stream" : null;
+    }
+
+    // Moves the music to track position t (seconds): element currentTime on the stream path, a restart of the pair's
+    // sources at that offset on the buffered path. A probe / debug seam: the transport itself never seeks mid-loop.
+    seekMusic(t) {
+      const L = this._layerPlay;
+      if (L) {
+        const pair = L.pair;
+        this._layersStart(pair, clamp(Number(t) || pair.start, pair.start, pair.start + pair.len - 0.01), 0.005);
+        return true;
+      }
+      const slot = this.active;
+      if (slot && slot.index >= 0) { try { slot.el.currentTime = Number(t) || 0; } catch (_) {} return true; }
+      return false;
+    }
+
+    // Snapshot of the adaptive-music state for the shell / probes.
+    musicLayerInfo() {
+      const L = this._layerPlay, pair = L ? L.pair : this.layers;
+      return {
+        enabled: this.layersEnabled, path: this.musicPath(), track: L ? L.track : null, prepared: this.layers ? this.layers.track : null,
+        position: this.musicPosition(), loopStart: pair ? pair.start : null, loopEnd: pair ? pair.start + pair.len : null,
+        intensity: this.intensity, topGain: L ? +L.gTop.gain.value.toFixed(3) : null, parked: this._layerParked ? { ...this._layerParked } : null,
+        ...this.layerStats
+      };
+    }
+
+    // Track position in seconds on whichever path carries (or parked) the music; null when unknown.
+    musicPosition() {
+      if (this._layerPlay) return this._layersPos();
+      if (this._layerParked && this._layerParked.track === this.currentTrack) return this._layerParked.pos;
+      const slot = this.active;
+      return slot && Number.isFinite(slot.el.currentTime) ? slot.el.currentTime : null;
     }
 
     // HTML-audio path (native/file://): gains become element.volume with a small interval fader.
@@ -1049,6 +1182,215 @@
           (v.osc || v.src).stop(now + 0.03);
         } catch (_) {}
       }
+    }
+
+    // ------------------------------------------------------------------ adaptive music layers (SOUND pass)
+
+    // True when track `index` has a layer pair in the manifest and this device takes the buffered path.
+    layersAvailable(index) {
+      const L = this.musicLayers[index];
+      return !!(this.layersEnabled && this.ctx && !this.forceHtmlAudio && L && L.base && L.top);
+    }
+
+    _layersReadyFor(index) {
+      return !!(this.layers && this.layers.track === index && this.layers.base && this.layers.top);
+    }
+
+    // Debug / probe switch. Turning the layers off while they carry the music moves the track onto the element at the
+    // same position; turning them on takes effect at the next playMusic / loop boundary.
+    setLayersEnabled(on) {
+      this.layersEnabled = !!on && LAYERS_ENV_OK;
+      if (!this.layersEnabled && this._layerPlay) {
+        const pos = this._layersPos(), track = this._layerPlay.track;
+        const slot = this._idleSlot();
+        this._layersStop(0.3, false);
+        if (slot && this.wantMusic) { this.currentTrack = track; this._startSlot(slot, track, 0.3, false); this._seek(slot, pos); }
+      }
+      return this.layersEnabled;
+    }
+
+    // Drums level 0..1, eased over LAYER_INTENSITY_TC (the director calls this from the tick hook; a per-key jump never
+    // reaches the gain). Stored for the next start when nothing buffered plays.
+    setIntensity(v) {
+      this.intensity = clamp(Number(v) || 0, 0, 1);
+      const L = this._layerPlay;
+      if (L) this._ramp(L.gTop.gain, this.intensity, LAYER_INTENSITY_TC);
+    }
+
+    // Fetches the two layer files of `index` as ArrayBuffers (kept until decoded). Resolves to the bytes or null.
+    _layerFetch(index) {
+      if (!this.layersAvailable(index)) return Promise.resolve(null);
+      if (this._layerBytes[index]) return Promise.resolve(this._layerBytes[index]);
+      if (this._layerFetching[index]) return this._layerFetching[index];
+      const L = this.musicLayers[index];
+      const get = (src) => fetch(versioned(src)).then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.arrayBuffer(); });
+      const p = Promise.all([get(L.base), get(L.top)])
+        .then(([base, top]) => { this._layerBytes[index] = { base, top }; return this._layerBytes[index]; })
+        .catch((err) => { console.warn("SFX: music layers fetch failed", index, err); return null; })
+        .finally(() => { delete this._layerFetching[index]; });
+      this._layerFetching[index] = p;
+      return p;
+    }
+
+    // Decodes `index`'s pair (from the prefetched bytes or a fresh fetch), trims both to the loop body
+    // [loopStart, loopEnd - LOOP_FADE) with a 12 ms splice so the wrap is seamless, and installs it as this.layers.
+    // The previous pair is released unless it is the one playing (the switch releases that one). Resolves pair | null.
+    _layersPrepare(index) {
+      if (!this.layersAvailable(index)) return Promise.resolve(null);
+      if (this._layersReadyFor(index)) return Promise.resolve(this.layers);
+      if (this._layerPromises[index]) return this._layerPromises[index];
+      const p = (async () => {
+        const bytes = await this._layerFetch(index);
+        if (!bytes || !this.ctx) return null;
+        const t0 = perfNow();
+        const decode = (ab) => new Promise((resolve, reject) => {
+          const r = this.ctx.decodeAudioData(ab, resolve, reject);
+          if (r && r.then) r.then(resolve, reject);
+        });
+        let base, top;
+        try { [base, top] = await Promise.all([decode(bytes.base), decode(bytes.top)]); } catch (err) { console.warn("SFX: music layers decode failed", index, err); delete this._layerBytes[index]; return null; }
+        delete this._layerBytes[index];
+        if (!(base instanceof AudioBuffer) || !(top instanceof AudioBuffer)) return null;
+        const row = MUSIC_LOOP[index] || [0, Math.min(base.duration, top.duration)];
+        const start = row[0];
+        const end = Math.min(row[1] - LOOP_FADE, base.duration, top.duration);
+        const n = Math.round((end - start) * base.sampleRate);
+        const pair = { track: index, base: this._trimBuffer(base, start, n), top: this._trimBuffer(top, start, n), start, len: n / base.sampleRate };
+        if (this.layers && this.layers !== (this._layerPlay && this._layerPlay.pair)) this.layers = null;
+        this.layers = pair;
+        this.layerStats.decodeMs = Math.round(perfNow() - t0);
+        this._layersAccount();
+        return pair;
+      })().finally(() => { delete this._layerPromises[index]; });
+      this._layerPromises[index] = p;
+      return p;
+    }
+
+    // Copies n samples from `from` seconds into a fresh buffer; the last LAYER_SPLICE_S blend into the material that
+    // leads into `from`, so looping back to sample 0 is continuous.
+    _trimBuffer(buf, from, n) {
+      const sr = buf.sampleRate, a = Math.round(from * sr);
+      n = Math.max(1, Math.min(buf.length - a, n));
+      const out = this.ctx.createBuffer(buf.numberOfChannels, n, sr);
+      const xf = Math.min(Math.round(LAYER_SPLICE_S * sr), a, n >> 1);
+      for (let c = 0; c < buf.numberOfChannels; c++) {
+        const tmp = new Float32Array(n);
+        buf.copyFromChannel(tmp, c, a);
+        if (xf > 0) {
+          const pre = new Float32Array(xf);
+          buf.copyFromChannel(pre, c, a - xf);
+          for (let i = 0; i < xf; i++) { const w = (i + 1) / (xf + 1), k = n - xf + i; tmp[k] = tmp[k] * (1 - w) + pre[i] * w; }
+        }
+        out.copyToChannel(tmp, c, 0);
+      }
+      return out;
+    }
+
+    _layersAccount() {
+      const mb = (b) => (b ? b.length * b.numberOfChannels * 4 / 1048576 : 0);
+      const pairs = new Set();
+      if (this.layers) pairs.add(this.layers);
+      if (this._layerPlay) pairs.add(this._layerPlay.pair);
+      let total = 0;
+      for (const p of pairs) total += mb(p.base) + mb(p.top);
+      for (const b of Object.values(this.banks)) if (b) total += mb(b.buffer);
+      this.layerStats.residentMB = +total.toFixed(1);
+      if (this.layerStats.residentMB > this.layerStats.peakMB) this.layerStats.peakMB = this.layerStats.residentMB;
+    }
+
+    // Starts the pair at track position `pos` (seconds; null = loopStart) with both sources looping [0, len) in lockstep;
+    // the top (drums) layer sits at this.intensity. fadeSec > 0 fades the pair in (equal-power shape, as the slots do).
+    _layersStart(pair, pos, fadeSec = 0, at) {
+      const ctx = this.ctx;
+      if (!ctx || !pair || !this.musicFilter) return;
+      if (this._layerPlay) this._layersStop(Math.max(0.02, fadeSec), false);
+      const now = at != null ? at : this._now();
+      const off = clamp((pos != null ? pos : pair.start) - pair.start, 0, Math.max(0, pair.len - 0.01));
+      const mk = (buf) => { const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true; src.loopStart = 0; src.loopEnd = pair.len; return src; };
+      const srcBase = mk(pair.base), srcTop = mk(pair.top);
+      const gBase = ctx.createGain(), gTop = ctx.createGain(), out = ctx.createGain();
+      gBase.gain.value = 1;
+      gTop.gain.value = this.intensity;
+      srcBase.connect(gBase); gBase.connect(out);
+      srcTop.connect(gTop); gTop.connect(out);
+      out.connect(this.musicFilter);
+      const g = out.gain;
+      if (fadeSec > 0.01) {
+        g.setValueAtTime(0.0001, now);
+        if (fadeSec > 0.1) g.linearRampToValueAtTime(0.707, now + fadeSec / 2);
+        g.linearRampToValueAtTime(1, now + fadeSec);
+      } else {
+        g.setValueAtTime(1, now);
+      }
+      srcBase.start(now, off);
+      srcTop.start(now, off);
+      const self = this;
+      const facade = { buffered: true, paused: false, track: pair.track, get currentTime() { return self._layersPos() || 0; }, duration: pair.start + pair.len };
+      this._layerPlay = { pair, track: pair.track, srcBase, srcTop, gBase, gTop, out, startedAt: now, offset: off, facade };
+      this._layerParked = null;
+      this.layerStats.starts++;
+      this._layersAccount();
+    }
+
+    // Fades the playing pair out and stops it; park = remember the position for playMusic(same) / resume.
+    _layersStop(fadeSec = 0.05, park = true) {
+      const L = this._layerPlay;
+      if (!L) return;
+      this._layerPlay = null;
+      if (park) this._layerParked = { track: L.track, pos: this._layersPos(L) };
+      const now = this._now(), f = Math.max(0.005, fadeSec);
+      try {
+        L.out.gain.cancelScheduledValues(now);
+        L.out.gain.setValueAtTime(L.out.gain.value, now);
+        L.out.gain.linearRampToValueAtTime(0.0001, now + f);
+        L.srcBase.stop(now + f + 0.02);
+        L.srcTop.stop(now + f + 0.02);
+      } catch (_) {}
+      L.srcBase.onended = () => { try { L.out.disconnect(); L.gBase.disconnect(); L.gTop.disconnect(); } catch (_) {} };
+    }
+
+    // Track position (seconds) of a playing pair: start offset + elapsed context time, wrapped into the loop body.
+    _layersPos(L = this._layerPlay) {
+      if (!L) return null;
+      const elapsed = Math.max(0, this._now() - L.startedAt);
+      return L.pair.start + ((L.offset + elapsed) % L.pair.len);
+    }
+
+    // The streaming element reached its loop point and the pair is decoded: the pair starts at loopStart (+ however
+    // late the fade point was caught) while the element fades over LOOP_FADE, exactly as the second element would.
+    _layersTakeover(slot, late = 0) {
+      const pair = this.layers;
+      if (!pair) return;
+      this._layersStart(pair, pair.start + late, LOOP_FADE);
+      this._parkElement(slot, LOOP_FADE);
+      this.currentTrack = pair.track;
+      this.layerStats.takeovers++;
+    }
+
+    // Fades an element out and pauses it afterwards (it stays this.active for the shell / probes; its index is kept so
+    // a later element start of the same track reuses the slot's src).
+    _parkElement(slot, fade) {
+      this._setSlotLevel(slot, 0, fade, "out");
+      setTimeout(() => { if (slot.level === 0 && (slot !== this.active || this._layerPlay || !this.wantMusic)) { try { slot.el.pause(); } catch (_) {} } }, (fade + 0.08) * 1000);
+    }
+
+    // Level clear: a different track follows (prefetchMusic said which), so the pair that just played is released and
+    // the next one decodes behind the results card (after the fade-out, so the two never overlap in memory).
+    _layersPlanNext() {
+      const next = this._prefetchedTrack;
+      if (next < 0 || !this.layersAvailable(next) || this._layersReadyFor(next)) return;
+      const g = global.game;
+      if (g && typeof g.runMode === "function" && g.runMode() !== "campaign") return;
+      clearTimeout(this._layerPlanTimer);
+      this._layerPlanTimer = setTimeout(() => {
+        this._layerPlanTimer = null;
+        if (this._layerPlay) return;              // something restarted the music meanwhile
+        if (this._layersReadyFor(next)) return;   // a quick Next already decoded it (playMusic -> _layersPrepare)
+        this.layers = null;
+        this._layerParked = null;
+        this._layersAccount();
+        this._layersPrepare(next);
+      }, LAYER_RELEASE_DELAY_MS);
     }
 
     // ------------------------------------------------------------------ sample pool (SOUND pass)
@@ -1681,6 +2023,7 @@
     fanfare(kind = "levelClear") {
       this.lastCue = "fanfare:" + kind;
       if (!this.ctx) return;
+      if (kind === "levelClear") this._layersPlanNext();   // the sector is over: decode the next track's pair behind the card
       const t0 = this._now();
       const clear = [523, 659, 784, [1046, 0.6]];
       const voices = (notes, o) => {
@@ -1787,6 +2130,7 @@
   SFX.MUSIC_LOOP = MUSIC_LOOP;
   SFX.FORCE_HTML_AUDIO = FORCE_HTML_AUDIO;
   SFX.VO_LINES = VO_LINES;
+  SFX.LAYERS_ENV_OK = LAYERS_ENV_OK;
   SFX.POOL = { maxVoices: POOL_MAX_VOICES, defaultCap: POOL_DEFAULT_CAP, climbBaseRate: CLIMB_BASE_RATE, duckDb: DUCK_DB };
   SFX.CUES = [
     "zap", "lock", "lockRelease", "lockLost", "error", "explosion", "impact", "damage", "shieldHit", "shieldBreak",

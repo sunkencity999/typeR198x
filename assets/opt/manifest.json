@@ -1,5 +1,5 @@
 {
- "version": "202611020006",
+ "version": "202611020045",
  "music": [
   "./assets/opt/audio/galactic_high_score_1.mp3",
   "./assets/opt/audio/galactic_high_score_2.mp3",
@@ -7,6 +7,32 @@
   "./assets/opt/audio/galactic_high_score_4.mp3",
   "./assets/opt/audio/galactic_high_score_5.mp3",
   "./assets/opt/audio/galactic_high_score_6.mp3"
+ ],
+ "musicLayers": [
+  {
+   "base": "./assets/opt/audio/galactic_high_score_1_nodrums.mp3",
+   "top": "./assets/opt/audio/galactic_high_score_1_drums.mp3"
+  },
+  {
+   "base": "./assets/opt/audio/galactic_high_score_2_nodrums.mp3",
+   "top": "./assets/opt/audio/galactic_high_score_2_drums.mp3"
+  },
+  {
+   "base": "./assets/opt/audio/galactic_high_score_3_nodrums.mp3",
+   "top": "./assets/opt/audio/galactic_high_score_3_drums.mp3"
+  },
+  {
+   "base": "./assets/opt/audio/galactic_high_score_4_nodrums.mp3",
+   "top": "./assets/opt/audio/galactic_high_score_4_drums.mp3"
+  },
+  {
+   "base": "./assets/opt/audio/galactic_high_score_5_nodrums.mp3",
+   "top": "./assets/opt/audio/galactic_high_score_5_drums.mp3"
+  },
+  {
+   "base": "./assets/opt/audio/galactic_high_score_6_nodrums.mp3",
+   "top": "./assets/opt/audio/galactic_high_score_6_drums.mp3"
+  }
  ],
  "sfx": {
   "laser": "./assets/opt/audio/laser.wav",
@@ -130,7 +156,7 @@
     ]
    },
    "explosion_l": {
-    "trim": 0.6,
+    "trim": 0.5,
     "voices": 2,
     "jitter": 0.04,
     "v": [
@@ -263,7 +289,7 @@
     ]
    },
    "damage": {
-    "trim": 0.5,
+    "trim": 0.45,
     "voices": 2,
     "jitter": 0.04,
     "v": [
@@ -331,7 +357,7 @@
     ]
    },
    "boss_crack": {
-    "trim": 0.6,
+    "trim": 0.5,
     "voices": 1,
     "jitter": 0.03,
     "v": [

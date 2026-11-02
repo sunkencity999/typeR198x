@@ -62,7 +62,7 @@
     "explosion_l_2.wav",
     "explosion_l_3.wav"
    ],
-   "trim": 0.6,
+   "trim": 0.5,
    "voices": 2,
    "jitter": 0.04
   },
@@ -132,7 +132,7 @@
     "damage_2.wav",
     "damage_3.wav"
    ],
-   "trim": 0.5,
+   "trim": 0.45,
    "voices": 2,
    "jitter": 0.04
   },
@@ -169,7 +169,7 @@
     "boss_crack_1.wav",
     "boss_crack_2.wav"
    ],
-   "trim": 0.6,
+   "trim": 0.5,
    "voices": 1,
    "jitter": 0.03
   },

@@ -12,6 +12,10 @@
 //  10. rankStamp(rank) says the letter; the director's results / waveWillEnd feeds reach the registry
 //  11. offline render with the banks: a 12-zap burst + explosion(1) + bossKill + damage peaks < .95
 //  12. legacy manifest (no banks): every cue runs on its synth, _sample() returns null, nothing throws
+//  13. adaptive music: the track-0 pair decodes (stereo drumless + mono drums) to the loop body and carries the music
+//  14. resident decoded audio (pair + banks) stays under 90 MB
+//  15. intensity: the director eases the combo / phase / overdrive / hull target into sfx.setIntensity (never a jump)
+//  16. the buffered loop wraps sample-accurately to loopStart
 import { openProbe, ROOT } from "./_lib.mjs";
 import fs from "node:fs";
 import path from "node:path";
@@ -192,6 +196,63 @@ const legacy = await lp.evaluate(async () => {
 });
 await legacyCtx.close();
 P.check("legacy manifest (no banks): synth cues run, _sample() null, say() false, nothing throws, no page errors", legacy.banks.sfx === null && legacy.banks.vo === null && legacy.sample === null && legacy.said === false && legacy.lastVoice === null && !legacy.threw && legacy.laser && legacyErrors.length === 0, { ...legacy, legacyErrors });
+
+// 13-16. adaptive music layers: decode, buffered loop geometry, intensity from the director, memory
+const lay = await g(async () => {
+  const s = game.sfx;
+  if (!s.layersEnabled) return { enabled: false };
+  const t0 = performance.now();
+  const pair = await s._layersPrepare(0);
+  const prepMs = Math.round(performance.now() - t0);
+  if (!pair) return { enabled: true, pair: null };
+  const [ls, le] = s.MUSIC_LOOP[0];
+  s.playMusic(0);
+  await new Promise((r) => setTimeout(r, 300));
+  const info1 = s.musicLayerInfo();
+  await new Promise((r) => setTimeout(r, 400));
+  const info2 = s.musicLayerInfo();
+  return { enabled: true, pair: { track: pair.track, start: pair.start, len: +pair.len.toFixed(3), baseCh: pair.base.numberOfChannels, topCh: pair.top.numberOfChannels, rate: pair.base.sampleRate, sameLen: pair.base.length === pair.top.length },
+    expectLen: +((le - 0.6) - ls).toFixed(3), prepMs, decodeMs: s.layerStats.decodeMs, info1, info2, advanced: info2.position - info1.position, music: !!s.music, facade: s.music && s.music.buffered === true };
+});
+if (!lay.enabled) P.note("adaptive music layers: disabled on this device / UA (touch-first or < 4 GB)", JSON.stringify(lay));
+else {
+  P.check("layers: pair decoded (stereo drumless + mono drums, equal length) to the loop body [loopStart, loopEnd - .6), playMusic(0) switches to it and the position advances", !!lay.pair && lay.pair.track === 0 && lay.pair.baseCh === 2 && lay.pair.topCh === 1 && lay.pair.sameLen && Math.abs(lay.pair.len - lay.expectLen) < 0.002 && lay.info2.path === "layers" && lay.advanced > 0.3 && lay.advanced < 0.6 && lay.music && lay.facade, lay);
+  P.check("layers: resident decoded audio (pair + banks) <= 90 MB, decode of both layers measured", lay.info2.residentMB <= 90 && lay.info2.residentMB > 30 && lay.decodeMs > 0, { residentMB: lay.info2.residentMB, peakMB: lay.info2.peakMB, decodeMs: lay.decodeMs, prepMs: lay.prepMs });
+
+  // intensity: the director eases toward a target built from the state; the drums gain follows
+  const inten = await g(async () => {
+    const s = game.sfx, gm = game;
+    const was = { mode: gm.mode, mult: gm.stats.mult, phase: gm.wavePhase, wave: gm.wave, inBoss: gm.inBoss, od: gm.overdriveOn };
+    gm.mode = "playing"; gm.wavePhase = "spawn"; gm.wave = 0; gm.inBoss = false; gm.overdriveOn = false; gm.stats.mult = 1;
+    gm._audioIntensity = null;
+    const run = (n) => { for (let i = 0; i < n; i++) gm.audioDirectorTick(1 / 60); };
+    run(200); const calm = { target: gm.audioIntensityTarget(), sent: s.intensity };
+    gm.stats.mult = 5; const t1 = gm.audioIntensityTarget();
+    const trace = []; for (let k = 0; k < 10; k++) { run(6); trace.push(+s.intensity.toFixed(3)); }
+    run(200); const hot = { target: t1, sent: s.intensity };
+    await new Promise((r) => setTimeout(r, 900));
+    const gTop = s.musicLayerInfo().topGain;
+    gm.wavePhase = "approach"; gm.stats.mult = 1; run(300); const approach = { target: gm.audioIntensityTarget(), sent: s.intensity };
+    gm.mode = "levelComplete"; run(300); const off = { target: gm.audioIntensityTarget(), sent: s.intensity };
+    Object.assign(gm, { mode: was.mode, wavePhase: was.phase, wave: was.wave, inBoss: was.inBoss, overdriveOn: was.od }); gm.stats.mult = was.mult;
+    let monotone = true; for (let i = 1; i < trace.length; i++) if (trace[i] < trace[i - 1] - 1e-9) monotone = false;
+    const perStep = trace.map((v, i) => i ? v - trace[i - 1] : 0).slice(1);
+    return { calm, hot, trace, monotone, maxStep: +Math.max(...perStep).toFixed(3), gTop, approach, off };
+  });
+  P.check("intensity: combo tier x1 -> x5 raises the target by .3 and the sent value eases up monotonically (<= .14 per 100 ms), the drums gain follows; approach phase and off-field targets as designed", Math.abs(inten.calm.sent - inten.calm.target) < 0.02 && Math.abs(inten.hot.target - inten.calm.target - 0.3) < 1e-6 && inten.monotone && inten.maxStep <= 0.145 && Math.abs(inten.hot.sent - inten.hot.target) < 0.02 && Math.abs(inten.gTop - inten.hot.sent) < 0.05 && Math.abs(inten.approach.target - 0.7) < 1e-6 && inten.off.target === 0 && inten.off.sent < 0.02, inten);
+
+  // the buffered loop wraps sample-accurately: seek near the body end, the position comes back to loopStart with the pair still carrying
+  const wrap = await g(async () => {
+    const s = game.sfx, info = s.musicLayerInfo();
+    s.seekMusic(info.loopEnd - 0.5);
+    const rows = [];
+    for (let i = 0; i < 16; i++) { await new Promise((r) => setTimeout(r, 50)); rows.push(+s.musicPosition().toFixed(3)); }
+    const after = s.musicLayerInfo();
+    s.stopMusic();
+    return { loopStart: info.loopStart, loopEnd: info.loopEnd, rows, path: after.path, wrapped: rows.some((p, i) => i && p < rows[i - 1]), minPos: Math.min(...rows), stillLayers: after.path === "layers" };
+  });
+  P.check("layers: the loop wraps from loopEnd - .6 back to loopStart on the buffered path (no element involved)", wrap.wrapped && wrap.minPos >= wrap.loopStart - 0.01 && wrap.minPos < wrap.loopStart + 0.6 && wrap.stillLayers, wrap);
+}
 
 P.check("zero page errors / console errors on the main page", P.errors.pageErrors.length === 0 && P.errors.consoleErrors.length === 0, P.errors);
 await P.finish();

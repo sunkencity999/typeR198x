@@ -181,58 +181,66 @@ try {
   const startToPlayingMs = Date.now() - tStart;
   check("startToPlayingMs <= 900", startToPlayingMs <= 900, startToPlayingMs);
   await page.waitForFunction(() => game.sfx.music && game.sfx.music.currentTime > 0, null, { timeout: 15000 }).catch(() => {});
-  const m0 = await page.evaluate(() => { const s = game.sfx; const a = s.active; return { currentTrack: s.currentTrack, state: s.musicState, src: a && a.src, playing: !!s.music, t: a && +a.el.currentTime.toFixed(2), loopStart: s.MUSIC_LOOP[s.currentTrack][0], musicGain: +s.musicGain.gain.value.toFixed(3), wantMusic: s.wantMusic, levelIndex: game.levelIndex }; });
-  check("L1: currentTrack === 0 and the element is playing from loop start", m0.currentTrack === 0 && m0.playing && m0.t >= m0.loopStart - 0.05, m0);
+  const m0 = await page.evaluate(() => { const s = game.sfx; const a = s.active; const p = s.musicPosition(); return { currentTrack: s.currentTrack, state: s.musicState, src: a && a.src, playing: !!s.music, path: s.musicPath(), t: p == null ? null : +p.toFixed(2), loopStart: s.MUSIC_LOOP[s.currentTrack][0], musicGain: +s.musicGain.gain.value.toFixed(3), wantMusic: s.wantMusic, levelIndex: game.levelIndex }; });
+  check("L1: currentTrack === 0 and the music is playing from loop start", m0.currentTrack === 0 && m0.playing && m0.t >= m0.loopStart - 0.05, m0);
   check(LEGACY ? "legacy: music src is the WAV master" : "manifest: music src is the opt MP3", LEGACY ? /\.wav$/i.test(m0.src) : /\.mp3$/i.test(m0.src), m0.src);
   await page.screenshot({ path: path.join(OUT, "01-playing.png") });
 
-  // 6. Loop crossfade: seek the active element to loopEnd - 1; the other element must take over near loopStart
-  //    within 2 s, and the analyser RMS on musicGain must not dip more than 12 dB below the pre-seek level
-  //    during the fade window (the song's own quiet intro after loopStart is not a gap).
+  // 6. Loop crossfade: seek the music to loopEnd - 1. Stream path: the other element must take over near loopStart
+  //    within 2 s. Layers path (SOUND pass, once the decoded pair carries the track; a decoded pair waiting on the
+  //    element hands over at this boundary): the pair's sources wrap to loopStart on their own. Either way the
+  //    analyser RMS on musicGain must not dip more than 12 dB below the pre-seek level across the window (the song's
+  //    own quiet intro after loopStart is not a gap).
   await sleep(600);
   const loop = await page.evaluate(async () => {
     const s = game.sfx; const an = s.ctx.createAnalyser(); an.fftSize = 2048; s.musicGain.connect(an); const buf = new Float32Array(an.fftSize);
     const rms = () => { an.getFloatTimeDomainData(buf); let acc = 0; for (let i = 0; i < buf.length; i++) acc += buf[i] * buf[i]; return +(20 * Math.log10(Math.sqrt(acc / buf.length) || 1e-9)).toFixed(1); };
-    const a = s.active; const [ls, le] = s._loopFor(a.index); const id = a.id; const rows = [];
-    const snap = (t) => { const o = s.musicEls.find((x) => x.id !== id); rows.push({ t, rms: rms(), oldT: +a.el.currentTime.toFixed(2), oldLevel: a.level, oldPaused: a.el.paused, newT: +o.el.currentTime.toFixed(2), newLevel: o.level, newPaused: o.el.paused, active: s.active.id }); };
+    const a = s.active; const pathBefore = s.musicPath(); const track = pathBefore === "layers" ? s._layerPlay.track : a.index;
+    const [ls, le0] = s._loopFor(track); const le = pathBefore === "layers" ? s._layerPlay.pair.start + s._layerPlay.pair.len + 0.6 : le0; const id = a.id; const rows = [];
+    const snap = (t) => { const o = s.musicEls.find((x) => x.id !== id); const p = s.musicPosition(); rows.push({ t, rms: rms(), oldT: +a.el.currentTime.toFixed(2), oldLevel: a.level, oldPaused: a.el.paused, newT: +o.el.currentTime.toFixed(2), newLevel: o.level, newPaused: o.el.paused, active: s.active.id, path: s.musicPath(), pos: p == null ? null : +p.toFixed(2) }); };
     const t0 = performance.now();
     for (let i = 0; i < 10; i++) { snap(+(performance.now() - t0).toFixed(0)); await new Promise((r) => setTimeout(r, 50)); }
-    a.el.currentTime = le - 1; const tSeek = performance.now();
+    s.seekMusic(le - 1); const tSeek = performance.now();
     for (let i = 0; i < 60; i++) { await new Promise((r) => setTimeout(r, 50)); snap(+(performance.now() - t0).toFixed(0)); }
     s.musicGain.disconnect(an);
-    return { id, ls, le, readyState: a.el.readyState, seekAt: +(tSeek - t0).toFixed(0), rows };
+    return { id, ls, le, track, pathBefore, readyState: a.el.readyState, seekAt: +(tSeek - t0).toFixed(0), rows, info: s.musicLayerInfo() };
   });
   const preDb = loop.rows.slice(0, 10).map((r) => r.rms).sort((x, y) => x - y)[5];
   const post10 = loop.rows.slice(10);
-  const takeover = post10.find((r) => !r.newPaused && r.newT >= loop.ls - 0.1 && r.newT < loop.ls + 1.6 && r.active !== loop.id);
+  const toLayers = post10.some((r) => r.path === "layers");
+  // stream: the other element starts near loopStart; layers: the position wraps back under the seek point
+  const takeover = toLayers
+    ? post10.find((r) => r.path === "layers" && r.pos != null && r.pos < loop.le - 1.5)
+    : post10.find((r) => !r.newPaused && r.newT >= loop.ls - 0.1 && r.newT < loop.ls + 1.6 && r.active !== loop.id);
   const tookMs = takeover ? takeover.t - loop.seekAt : null;
-  check("loop: other element playing near loopStart within 2 s of loopEnd-1", tookMs != null && tookMs <= 2000, { tookMs, ls: loop.ls, le: loop.le, readyState: loop.readyState, takeover });
-  const fadeStart = post10.findIndex((r) => r.newLevel > 0 && !r.newPaused);
-  const fadeEnd = post10.findIndex((r, i) => i > fadeStart && r.oldLevel === 0 && r.oldPaused);
+  check(toLayers ? "loop (layers): the decoded pair carries past the boundary and wraps to loopStart within 2 s of loopEnd-1" : "loop: other element playing near loopStart within 2 s of loopEnd-1", tookMs != null && tookMs <= 2000, { tookMs, path: loop.pathBefore, toLayers, ls: loop.ls, le: loop.le, readyState: loop.readyState, takeover });
+  const fadeStart = toLayers ? Math.max(0, post10.indexOf(takeover) - 8) : post10.findIndex((r) => r.newLevel > 0 && !r.newPaused);
+  const fadeEnd = toLayers ? -1 : post10.findIndex((r, i) => i > fadeStart && r.oldLevel === 0 && r.oldPaused);
   const win = fadeStart >= 0 ? post10.slice(Math.max(0, fadeStart - 1), fadeEnd > 0 ? fadeEnd : fadeStart + 16) : [];
   const winMin = win.length ? Math.min(...win.map((r) => r.rms)) : null;
-  report.loopRms = { preSteadyDb: preDb, fadeWindowMinDb: winMin, fadeSamples: win.length, rows: loop.rows };
-  check("loop: RMS across the crossfade window stays within 12 dB of the pre-seek level", winMin != null && preDb - winMin <= 12 && preDb > -60, { preSteadyDb: preDb, fadeWindowMinDb: winMin, fadeSamples: win.length });
+  report.loopRms = { preSteadyDb: preDb, fadeWindowMinDb: winMin, fadeSamples: win.length, path: toLayers ? "layers" : "stream", layerInfo: loop.info, rows: loop.rows };
+  check("loop: RMS across the crossfade window stays within 12 dB of the pre-seek level", winMin != null && preDb - winMin <= 12 && preDb > -60, { preSteadyDb: preDb, fadeWindowMinDb: winMin, fadeSamples: win.length, path: toLayers ? "layers" : "stream" });
   const last = post10[post10.length - 1];
-  check("loop: outgoing element paused after the fade, incoming at level 1", last.oldPaused && last.oldLevel === 0 && last.newLevel === 1 && !last.newPaused, last);
+  check(toLayers ? "loop (layers): the element is parked (paused, level 0) and the pair still carries at the end" : "loop: outgoing element paused after the fade, incoming at level 1", toLayers ? (last.oldPaused && last.oldLevel === 0 && last.path === "layers") : (last.oldPaused && last.oldLevel === 0 && last.newLevel === 1 && !last.newPaused), last);
+  if (toLayers) check("layers: decoded pair for the current track, resident decoded audio (pair + banks) <= 90 MB, loop body = [loopStart, loopEnd - .6)", loop.info.track === loop.track && loop.info.residentMB <= 90 && Math.abs(loop.info.loopEnd - (loop.le - 0.6)) < 0.01 && Math.abs(loop.info.loopStart - loop.ls) < 0.01, loop.info);
 
   // 7. Mute is master gain only
   await page.evaluate(() => game.sfx.setMuted(true)); await sleep(200);
-  const muted = await page.evaluate(() => ({ master: +game.sfx.master.gain.value.toFixed(3), playing: !!game.sfx.music, paused: game.sfx.active.el.paused }));
+  const muted = await page.evaluate(() => ({ master: +game.sfx.master.gain.value.toFixed(3), playing: !!game.sfx.music, path: game.sfx.musicPath(), paused: game.sfx.musicPath() === "layers" ? false : game.sfx.active.el.paused }));
   await page.evaluate(() => game.sfx.setMuted(false)); await sleep(200);
   const unmuted = await page.evaluate(() => ({ master: +game.sfx.master.gain.value.toFixed(3), playing: !!game.sfx.music }));
-  check("mute: setMuted(true) -> master ~0, element keeps playing; setMuted(false) -> master .8, music playing", muted.master < 0.01 && !muted.paused && unmuted.master > 0.79 && unmuted.playing, { muted, unmuted });
+  check("mute: setMuted(true) -> master ~0, music keeps playing; setMuted(false) -> master .8, music playing", muted.master < 0.01 && !muted.paused && muted.playing && unmuted.master > 0.79 && unmuted.playing, { muted, unmuted });
 
   // 8. Volume curves
   const vol = await page.evaluate(async () => { const s = game.sfx; const osc = s.ctx.createOscillator(); const g = s.ctx.createGain(); g.gain.value = 0.0001; osc.connect(g); g.connect(s.sfxGain); osc.start(); s.setMusicVolume(0.2); s.setSfxVolume(0.5); const samples = []; for (let i = 0; i < 6; i++) { await new Promise((r) => setTimeout(r, 60)); samples.push([+s.musicGain.gain.value.toFixed(4), +s.sfxGain.gain.value.toFixed(4)]); } const out = { music: +s.musicGain.gain.value.toFixed(4), sfx: +s.sfxGain.gain.value.toFixed(4), samples, sfxVol: s.sfxVol }; osc.stop(); s.setMusicVolume(0.7); s.setSfxVolume(0.8); return out; });
   check("volume: musicGain = .8*v^2, sfxGain = v^2 (squared curve)", Math.abs(vol.music - 0.8 * 0.04) < 0.003 && Math.abs(vol.sfx - 0.25) < 0.01, vol);
 
   // 9. Restart continuity: playMusic(sameIndex) keeps the element
-  const before = await page.evaluate(() => ({ id: game.sfx.active.id, t: game.sfx.active.el.currentTime }));
+  const before = await page.evaluate(() => ({ id: game.sfx.active.id, path: game.sfx.musicPath(), t: game.sfx.musicPosition() }));
   await page.evaluate(() => { game.sfx.playMusic(game.sfx.currentTrack); game.sfx.playMusic(); });
   await sleep(300);
-  const after = await page.evaluate(() => ({ id: game.sfx.active.id, t: game.sfx.active.el.currentTime, playing: !!game.sfx.music }));
-  check("restart: playMusic(same) and playMusic() keep the same element with continuous currentTime", before.id === after.id && after.t >= before.t && after.playing, { before, after });
+  const after = await page.evaluate(() => ({ id: game.sfx.active.id, path: game.sfx.musicPath(), t: game.sfx.musicPosition(), playing: !!game.sfx.music }));
+  check("restart: playMusic(same) and playMusic() keep the same carrier with a continuous position", before.id === after.id && before.path === after.path && after.t >= before.t && after.t < before.t + 2 && after.playing, { before, after });
 
   // 10. Boss -> finale -> wave
   await page.evaluate(() => game.sfx.setMusicState("boss")); await sleep(700);
@@ -253,21 +261,21 @@ try {
   check("pause: filter < 700 Hz and -6 dB; resume restores wave", paused.filter < 700 && Math.abs(paused.gain - 0.8 * 0.49 * 0.5) < 0.01 && resumed.filter > 15000 && Math.abs(resumed.gain - 0.8 * 0.49) < 0.01 && resumed.state === "wave", { paused, resumed });
 
   // 12. End state then Try Again
-  const posBefore = await page.evaluate(() => ({ id: game.sfx.active.id, t: game.sfx.active.el.currentTime }));
+  const posBefore = await page.evaluate(() => ({ id: game.sfx.active.id, path: game.sfx.musicPath(), t: game.sfx.musicPosition() }));
   await page.evaluate(() => { game.sfx.lowHp(true); game.sfx.setMusicState("end"); game.sfx.fanfare("gameOver"); });
   await sleep(1000);
   const end1 = await page.evaluate(() => ({ gain: +game.sfx.musicGain.gain.value.toFixed(4), lastCue: game.sfx.lastCue, lowHp: !!game.sfx._lowHpTimer }));
   await sleep(600);
-  const end2 = await page.evaluate(() => ({ paused: game.sfx.active.el.paused, music: game.sfx.music, state: game.sfx.musicState }));
-  check("end: musicGain < .01 within 1 s, element paused within 1.6 s, lastCue fanfare:gameOver, lowHp beeper stopped", end1.gain < 0.01 && end2.paused && end2.music === null && end1.lastCue === "fanfare:gameOver" && !end1.lowHp, { end1, end2 });
+  const end2 = await page.evaluate(() => ({ paused: game.sfx.active.el.paused && !game.sfx._layerPlay, music: game.sfx.music, state: game.sfx.musicState, parked: game.sfx._layerParked }));
+  check("end: musicGain < .01 within 1 s, carrier stopped within 1.6 s, lastCue fanfare:gameOver, lowHp beeper stopped", end1.gain < 0.01 && end2.paused && end2.music === null && end1.lastCue === "fanfare:gameOver" && !end1.lowHp, { end1, end2 });
   await page.evaluate(() => { game.sfx.playMusic(game.sfx.trackForLevel(game.levelIndex)); game.sfx.setMusicState("wave"); });
   await sleep(500);
-  const again = await page.evaluate(() => ({ id: game.sfx.active.id, t: game.sfx.active.el.currentTime, playing: !!game.sfx.music, gain: +game.sfx.musicGain.gain.value.toFixed(3), state: game.sfx.musicState }));
-  check("try again: music playing again on the same element, position continuous, gain restored", again.playing && again.id === posBefore.id && again.t >= posBefore.t - 0.05 && again.gain > 0.3, { posBefore, again });
+  const again = await page.evaluate(() => ({ id: game.sfx.active.id, path: game.sfx.musicPath(), t: game.sfx.musicPosition(), playing: !!game.sfx.music, gain: +game.sfx.musicGain.gain.value.toFixed(3), state: game.sfx.musicState }));
+  check("try again: music playing again on the same carrier, position continuous, gain restored", again.playing && again.id === posBefore.id && again.path === posBefore.path && again.t >= posBefore.t - 0.05 && again.t < posBefore.t + 2 && again.gain > 0.3, { posBefore, again });
 
   // 13. Track change crossfades to the other element (sector 3 -> track 2), no-arg call follows game.levelIndex
-  const sw = await page.evaluate(async () => { const s = game.sfx; const was = s.active.id; s.playMusic(s.trackForLevel(2)); await new Promise((r) => setTimeout(r, 900)); return { was, now: s.active.id, track: s.currentTrack, playing: !!s.music, oldLevel: s.musicEls.find((x) => x.id === was).level }; });
-  check("track change: new track on the other element with the old one faded out", sw.was !== sw.now && sw.track === 2 && sw.playing && sw.oldLevel === 0, sw);
+  const sw = await page.evaluate(async () => { const s = game.sfx; const was = s.active.id; const wasPath = s.musicPath(); s.playMusic(s.trackForLevel(2)); await new Promise((r) => setTimeout(r, 900)); return { was, wasPath, now: s.active.id, path: s.musicPath(), track: s.currentTrack, playing: !!s.music, oldLevel: s.musicEls.find((x) => x.id === was).level, layersStopped: !s._layerPlay || s._layerPlay.track === 2 }; });
+  check("track change: new track on the other element (no pair decoded for it yet) with the old carrier faded out", sw.was !== sw.now && sw.track === 2 && sw.playing && sw.path === "stream" && sw.oldLevel === 0 && sw.layersStopped, sw);
   const noArg = await page.evaluate(async () => { const s = game.sfx; const idBefore = s.active.id; s.playMusic(); await new Promise((r) => setTimeout(r, 900)); return { idBefore, idAfter: s.active.id, track: s.currentTrack, levelIndex: game.levelIndex }; });
   check("legacy playMusic() follows game.levelIndex (back to track 0 at L1)", noArg.track === 0 && noArg.idBefore !== noArg.idAfter, noArg);
 
@@ -277,9 +285,9 @@ try {
 
   // 15. Hidden / visible
   await page.evaluate(() => game.sfx.onHidden()); await sleep(200);
-  const hidden = await page.evaluate(() => ({ state: game.sfx.ctx.state, paused: game.sfx.active.el.paused, needsGesture: game.sfx.needsGesture }));
+  const hidden = await page.evaluate(() => ({ state: game.sfx.ctx.state, path: game.sfx.musicPath(), paused: game.sfx.musicPath() === "layers" ? game.sfx.ctx.state !== "running" : game.sfx.active.el.paused, needsGesture: game.sfx.needsGesture }));
   await page.evaluate(() => game.sfx.onVisible()); await sleep(300);
-  const visible = await page.evaluate(() => ({ state: game.sfx.ctx.state, paused: game.sfx.active.el.paused, needsGesture: game.sfx.needsGesture }));
+  const visible = await page.evaluate(() => ({ state: game.sfx.ctx.state, path: game.sfx.musicPath(), paused: game.sfx.musicPath() === "layers" ? game.sfx.ctx.state !== "running" : game.sfx.active.el.paused, needsGesture: game.sfx.needsGesture }));
   check("onHidden suspends + pauses, onVisible resumes + plays, needsGesture false", hidden.state === "suspended" && hidden.paused && !hidden.needsGesture && visible.state === "running" && !visible.paused && !visible.needsGesture, { hidden, visible });
 
   // 15b. needsGesture: a context that leaves 'running' on its own flags the toast; resumeIfNeeded clears it
