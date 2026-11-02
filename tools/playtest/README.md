@@ -73,6 +73,11 @@ scenarios, fixtures and the ~45 openProbe probes behave as before. Probes pick i
 context calls `await harnessFlags(context, { flightCheck })` from `_lib.mjs`. `P.flightCheck()` returns
 `game.flightCheckState()` (null when none runs).
 
+**Service worker flag (PLATFORM).** The same init script sets `window.TypeRHarness.sw = false`, which makes
+`registerServiceWorker()` (12-access.js) decline, so no scenario, fixture or probe ever runs against a cached shell and the
+byte budgets measure a first visit. `openProbe(name, { sw: true })` / `harnessFlags(context, { sw: true })` opt a context in;
+`probes/t-platform.mjs` does, then asserts the precache and a cache-served second load.
+
 ## Local server
 
 `play.mjs` serves `--root` on a random 127.0.0.1 port with correct MIME types, `Accept-Ranges`

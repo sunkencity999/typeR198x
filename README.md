@@ -184,7 +184,27 @@ days flown and a goal line built from the last five sessions (also on the title 
 
 The settings panel (title screen link row or the pause screen) has **Music** (default 70 %), **SFX**
 (80 %), **Mute**, **CRT filter** and its **intensity** (on, 75 %), **Motion** (*Follow system* /
-*Reduced* / *Full*) and a **Fullscreen** button. All of it persists in the save.
+*Reduced* / *Full*), the accessibility rows below and a **Fullscreen** button. All of it persists in the save.
+
+**Accessibility options (PLATFORM, `assets/js/game/12-access.js`).** Six more rows in the same panel, each stored in
+`save.settings` (defaults and sanitising in `40-save.js`) and applied through the shell's `setSetting` / `applySettings`
+path, which `12-access.js` wraps; the render modules are untouched (prototype wrappers, installed on the first
+`applySettings` call once every module has loaded):
+
+| Row | Key | Values (default) | Effect |
+| --- | --- | --- | --- |
+| Plate colours | `plateColor` | `neon` / `contrast` (`neon`) | High contrast swaps the `PLATE_STYLES` strokes for a colour-blind-safe set with distinct luminance (idle `#E8ECF8`, locked `#FFD60A`, danger `#FF7A00`, minion `#C9A4FF`; 17.1 / 14.3 / 7.7 / 9.9 : 1 on the `bg0` plate fill) and re-bakes the plate sprites, and adds two shape cues drawn from the `renderOverlay` hook (source-over only): a second, white bracket pair outside the lime lock brackets and a dashed hazard underline under plates past the danger line |
+| Plate font | `plateFont` | `mono` / `dyslexic` (`mono`) | Dyslexia-friendly swaps `FONT.target`'s family for **TypeR Dyslexic Mono** (OpenDyslexic Mono built from the OFL sources, Basic Latin + Latin-1 subset, 13 KB WOFF2 in `assets/fonts/`, licence in `OFL-OpenDyslexic.txt`). Never preloaded: fetched with `document.fonts.load` when chosen, applied only once it is resident (a failed load keeps mono and says so in a toast). Everything typable (plates, capsules, boss segments) follows; there is no separate typed-text field to restyle |
+| Plate size | `plateScale` | 1 .. 1.3 step .1 (1) | Multiplies `plateFontPx()` (so `plateGeometry()` scales with it): 25 -> 33 px glyphs, 45 -> 60 px plates at 130 %, still inside the 68 px lane pitch; the plate sprite cache is invalidated and re-warmed on change |
+| Screen shake | `shakeAmount` | 0 .. 1 step .1 (1) | Scales `motion().shake`, independent of the Motion row (0 = no camera offset at all, even at full motion) |
+| Reduce flashes | `reduceFlashes` | off / on (off) | Caps `motion().flash` at .3 (the reduced-motion value) and drops the storm lightning frames while keeping the storm tint |
+| Keyboard layout | `keyboardLayout` | `auto` / `qwerty` / `azerty` / `qwertz` / `dvorak` / `colemak` (`auto`) | Only arranges the Flight log's key heatmap (`keyboardRows()`). Auto reads `navigator.keyboard.getLayoutMap()` where it exists (Chromium) and classifies the layout from the characters at KeyQ KeyW KeyY KeyA KeyZ KeyS (`keyboardLayout()` falls back to QWERTY). Typing itself reads `event.key` (`normalizeKey`, 00-util.js) and needs no layout: an AZERTY `a` is an `a` |
+
+Public methods: `game.plateScale()`, `game.shakeAmount()`, `game.reduceFlashes()`, `game.plateColorMode()`, `game.plateFontMode()`,
+`game.keyboardLayout()`, `game.keyboardRows()`, `game.accessInfo()`; the wrapped `game.motion()` returns one reused object when a
+scale applies. `tools/playtest/probes/t-platform.mjs` is the acceptance set (round-trip through reload, palette contrast
+from `assets/style/palette.json`, cue pixels, geometry, shake, flashes, heatmap rows, install / update UI, the frame budget
+under High contrast, and the service worker in an opt-in context).
 
 **Reduced motion.** `resolveMotion()` sets `game.reduceMotion` and the `:root.reduce-motion` class from the
 Motion setting, falling back to `prefers-reduced-motion`. Under it the camera does not shake, hit-stop and
@@ -209,6 +229,38 @@ python3 -m http.server 8000    # any OS, from the repo root; open http://localho
 The game also boots straight from `file://index.html` (the classic scripts need no server and the loader
 and the audio transport switch to bare, unversioned paths on a `file:` origin), but a local HTTP server
 is the reference setup because it exercises the same cache and range-request paths as production.
+
+### Install (PWA) and offline
+
+The web build is an installable, offline-capable PWA (PLATFORM pass): `site.webmanifest` (name *Type-R 198X*, short name
+*Type-R*, `start_url ./?source=pwa`, standalone, landscape, `#0B1030`, icons 192 / 512 in `any` and `maskable` purposes under
+`assets/ui/icons/`, rendered from `assets/ui/mark.svg` by `tools/gen-pwa-icons.mjs`) and the service worker `sw.js` at the web
+root (scope `/`).
+
+- **Registration.** `registerServiceWorker()` (12-access.js) runs from `finishLoading` in 05-boot.js, after the first load and an
+  idle callback, only on `http(s)`, never under the native user agent and never when `window.TypeRHarness.sw === false`, which
+  `tools/playtest/play.mjs` and `probes/_lib.mjs` set in every harness context so no run ever measures a cached shell
+  (`probes/t-platform.mjs` opens its own `{ sw: true }` context to test the worker).
+- **Versioning.** `sw.js` carries `const SW_VERSION = "<shell token>"`; `tools/bump-version.sh` rewrites it together with every
+  `?v=` inside the worker's `PRECACHE` list (same URL rule as the pages). A new token is a new worker: it installs beside the running
+  one, and the page shows **NEW VERSION READY — RELOAD** (a clickable toast plus the **Reload to update** link in the title's link
+  row) only at the menu, never during a run; the worker swaps (`SKIP_WAITING`) and the page reloads when the player asks.
+  Old caches are deleted on activate.
+- **Precache.** `tools/gen-sw-precache.mjs` writes the `PRECACHE` block of `sw.js` from `index.html` (every local `<script>` /
+  `<link>`, the secondary pages, the manifest, `assets/fonts/*.woff2`, `assets/ui/**`; 69 entries, no `assets/opt` art). Run it
+  after adding a script or a UI asset; `tools/deploy-check.sh --local` fails when the list is stale (`--check`). Install adds the
+  entries one by one and swallows failures, so a stale list never breaks the page.
+- **Strategies.** Navigations are network-first with a cache fallback (the page, else `index.html`); `assets/opt/**` (versioned,
+  immutable) is cache-first in a release-independent store capped at 60 MB (oldest out) — a media range request is answered from a
+  cached full copy, an open-ended `bytes=0-` request streams the network body to the player while the same bytes are stored, other
+  ranges pass through; everything else is the precached shell copy, else stale-while-revalidate. `/api/` is never intercepted.
+- **Install.** The **Install** link in the title's link row appears only after `beforeinstallprompt`, calls `prompt()` once and
+  hides after `appinstalled` or in `display-mode: standalone` (`<html data-display="standalone">`). Installed, the fullscreen
+  toggle still works and Esc still pauses; the page footer gets the home-indicator inset.
+- **Hosting.** `tools/deploy/htaccess-cache.txt` serves `sw.js` and `site.webmanifest` `no-cache` and adds the
+  `application/manifest+json` type; `deploy.mjs` lists `sw.js` in `TOP_FILES`; `tools/deploy-check.sh` checks both files, the
+  `SW_VERSION` / shell-token match and the icons (remote and `--local`).
+- **Privacy.** The worker stores the game's own files and nothing else; [privacy-policy.html](./privacy-policy.html) says so.
 
 ## Architecture
 
@@ -237,6 +289,7 @@ Module map, in `index.html` load order:
 | `game.js` | `ASSET_VERSION`, the stale-shell guard, `withAssetVersion` (literal line kept for the native sed), `class Game { constructor, loop }`, `hook` / `runMode` / `rand` |
 | `assets/js/game/05-boot.js` | Boot sequence, loading overlay and watchdog, per-sector asset gate, prefetch of the next sector (from the page's first typed key) |
 | `assets/js/game/10-ui.js` | Shell: `setMode` state machine, focus routing, announcer, modals and confirms, settings + `resolveMotion`, fullscreen, top bar, mobile input |
+| `assets/js/game/12-access.js` | PLATFORM: the accessibility rows (plate colours / font / size, screen shake, reduce flashes) as wrappers over `plateFontPx`, `motion`, `drawThemeFx`, `FONT.target` and `applySettings` / `bindSettings`, the high-contrast `PLATE_STYLES` swap + `renderOverlay` shape cues, keyboard layout detection (`keyboardLayout` / `keyboardRows`), the service-worker registration and update toast, the Install link (`ACCESS_*`, `access*`) |
 | `assets/js/game/15-screens.js` | Title cabinet (sector grid, resume card), records and help modals, results cards, tutorial toasts, CRT overlay and the typewriter ending |
 | `assets/js/game/17-onboarding.js` | First-run Flight check (ONBOARD): eligibility, the three drills, Skip / `Esc`, pause relabel, the briefing summary and disclosure, the `TypeRHarness.flightCheck` flag |
 | `assets/js/game/20-run.js` | Run and sector lifecycle, checkpoints, `saveRun`, level complete / game over / victory |
@@ -435,7 +488,8 @@ on an integrated GPU.
 
 One `localStorage` key, **`typesmup198x.save.v1`**, schema 3 (`assets/js/core/40-save.js`):
 `playerName`, `selectedShip`, `highScore`, `lastUnlockedLevel` (1..10), `storySeen`, `settings`
-(`muted`, `crt`, `musicVolume`, `sfxVolume`, `crtIntensity`, `reduceMotion`, `renderScaleCap`),
+(`muted`, `crt`, `musicVolume`, `sfxVolume`, `crtIntensity`, `reduceMotion`, `renderScaleCap`, and the PLATFORM rows
+`plateColor`, `plateFont`, `plateScale`, `shakeAmount`, `reduceFlashes`, `keyboardLayout`),
 `highScores` (top 10), `sectorBests` ("1".."10" -> score, rank, wpm, acc, maxCombo, date), `bestWpm`,
 `victories`, `tutorialSeen` (the overhaul's tips plus `phrase`, the first two-word tip, one write per save lifetime,
 and `surge` / `overdrive`, the first Counter-Signal and Overdrive tips), `onboardingDone` (ms epoch when the first-run
@@ -521,8 +575,10 @@ Full flag, field and fixture tables: [tools/playtest/README.md](./tools/playtest
 | `tools/build-web-assets.sh` | Masters -> `assets/opt` + manifest (+ og-card); `MANIFEST_ONLY=1`, `OG_ONLY=1`, `SKIP_OG=1` |
 | `tools/art/gen_explosions.py` | Generates the explosion sheet master (neon pixel art, 21 rects in `EXPLOSION_FRAMES` order) + preview; see `tools/art/README.md` |
 | `tools/art/pixelize.py` | Pixel-consistency pass for a sprite master (box downsample to the backdrops' art density, k-means palette, hard alpha, edge darkening, nearest upscale back to master size) |
-| `tools/bump-version.sh [token] [--root] [--dry-run] [--add-missing] [--quiet]` | Single writer of the shell token |
-| `tools/deploy-check.sh <url> [--strict] [--local] [--unreferenced-out f]` | Remote header/MIME/token/privacy checks; `--local` adds source checks and the native sync dry run |
+| `tools/bump-version.sh [token] [--root] [--dry-run] [--add-missing] [--quiet]` | Single writer of the shell token (pages, `game.js`, and `sw.js`'s `SW_VERSION` + precache `?v=`) |
+| `tools/gen-sw-precache.mjs [--root] [--check]` | Writes `sw.js`'s `PRECACHE` block from `index.html` (+ pages, manifest, fonts, `assets/ui`); `--check` exits 1 on drift (run by `deploy-check.sh --local`) |
+| `tools/gen-pwa-icons.mjs [--root]` | Renders `assets/ui/icons/icon-{192,512}.png` and `icon-maskable-{192,512}.png` from `assets/ui/mark.svg` with Playwright's Chrome |
+| `tools/deploy-check.sh <url> [--strict] [--local] [--unreferenced-out f]` | Remote header/MIME/token/privacy/PWA checks (`sw.js`, `site.webmanifest`, icons); `--local` adds source checks (precache drift, manifest, `SW_VERSION`) and the native sync dry run |
 | `tools/deploy/deploy.mjs` | FTP/FTPS deploy with backup, dry run and the `.htaccess` cache policy (see below) |
 | `tools/deploy/htaccess-cache.txt`, `tools/nginx-cache.conf` | Cache and MIME policy for Apache (`--htaccess`) and nginx hosts |
 | `tools/unreferenced-assets.sh [--out file]` | Files under `assets/` the web build never references (22.6 MB today: native icon sets, explosion frame PNGs, manifest.json, OFL text, two icons) |
@@ -548,8 +604,9 @@ tools/deploy-check.sh https://typer198x.com --strict            # 5. go/no-go
   `tools/deploy/backups/<timestamp>/` (`--backup light` skips files over 4 MB, `full` takes everything,
   `none` skips), uploads assets first, then CSS/JS, then the other pages, then `assets/opt/manifest.js`, then `index.html` last, skips unchanged binaries by
   size, and verifies over HTTPS that `index.html` and `game.js` match. `TOP_FILES` lists the root pages
-  (`index.html`, `game.js`, `style.css`, `privacy-policy.html`, `privacy.html`, `info.html`, `support.html`
-  and the optional `robots.txt`/`sitemap.xml`/`site.webmanifest`); `assets/` is walked whole.
+  (`index.html`, `game.js`, `style.css`, `sw.js`, `privacy-policy.html`, `privacy.html`, `info.html`, `support.html`,
+  `site.webmanifest` and the optional `robots.txt`/`sitemap.xml`); `assets/` is walked whole. `sw.js` uploads with the
+  CSS/JS group, before the pages and `index.html`, so a shell that registers the new worker always finds it.
 - **Cache policy (audit G025).** The live host currently answers `/index.html` and the other pages with
   `Cache-Control: max-age=15552000` (180 days), so a returning browser keeps the old shell (the stale-shell guard
   reloads it once only when its old `game.js` is gone from the cache; a browser holding the whole old build is
@@ -558,14 +615,18 @@ tools/deploy-check.sh https://typer198x.com --strict            # 5. go/no-go
   (never replaces it: the download is kept as `tools/deploy/backups/htaccess-<ms>.previous.txt`, the uploaded
   text as `htaccess-<ms>.merged.txt`, a new file is created only after a download attempt answers "no such
   file" even when the listing hides dotfiles, and any other download failure makes the step skip and the
-  run exit 1): HTML and `manifest.js` `no-cache`, URLs carrying `?v=` `immutable` for a year, bare js/css/json
+  run exit 1): HTML, `manifest.js`, `sw.js` and `site.webmanifest` `no-cache`, URLs carrying `?v=` `immutable` for a year, bare js/css/json
   revalidating and bare media/fonts 30 days (immutability is gated on the token, not the extension), the WebP /
-  WOFF2 / MP3 MIME types. `tools/nginx-cache.conf` is the equivalent server-block include for an nginx host. If
+  WOFF2 / MP3 / web-manifest MIME types. `tools/nginx-cache.conf` is the equivalent server-block include for an nginx host
+  (it does not yet carry the `sw.js` / `site.webmanifest` rules; the live host is Apache). If
   the host's own static cache still serves `.html` with a long `max-age`, exclude `.html` from it and
   purge it in the hosting panel (DEPLOY.md step 6, required while it does: no client code reaches a browser that
   never sends a request).
 - **Go/no-go.** `tools/deploy-check.sh https://typer198x.com --strict` fails when `index.html` has a wrong
-  status or MIME type, when `index.html` or `/` lacks
+  status or MIME type, when `sw.js` is missing, fails `node --check` or carries a `SW_VERSION` other than the served
+  shell token, when `site.webmanifest` is missing or invalid (name, `start_url`, standalone, 192 / 512 `any` + `maskable`
+  icons) or an icon does not answer 200 as PNG (the `no-cache` on both and the manifest MIME type are WARN, strict FAIL
+  for the cache header), when `index.html` or `/` lacks
   `no-cache`/`max-age=0`, when the served `?v=` tokens disagree, when a script, stylesheet, WebP or MP3 comes
   back with the wrong status or MIME type (the font: wrong status or a non-font type), when the served
   `game.js` fails `node --check` or no served script carries the `window.SFX` guard, when
@@ -609,7 +670,7 @@ the last 100 sessions: sector attempts, deaths included, daily sorties, drills a
 results of up to 60 days with the sortie count, streak and that day's attempts, the drill and endless drift run counts
 and bests, and when the Flight Check was finished or skipped; it is never sent anywhere and Reset save erases it.
 The game uses that profile on the device to pace the stream, rate daily sorties and aim words and drills at weak keys.
-[privacy-policy.html](./privacy-policy.html) says so, effective 26 October 2026. No accounts, analytics, telemetry or
+[privacy-policy.html](./privacy-policy.html) says so, effective 1 November 2026. No accounts, analytics, telemetry or
 third-party scripts; the web build makes no network calls while playing beyond fetching its own code, art and music. The footer links
 [privacy-policy.html](./privacy-policy.html); `privacy.html` is a meta-refresh stub for old links.
 [info.html](./info.html) and [support.html](./support.html) carry the same icon/meta block as the game

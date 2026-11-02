@@ -354,7 +354,9 @@ if (UA) ctxOpts.userAgent = UA;
 const context = await browser.newContext(ctxOpts);
 await context.addInitScript(installProbe);
 // Harness flag contract (spec-onboard 3.7): "skip" | "play" | null (the game's real eligibility rule).
-await context.addInitScript((m) => { window.TypeRHarness = Object.assign(window.TypeRHarness || {}, { flightCheck: m }); }, FLIGHT_CHECK ? "play" : "skip");
+// PLATFORM: sw false keeps the service worker (sw.js) out of every harness context, so the runs measure the network
+// as players see it on a first visit and no cached shell survives between rows; probes/t-platform.mjs opts in on its own.
+await context.addInitScript((m) => { window.TypeRHarness = Object.assign(window.TypeRHarness || {}, { flightCheck: m, sw: false }); }, FLIGHT_CHECK ? "play" : "skip");
 if (NO_MUSIC) await context.addInitScript(installNoMusic);
 if (fixture) {
   await context.addInitScript(({ key, blob }) => {
