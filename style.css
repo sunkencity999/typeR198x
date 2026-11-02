@@ -3303,3 +3303,62 @@ body[data-mode="paused"] #bossChargeFill { transition: none; }
 #settingsModal .modalInner.compact { width: min(600px, 100%); }
 #menuSettingsHost { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 /* ===== end ACCESS / PWA ===== */
+/* ===== SHIPS (career unlocks) ===== */
+/* Hangar cards with data-ship-unlock > save.career.clears are locked by 14-hangar.js (hangarRefresh): grayscale .7,
+   dimmed, not-allowed cursor, the radio disabled (out of the tab order and the group's arrow cycle, so the label does
+   nothing), and the "Unlocks after N clears" line with the sector grid's lock glyph, shown only while locked. .is-new
+   marks a card the Career module just unlocked: an amber ring that pulses three times and a NEW pill until the next
+   refresh. The card's title attribute carries the hull's one-line description. */
+.shipLock {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--c-score);
+}
+.shipCard.is-locked { cursor: not-allowed; }
+.shipCard.is-locked .shipCardInner {
+  opacity: 0.8;   /* the same floor as .sectorCard.is-locked: the name stays >= 3:1 under the grayscale */
+  filter: grayscale(0.7);
+  transform: none;
+}
+.shipCard.is-locked .shipCardInner:hover { border-color: rgba(255,255,255,0.18); }
+.shipCard.is-locked .shipName { opacity: 0.7; }
+.shipCard.is-locked .shipLock { display: inline-flex; }
+.shipCard.is-locked .shipLock::before {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 10px;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 10'%3E%3Cpath d='M2 4V3a2 2 0 0 1 4 0v1' fill='none' stroke='%23000' stroke-width='1.2'/%3E%3Crect x='1' y='4' width='6' height='5' rx='1' fill='%23000'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 10'%3E%3Cpath d='M2 4V3a2 2 0 0 1 4 0v1' fill='none' stroke='%23000' stroke-width='1.2'/%3E%3Crect x='1' y='4' width='6' height='5' rx='1' fill='%23000'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.shipCard.is-new .shipCardInner {
+  border-color: var(--c-score);
+  box-shadow: 0 0 0 1px rgba(255,193,74,0.6), 0 0 18px rgba(255,193,74,0.4);
+  animation: shipNewPulse 1.2s ease-in-out 3;
+}
+.shipCard.is-new .shipCardInner::after {
+  content: "NEW";
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  padding: 3px 7px 2px;
+  border-radius: var(--r-pill);
+  background: var(--c-score);
+  color: var(--bg0);
+  font: 700 var(--fs-2xs) / 1 var(--font-display);
+  letter-spacing: 0.12em;
+  pointer-events: none;
+}
+@keyframes shipNewPulse {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(255,193,74,0.6), 0 0 18px rgba(255,193,74,0.4); }
+  50% { box-shadow: 0 0 0 2px rgba(255,193,74,0.95), 0 0 28px rgba(255,193,74,0.7); }
+}
+:root.reduce-motion .shipCard.is-new .shipCardInner { animation: none; }
+/* ===== end SHIPS (career unlocks) ===== */

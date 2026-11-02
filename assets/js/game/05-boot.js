@@ -14,7 +14,7 @@
 // (typedThisPage, set by handleTyped): a run resumed past 25 % of a sector (Continue into a wave or a boss) used to
 // fetch the next sector's art during the boss intro, before the pilot could type (CONTRACT 8.z Z11 budget).
 
-const CRITICAL_KEYS = ["ships/coconut", "ships/little-dark-one", "ships/sofrito", "ships/honeybee", "bg/first", "fg/first", "fx/explosions", "fx/drones"];
+const CRITICAL_KEYS = ["ships/coconut", "ships/little-dark-one", "ships/sofrito", "ships/honeybee", "ships/paprika", "ships/nightjar", "ships/moonpie", "bg/first", "fg/first", "fx/explosions", "fx/drones"];
 const ASSET_LABELS = {
   "bg/first": "sector 1 skyline",
   "fg/first": "sector 1 skyline",
@@ -24,6 +24,9 @@ const ASSET_LABELS = {
   "ships/little-dark-one": "your ship",
   "ships/sofrito": "your ship",
   "ships/honeybee": "your ship",
+  "ships/paprika": "your ship",
+  "ships/nightjar": "your ship",
+  "ships/moonpie": "your ship",
   font: "display font"
 };
 const BOOT_SOFT_WATCHDOG_MS = 12000;

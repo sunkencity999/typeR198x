@@ -47,6 +47,11 @@ const THRUSTER_OFFSET = Object.freeze({
   "little-dark-one": { nozzles: [{ fx: 0.02, fy: 0.34 }, { fx: 0.02, fy: 0.64 }], muzzleFx: 0.94 },
   sofrito:           { nozzles: [{ fx: 0.05, fy: 0.47 }], muzzleFx: 0.975 },
   honeybee:          { nozzles: [{ fx: 0.06, fy: 0.32 }, { fx: 0.06, fy: 0.73 }], muzzleFx: 0.92 },
+  // 2026-11 CAREER: the three generated hulls (tools/art/gen_ships.py prints these rows: the rear lip of each engine
+  // opening on the trimmed box; paprika twin pods, nightjar one wide slot, moonpie three small engines in a row).
+  paprika:           { nozzles: [{ fx: 0.021, fy: 0.297 }, { fx: 0.021, fy: 0.823 }], muzzleFx: 0.964 },
+  nightjar:          { nozzles: [{ fx: 0.021, fy: 0.464 }], muzzleFx: 0.964 },
+  moonpie:           { nozzles: [{ fx: 0.021, fy: 0.355 }, { fx: 0.021, fy: 0.546 }, { fx: 0.021, fy: 0.736 }], muzzleFx: 0.964 },
   default:           { nozzles: [{ fx: 0.04, fy: 0.5 }], muzzleFx: 0.96 }
 });
 

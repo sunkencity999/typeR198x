@@ -58,6 +58,7 @@ const PRECACHE = [
   "./assets/js/game/05-boot.js?v=20261101a",
   "./assets/js/game/10-ui.js?v=20261101a",
   "./assets/js/game/12-access.js?v=20261101a",
+  "./assets/js/game/14-hangar.js?v=20261101a",
   "./assets/js/game/15-screens.js?v=20261101a",
   "./assets/js/game/17-onboarding.js?v=20261101a",
   "./assets/js/game/20-run.js?v=20261101a",

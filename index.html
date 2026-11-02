@@ -202,6 +202,31 @@
                     <span class="shipName">The S.S. HoneyBee</span>
                   </div>
                 </label>
+                <!-- CAREER unlocks (14-hangar.js hangarRefresh): data-ship-unlock = campaign clears needed; locked cards get .is-locked + a disabled radio -->
+                <label class="shipCard" data-ship-unlock="1" title="Fast, loud, impossible to lose in a crowd.">
+                  <input type="radio" name="shipChoice" value="paprika" />
+                  <div class="shipCardInner">
+                    <img data-ship-id="paprika" src="./assets/opt/ships/paprika@1x.webp?v=202611020055" alt="The S.S. Paprika" width="350" height="193" decoding="async" fetchpriority="low" />
+                    <span class="shipName">The S.S. Paprika</span>
+                    <span class="shipLock">Unlocks after 1 clear</span>
+                  </div>
+                </label>
+                <label class="shipCard" data-ship-unlock="5" title="You will not hear it coming. Neither will they.">
+                  <input type="radio" name="shipChoice" value="nightjar" />
+                  <div class="shipCardInner">
+                    <img data-ship-id="nightjar" src="./assets/opt/ships/nightjar@1x.webp?v=202611020055" alt="The S.S. Nightjar" width="350" height="193" decoding="async" fetchpriority="low" />
+                    <span class="shipName">The S.S. Nightjar</span>
+                    <span class="shipLock">Unlocks after 5 clears</span>
+                  </div>
+                </label>
+                <label class="shipCard" data-ship-unlock="12" title="Comfort class. The dashboard lights up like a diner at midnight.">
+                  <input type="radio" name="shipChoice" value="moonpie" />
+                  <div class="shipCardInner">
+                    <img data-ship-id="moonpie" src="./assets/opt/ships/moonpie@1x.webp?v=202611020055" alt="The S.S. Moonpie" width="350" height="197" decoding="async" fetchpriority="low" />
+                    <span class="shipName">The S.S. Moonpie</span>
+                    <span class="shipLock">Unlocks after 12 clears</span>
+                  </div>
+                </label>
               </fieldset>
 
               <div class="stats neon-panel">
@@ -752,6 +777,7 @@
   <script src="./assets/js/game/05-boot.js?v=20261101a"></script>
   <script src="./assets/js/game/10-ui.js?v=20261101a"></script>
   <script src="./assets/js/game/12-access.js?v=20261101a"></script>
+  <script src="./assets/js/game/14-hangar.js?v=20261101a"></script>
   <script src="./assets/js/game/15-screens.js?v=20261101a"></script>
   <script src="./assets/js/game/17-onboarding.js?v=20261101a"></script>
   <script src="./assets/js/game/20-run.js?v=20261101a"></script>
