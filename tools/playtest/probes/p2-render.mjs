@@ -62,13 +62,13 @@ const boot = await P.g(() => {
     stats: TypeRAssets.stats(), sheetScale: ExplosionSprite.sheetScale, variant: TypeRAssets.variant, degraded: game.degradedAssets, gid: window.__p2.getImageData };
 });
 P.check("overlay: aria-valuenow 100, fill 100%, .is-dismissed then .hidden, aria-busy false, bootReason ready", boot.valuenow === "100" && boot.fill === "100%" && boot.hidden && boot.dismissed && boot.busy === "false" && boot.bootReason === "ready", { valuenow: boot.valuenow, fill: boot.fill, hidden: boot.hidden, busy: boot.busy, label: boot.label, bootReason: boot.bootReason });
-P.check("ship cards hydrated from Assets.url x1 with explicit width/height", boot.imgs.length === 4 && boot.imgs.every((i) => /ships\/[a-z-]+@1x\.webp\?v=/.test(i.src) && i.w === "350" && Number(i.h) > 0), boot.imgs);
-P.check(`critical set resident (4 ships + bg/fg first + fx), variant ${boot.variant}, sheetScale ${boot.sheetScale}`, ["ships/coconut", "ships/little-dark-one", "ships/sofrito", "ships/honeybee", "bg/first", "fg/first", "fx/explosions"].every((k) => boot.stats.resident.includes(k)) && boot.sheetScale === (boot.variant === "x2" ? 1 : 0.5), { resident: boot.stats.resident, decodedPx: boot.stats.decodedPx, errors: boot.stats.errors });
+P.check("ship cards hydrated from Assets.url x1 with explicit width/height (7 cards: 4 originals + 3 career hulls)", boot.imgs.length === 7 && boot.imgs.every((i) => /ships\/[a-z-]+@1x\.webp\?v=/.test(i.src) && i.w === "350" && Number(i.h) > 0), boot.imgs);
+P.check(`critical set resident (7 ships + bg/fg first + fx), variant ${boot.variant}, sheetScale ${boot.sheetScale}`, ["ships/coconut", "ships/little-dark-one", "ships/sofrito", "ships/honeybee", "ships/paprika", "ships/nightjar", "ships/moonpie", "bg/first", "fg/first", "fx/explosions"].every((k) => boot.stats.resident.includes(k)) && boot.sheetScale === (boot.variant === "x2" ? 1 : 0.5), { resident: boot.stats.resident, decodedPx: boot.stats.decodedPx, errors: boot.stats.errors });
 P.check("no getImageData before the first keystroke", boot.gid === 0, boot.gid);
 const pngMasters = requests.filter((u) => /assets\/(ships|backgrounds|foregrounds|boss_ships|explosions)\/.*\.png/.test(u));
 P.check("boot requested no PNG masters", pngMasters.length === 0, pngMasters);
 const shipReqs = requests.filter((u) => /opt\/ships\//.test(u));
-P.check("ship WebP requests at boot (x1 only, no @2x)", shipReqs.every((u) => /@1x/.test(u)), shipReqs.map((u) => u.replace(/^.*\/assets/, "assets")));
+P.check("ship WebP requests at boot (7 x1 files, no @2x)", shipReqs.length > 0 && shipReqs.every((u) => /@1x/.test(u)) && new Set(shipReqs.map((u) => u.replace(/\?.*$/, ""))).size === 7, shipReqs.map((u) => u.replace(/^.*\/assets/, "assets")));
 
 // ---------------- Enter play: gate, accent, prefetch ----------------
 await P.startRun("P2");
