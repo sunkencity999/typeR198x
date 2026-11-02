@@ -51,8 +51,12 @@ if (!PASSWORD && !DRY) { console.error("missing TYPER_FTP_PASSWORD (or --passwor
 
 // ------------------------------------------------------------------ local file set
 const TOP_FILES = ["index.html", "game.js", "style.css", "privacy-policy.html", "privacy.html", "info.html", "support.html", "robots.txt", "sitemap.xml", "site.webmanifest"];
-const ASSET_DIRS = ["assets"];
-const SKIP_RE = /(^|\/)(\.DS_Store|Thumbs\.db|\.git)$/;
+// api/ holds the optional daily-sortie leaderboard (api/leaderboard.php + api/.htaccess, see tools/leaderboard/README.md).
+const ASSET_DIRS = ["assets", "api"];
+// Never uploaded: OS cruft, git, and the leaderboard's fallback SQLite database / salt a local PHP test may have left in api/.
+const SKIP_RE = /(^|\/)(\.DS_Store|Thumbs\.db|\.git)$|\.(sqlite|sqlite-journal|sqlite-wal|sqlite-shm|salt)$/i;
+// Never downloaded into a backup: the live leaderboard database and its IP-hash salt stay on the server.
+const BACKUP_SKIP_RE = /\.(sqlite|sqlite-journal|sqlite-wal|sqlite-shm|salt)$/i;
 function walk(dir, out = []) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name);
@@ -65,7 +69,7 @@ const local = [];
 for (const f of TOP_FILES) if (fs.existsSync(path.join(ROOT, f))) local.push(path.join(ROOT, f));
 for (const d of ASSET_DIRS) if (fs.existsSync(path.join(ROOT, d))) walk(path.join(ROOT, d), local);
 const rel = (p) => path.relative(ROOT, p).split(path.sep).join("/");
-const isText = (p) => /\.(html|js|mjs|css|json|svg|txt|xml|webmanifest|md)$/i.test(p);
+const isText = (p) => /\.(html|js|mjs|css|json|svg|txt|xml|webmanifest|md|php)$|(^|\/)\.htaccess$/i.test(p);
 // upload order: assets (new files first), then css/js, then the other pages, then assets/opt/manifest.js, then index.html last.
 // manifest.js is served no-cache and read by the old shell, so it must not name files that are still uploading (review R42).
 // The other pages reference ?v=<new token> CSS and the host ignores the query with max-age=31536000: uploaded before the
@@ -174,6 +178,7 @@ async function remoteWalkScoped(root, out = []) {
     let n = 0, skipped = 0;
     for (const f of remoteFiles) {
       if (BACKUP === "light" && f.size > 4 * 1048576) { skipped++; continue; }
+      if (BACKUP_SKIP_RE.test(f.path)) { skipped++; continue; }   // the leaderboard database and salt never leave the server
       const relPath = f.path.slice(root === "/" ? 1 : root.length + 1);
       const dest = path.join(bdir, relPath);
       fs.mkdirSync(path.dirname(dest), { recursive: true });
