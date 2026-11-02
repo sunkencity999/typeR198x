@@ -863,6 +863,50 @@ remixes are welcome.
 
 ## Changelog
 
+### 2026-11-02 Career (release token `20261102a`, art token `202611020252`)
+
+What a campaign clear leaves behind. The save already counted victories; nothing read it. Now every clear of sector 10
+records a **commendation** and the game grows with the pilot, while the tuned campaign stays one toggle away.
+
+**Commendations and the service record (`assets/js/game/56-career.js`).** `save.career` holds `clears`, the chosen
+`loop`, `pure`, the `boons` picked, the `picks` waiting and one commendation per clear (rank, ship, loop, score, WPM,
+accuracy, date); older saves are rebuilt from `victories` with generic entries and one pick per clear. A **service
+record** strip appears under the title hero after the first clear: a hexagonal badge per commendation (the twentieth is
+the star of the Electromancer's Seal), the loop selector, the boon chips and CHOOSE BOON while a pick waits. The records
+modal gains a Commendations table; results cards and high-score rows carry LOOP n / BOONS / PURE tags. The victory
+screen shows the COMMENDATION n panel: the pick button, the unlock callouts (ship, beam tier, loop, seal) and the
+wallpaper buttons.
+
+**Boons.** One pick per clear from three offers (deterministic per clear, so a reload offers the same three), seven in
+all, permanent, campaign only, never in the Daily Sortie, Endless Drift or Drill: Shield Start (a 4 s shield at every
+sector start), Absorb (the first leak of a sector costs no hull), Long Burn (powerups x1.5), Safe Release (once per wave a
+manual release keeps the typed letters), Field Repair (repair kits x1.5), Wide Spread (radius x1.4), Hot Engine
+(Overdrive charges x1.25). Each is a wrapper over the owner (`collectPowerup`, `releaseLock`, `applySpread`, `odTick`)
+or a hook (`sectorStart`, `damageWillApply`); nothing in combat changed.
+
+**Loops (New Game+).** Each clear unlocks the next loop up to 5. A loop run has plates +6 % faster per loop (on top of
+the pace controller: `paceApplyTuning` is wrapped), bosses one segment longer per loop (`buildBossPlan` repeats the
+longest segments; phases keep their starts) and every point +10 % per loop (`scoreWillAdd`). The run record carries
+`loop` / `boons` / `pure`, so a saved run resumes with what it started with. The **Career boons & loops** setting turns
+both off for campaign runs (loop 0, no boons, tag PURE).
+
+**Unlocks.** Ships: the S.S. Paprika (a red hot-rod racer) after 1 clear, the S.S. Nightjar (a navy stealth wedge with
+violet edge lights) after 5, the S.S. Moonpie (a white-and-gold cruiser) after 12, generated as pixel art by
+`tools/art/gen_ships.py` from parts (fuselage, canopy, wings, fins, engine pods) with the drones' shading and the ships'
+block size; `14-hangar.js` locks their cards (greyed, out of the tab order, "Unlocks after N clears"), marks a fresh
+unlock NEW and falls back to the Coconut when a saved selection is locked. Cosmetic beam tiers for the main weapon
+inside the beam's additive batch (`drawBeamTierPasses`): Twin Rail (1 clear: two thin rails), Prism (5: a gradient
+core), Lance (12: a dashed sheath racing along the beam), Aurora (20: the sheath cycles hue and the impact sparkles).
+Commendation **wallpapers** (`58-wallpaper.js`): 2560x1440 and 1080x1920 compositions of the sector-10 vista, the
+pilot's ship, the drones, the boss silhouette, the wordmark, the commendation, the rank, the stats and the badge strip,
+downloaded as PNG from the victory screen and the records modal.
+
+**Probes and budgets.** `t-career` (12 checks: migration, strip, pick modal, loop run rules, Absorb, Safe Release, beam
+tier 4, a sector-10 clear into the panel and the record tags, PURE, a Drill run without career, the Commendations table),
+`t-hangar` (17), `t-wallpaper` (14); `content-tables` expects seven ships. Harness all / mobile / reduced-motion /
+native / no-music: 0 errors, 60 fps, max render 5.8 ms; budget probe 60 fps, 5.4-5.6 ms, 5 composite sets, 0 shadowBlur.
+Non-media bytes before the first keystroke 2.42 MB at DPR 1 (three more x1 ship WebPs; budget 2.5 MB).
+
 ### 2026-11-01 AAA pass (release token `20261101a`, art token `202611020055`)
 
 The follow-up to the presentation pass: the layers a AAA title has that the build did not. Seven workstreams, three of

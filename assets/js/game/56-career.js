@@ -56,7 +56,11 @@ Object.assign(Game.prototype, {
   career() {
     const s = this.save;
     if (!s) return careerDefault();
-    if (!s.career || typeof s.career !== "object") s.career = (typeof normaliseCareer === "function") ? normaliseCareer(null, s.victories | 0) : careerDefault();
+    const c = s.career;
+    // a missing or partial block (probes and older saves write { clears: n } alone) is normalised in place
+    if (!c || typeof c !== "object" || !Array.isArray(c.boons) || !Array.isArray(c.commendations) || !Number.isFinite(c.picks) || !Number.isFinite(c.loop)) {
+      s.career = (typeof normaliseCareer === "function") ? normaliseCareer(c && typeof c === "object" ? c : null, s.victories | 0) : careerDefault();
+    }
     return s.career;
   },
 

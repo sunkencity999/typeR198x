@@ -198,7 +198,8 @@ check("RANK thresholds/colours", eq(G("RANK.thresholds"), [["S", 0.9], ["A", 0.7
 
 // ---- untouched content still present ----
 check("getVictoryScript 23 lines", G("getVictoryScript().length") === 23);
-check("SHIP_CONFIGS 4 ships", G("Object.keys(SHIP_CONFIGS).length") === 4);
+check("SHIP_CONFIGS 7 ships (four originals + the three Career unlocks)", G("Object.keys(SHIP_CONFIGS).length") === 7);
+check("SHIP_CONFIGS unlocks: originals 0, paprika 1, nightjar 5, moonpie 12", G("[SHIP_CONFIGS.coconut.unlock, SHIP_CONFIGS.paprika.unlock, SHIP_CONFIGS.nightjar.unlock, SHIP_CONFIGS.moonpie.unlock].join()") === "0,1,5,12");
 check("BOSS_ARTS 10", G("BOSS_ARTS.length") === 10);
 check("PARALLAX_THEMES 10", G("PARALLAX_THEMES.length") === 10);
 
