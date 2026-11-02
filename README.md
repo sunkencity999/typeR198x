@@ -588,6 +588,41 @@ phase. `storeSave()` keeps playing from memory with a toast when storage is unav
 the title screen (link row under the pilot stats) erases everything after a confirmation. The harness
 fixtures under `tools/playtest/fixtures/` are the regression set for every legacy shape.
 
+### Commendation wallpapers
+
+Every campaign clear earns a downloadable wallpaper (`assets/js/game/58-wallpaper.js`, WALLPAPER) composed from the
+game's own art and the pilot's run: the sector-10 vista (`bg/tenth` + the untiled `fg/tenth`, graded darker toward the
+bottom third, vignette, seeded stars), the pilot's ship large in the lower left with its plume glow at the
+`THRUSTER_OFFSET` nozzles, two or three drone silhouettes from `fx/drones` behind it, the Final Electromancer
+(`bosses/10`) as a faint accent-graded hologram on the right, the wordmark in Orbitron, `COMMENDATION Nº n`, the pilot
+name, the rank badge (coloured like the CSS `.rankBadge`: `RANK.colors`), a stats row (score, WPM, accuracy, loop,
+PURE / boons), the twenty-slot badge strip (one hexagon per commendation with its rank letter, older ones dimmed, the
+twentieth a star) and a footer (date · ship · typer198x.com). Two sizes: **desktop** 2560 × 1440 and **phone**
+1080 × 1920 (the phone stacks vista / ship / text).
+
+Where: the victory screen's career panel (`#careerWallpaperSlot`, filled at runtime with the two `.btn-arcade` buttons
+"Wallpaper · desktop" / "Wallpaper · phone" and a hint, on `modeChange` to `victory` with a 300 ms retry for up to
+10 s) and the records modal's Hall tab (`#careerWallpaperRecords`, one "Wallpaper" button sized by the screen's
+orientation, after the table, hidden with no clears; created in a wrapper of `openRecords`, no markup edit). The file is
+`TypeR-198X-commendation-<n>-<desktop|phone>.png`, saved through a temporary `<a download>` (a browser without
+`download` opens the image in a new tab); the button carries `.is-busy` / `aria-busy` while rendering. A shell whose
+canvas is tainted (`file://` images in Chrome) makes `toBlob` throw: the buttons hide and the hint says so.
+
+Data: `save.career` (the Career module: `clears`, `commendations[{ n, date, rank, ship, loop, score, wpm, acc, boons,
+pure }]`) when present, else `save.victories`, the live run results or the newest `highScores` row and `selectedShip`.
+Nothing runs per frame: the render happens on demand in its own offscreen canvas (blend modes, gradients and
+`shadowBlur` are fine there) from the `@2x` files (`Assets.url(key, "x2")`, same origin, no CORS attribute), with the
+loader's resident drawable as the fallback; the decoded images are released 20 s after the last render. Pixel art
+draws with `imageSmoothingEnabled` false when enlarged; the vista scales smoothly. Measured: 170 ms for the first
+desktop render on the harness machine (image fetches included), a few ms for the second size.
+
+API: `game.renderCareerWallpaper({ size, commendation?, career? }) -> Promise<HTMLCanvasElement>` (never rejects: a
+missing asset skips its element, a failed Orbitron load uses the system stack), `game.downloadCareerWallpaper(size,
+{ button? })`, `game.careerWallpaperMount()`, `game.careerWallpaperRecordsMount()`, `game.careerWallpaperData()`,
+`game.careerWallpaperFilename(size, data)`. Probe: `node probes/t-wallpaper.mjs --root ../..` (renders both sizes
+from a faked career, pixel checks, the stubbed download, the victory slot, the records button, the render budget; it
+writes `wallpaper-desktop.png` / `wallpaper-phone.png` into its out dir).
+
 ## Play-test harness
 
 `tools/playtest/play.mjs` is a headless Playwright driver that serves the repo on a random port (correct
