@@ -875,7 +875,11 @@ KV). The privacy policy (effective 1 November 2026) describes it and the service
 **Probes.** `t-words-render` now warms the canvas up with one readback before its pixel diffs (Chrome re-rasterises on the
 first `getImageData`; the diff failed on fa06754 too under the current Chrome). `assets-loader` expects 39 synth entries
 and does not require never-loaded pins to be resident after gc. `ui-screens` checks script order and versioning instead of a
-hard-coded tag count. `p2-render`'s "locked plate drawn last" and `d1`'s low-HP pulse remain the known flakes.
+hard-coded tag count. `t-leaderboard` compares the posted `version` with the live shell token. `d3` freezes the
+ambient and drone layers for its single-pixel samples; its "idle plate fill luminance <= 28" check fails on `fa06754` too
+under the current Chrome (fill reads 33), so with `p2-render`'s "locked plate drawn last" and `d1`'s low-HP pulse it is a
+known flake, not a regression. The camera zoom applies to the world layers only (L1-L4), so plates, the ship and every
+plate-sampling probe keep their geometry.
 
 ### 2026-10-31 presentation pass (release token `20261031a`, art token `202611010527`)
 
