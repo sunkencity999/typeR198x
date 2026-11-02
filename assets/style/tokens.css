@@ -9,6 +9,17 @@
   font-display: swap;
 }
 
+/* ACCESS (12-access.js): the dyslexia-friendly plate face (OpenDyslexic Mono, OFL, subset and renamed: see
+   assets/fonts/OFL-OpenDyslexic.txt). Never preloaded: fetched only when the "Plate font" setting asks for it. The weight
+   range maps the 600/700 the plates request onto the one face without synthetic bold (the glyphs are already heavy). */
+@font-face {
+  font-family: "TypeR Dyslexic Mono";
+  src: url("../fonts/TypeRDyslexicMono-Regular.woff2") format("woff2");
+  font-weight: 400 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   color-scheme: dark;
 

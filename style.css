@@ -3085,3 +3085,29 @@ body[data-mode="paused"] #bossChargeFill { transition: none; }
 @media (orientation: portrait) and (max-width: 640px) { .bossCharge { height: 2px; } }
 @media (max-height: 520px) and (orientation: landscape) { .bossCharge { grid-column: 2; grid-row: 1; top: 50%; margin-top: 6px; } }
 /* ===== end track:ARCADE ===== */
+
+/* ===== ACCESS / PWA (12-access.js) ===== */
+/* The update toast is clickable (reload after the new worker takes over); the footer "Reload to update" link is the
+   keyboard route and keeps the tip tint. Install / Reload stay .hidden until the browser offers them. */
+.toast[data-key="pwaUpdate"] { cursor: pointer; }
+.toast[data-key="pwaUpdate"]:hover { border-color: var(--c-score); }
+#btnPwaReload { color: var(--c-score); opacity: 1; }
+#btnPwaReload:hover, #btnPwaReload:focus-visible { color: var(--c-score); text-shadow: 0 0 8px rgba(255,193,74,0.45); }
+/* Installed (display-mode: standalone): no browser chrome, so the page footer's outbound links get a little more room
+   above the home indicator; everything else (fullscreen toggle, Esc = pause) behaves as in a tab. */
+:root[data-display="standalone"] .footer { padding-bottom: max(var(--sp-2), env(safe-area-inset-bottom)); }
+/* High contrast also lifts the dim band's neighbours a touch: the plate text itself is drawn on the canvas. */
+:root[data-plate-color="contrast"] .flKey[data-err="hi"] { border-color: #FF7A00; }
+:root[data-plate-color="contrast"] .flKey[data-err="mid"] { border-color: #FFD60A; }
+/* Thirteen settings rows. In the pause cockpit (>= 900 px, settings beside the run summary) the panel's column sets the
+   card's height, so the card now scrolls inside the screen when the viewport is short (1280x720: ~160 px) instead of
+   pushing the screen itself into overflow; the rows are 36 px there so a 900 px tall window still shows all of them.
+   In the title's settings modal the host scrolls under the fixed Done button. */
+@media (min-width: 900px) {
+  #screenPaused .screenInner { max-height: 100%; overflow-y: auto; overscroll-behavior: contain; }
+  #pauseSettingsHost .settingsPanel { gap: 3px; }
+  #pauseSettingsHost .settingsRow { min-height: 36px; }
+}
+#settingsModal .modalInner.compact { width: min(600px, 100%); }
+#menuSettingsHost { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+/* ===== end ACCESS / PWA ===== */

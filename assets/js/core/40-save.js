@@ -96,7 +96,10 @@ const defaultSave = () => ({
   lastUnlockedLevel: 1, // 1..10
   storySeen: false,
   keyboardHintSeen: false,
-  settings: { muted: false, crt: true, musicVolume: 0.7, sfxVolume: 0.8, crtIntensity: 0.75, reduceMotion: null, renderScaleCap: 2 },
+  settings: { muted: false, crt: true, musicVolume: 0.7, sfxVolume: 0.8, crtIntensity: 0.75, reduceMotion: null, renderScaleCap: 2,
+    // ACCESS (12-access.js): plate colours neon | contrast, plate font mono | dyslexic, plate glyph scale 1..1.3, camera shake
+    // 0..1 (independent of reduceMotion), reduce flashes, keyboard layout auto | qwerty | azerty | qwertz | dvorak | colemak
+    plateColor: "neon", plateFont: "mono", plateScale: 1, shakeAmount: 1, reduceFlashes: false, keyboardLayout: "auto" },
   highScores: [],      // top 10: { runId, name, score, levelReached, startLevel, wpm, acc, maxCombo, ship, difficulty, date }
   sectorBests: {},     // "1".."10" -> { score, rank, wpm, acc, maxCombo, date }
   bestWpm: 0,
@@ -190,7 +193,14 @@ function normaliseSettings(s) {
     sfxVolume: num(s.sfxVolume, 0.8, 0, 1),
     crtIntensity: num(s.crtIntensity, 0.75, 0.25, 1),
     reduceMotion: s.reduceMotion === true ? true : s.reduceMotion === false ? false : null,
-    renderScaleCap: num(s.renderScaleCap, 2, 0.5, 2)
+    renderScaleCap: num(s.renderScaleCap, 2, 0.5, 2),
+    // ACCESS (12-access.js): enumerations fall back to their default, numbers are clamped, plateScale snaps to .1 steps
+    plateColor: s.plateColor === "contrast" ? "contrast" : "neon",
+    plateFont: s.plateFont === "dyslexic" ? "dyslexic" : "mono",
+    plateScale: Math.round(num(s.plateScale, 1, 1, 1.3) * 10) / 10,
+    shakeAmount: num(s.shakeAmount, 1, 0, 1),
+    reduceFlashes: s.reduceFlashes === true,
+    keyboardLayout: ["qwerty", "azerty", "qwertz", "dvorak", "colemak"].includes(s.keyboardLayout) ? s.keyboardLayout : "auto"
   };
 }
 

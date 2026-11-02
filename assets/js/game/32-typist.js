@@ -1270,7 +1270,8 @@ Object.assign(Game.prototype, {
     // keyboard glyph
     const med = this.typistKeyMedianMs(ty);
     let keyRows = "";
-    for (const rowKeys of TYPIST_KEY_ROWS) {
+    // ACCESS (12-access.js): rows follow the Keyboard layout setting / detected layout; TYPIST_KEY_ROWS (QWERTY) otherwise.
+    for (const rowKeys of (typeof this.keyboardRows === "function" ? this.keyboardRows() : TYPIST_KEY_ROWS)) {
       let row = "";
       for (const ch of rowKeys) {
         const i = typistCode(ch);
