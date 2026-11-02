@@ -247,6 +247,28 @@ NODE
   if [[ "$st" == "200" ]]; then
     grep -qiE '<meta[^>]*http-equiv="refresh"' "$TMP/pstub.html" && pass "privacy.html is a meta-refresh stub" || warn "privacy.html 200 but carries no meta refresh"
   else warn "privacy.html status $st (old links to it would 404)"; fi
+
+  # Daily sortie leaderboard (LEADERBOARD, tools/leaderboard/README.md): checked only when the local build enables it.
+  # Same-origin endpoint: the served api/leaderboard.php answers 200 JSON with no-store and no CORS header, and the
+  # fallback database / .htaccess are not served. An external (Worker) endpoint is reported, not checked.
+  lb_ep=$(grep -oE 'endpoint: *"[^"]*"' "$ROOT/assets/js/game/54-leaderboard.js" 2>/dev/null | head -1 | sed -E 's/.*"([^"]*)".*/\1/')
+  if [[ ! -f "$ROOT/assets/js/game/54-leaderboard.js" ]]; then info "leaderboard: no 54-leaderboard.js in this build"
+  elif [[ -z "$lb_ep" ]]; then info "leaderboard: off (LEADERBOARD.endpoint is empty), api/ checks skipped"
+  elif [[ "$lb_ep" == ./api/* || "$lb_ep" == /api/* || "$lb_ep" == api/* ]]; then
+    lb_url="$(abs "$lb_ep")"
+    st="$(fetch "$lb_url?day=$(date -u +%F)" "$TMP/lb.json")"
+    [[ "$st" == "200" ]] && pass "leaderboard $lb_ep 200" || fail "leaderboard $lb_ep status $st"
+    ct="$(ctype "$TMP/lb.json.h")"
+    [[ "$ct" == "application/json" ]] && pass "leaderboard Content-Type $ct" || fail "leaderboard Content-Type '$ct' (expected application/json)"
+    cc="$(hdr "$TMP/lb.json.h" cache-control)"
+    [[ "$cc" == *no-store* ]] && pass "leaderboard Cache-Control '$cc'" || fail "leaderboard Cache-Control '${cc:-<none>}' (expected no-store)"
+    [[ -z "$(hdr "$TMP/lb.json.h" access-control-allow-origin)" ]] && pass "leaderboard sends no Access-Control-Allow-Origin (same origin only)" || fail "leaderboard sends Access-Control-Allow-Origin"
+    grep -q '"top"' "$TMP/lb.json" && pass "leaderboard body is the board JSON (has \"top\")" || fail "leaderboard body is not the board JSON: $(head -c 120 "$TMP/lb.json")"
+    for f in "api/.ht_leaderboard.sqlite" "api/.htaccess" "api/leaderboard.sqlite"; do
+      st="$(fetch "$URL/$f" "$TMP/lbdeny")"
+      [[ "$st" == "403" || "$st" == "404" ]] && pass "$f is not served ($st)" || fail "$f answers $st (must be 403/404)"
+    done
+  else info "leaderboard: external endpoint $lb_ep (not checked here; see tools/leaderboard/README.md)"; fi
 fi
 
 # ---------------------------------------------------------------- local native-sync mode
@@ -280,6 +302,15 @@ if [[ $LOCAL -eq 1 ]]; then
         else fail "assets/opt ?v= tokens in index.html differ from the manifest version $json_v:$badopt (stale ship-card tokens; run tools/bump-version.sh)"; fi
       fi
     else fail "assets/opt/manifest.js or manifest.json is missing (run tools/build-web-assets.sh)"; fi
+    # leaderboard backend (optional): php -l when php is installed, the protective .htaccess beside it
+    if [[ -f "$ROOT/api/leaderboard.php" ]]; then
+      if command -v php >/dev/null 2>&1; then
+        php -l "$ROOT/api/leaderboard.php" > "$TMP/phpl" 2>&1 && pass "php -l api/leaderboard.php" || fail "php -l api/leaderboard.php: $(tr -s ' \n' ' ' < "$TMP/phpl" | head -c 200)"
+      else info "php not installed: api/leaderboard.php not linted (brew install php)"; fi
+      [[ -f "$ROOT/api/.htaccess" ]] && grep -q 'sqlite' "$ROOT/api/.htaccess" && pass "api/.htaccess denies the fallback database" || fail "api/.htaccess missing or does not deny *.sqlite"
+      lb_ep=$(grep -oE 'endpoint: *"[^"]*"' "$ROOT/assets/js/game/54-leaderboard.js" 2>/dev/null | head -1 | sed -E 's/.*"([^"]*)".*/\1/')
+      info "leaderboard endpoint in this build: '${lb_ep:-<empty = off>}'"
+    fi
     # duplicate top-level declarations across the classic scripts
     if [[ -f "$ROOT/tools/check-globals.sh" ]]; then
       if bash "$ROOT/tools/check-globals.sh" "$ROOT/index.html" > "$TMP/globals" 2>&1; then pass "$(head -1 "$TMP/globals")"; else fail "check-globals: $(grep -v '^duplicate' "$TMP/globals" | tr -s ' \n' ' ' | head -c 200)"; fi

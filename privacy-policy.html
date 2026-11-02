@@ -117,23 +117,33 @@
     <a class="back" href="./index.html?v=20261031a">← Back to the game</a>
     <p class="eyebrow" style="margin-top:24px">Type-R 198X</p>
     <h1>Privacy Policy</h1>
-    <p class="meta">Effective date: 26 October 2026 · Applies to the web build at typer198x.com and the iOS/iPadOS and macOS builds.</p>
+    <p class="meta">Effective date: 1 November 2026 · Applies to the web build at typer198x.com and the iOS/iPadOS and macOS builds.</p>
 
-    <p>Type-R 198X is a single-player typing shooter published by Christopher Bradford. The short version: the game keeps your progress on your own device, never sends it anywhere, and does not know who you are.</p>
+    <p>Type-R 198X is a single-player typing shooter published by Christopher Bradford. The short version: the game keeps your progress on your own device, never sends it anywhere unless you opt in to the public daily sortie board, and does not know who you are.</p>
 
     <h2>What is stored, and where</h2>
     <ul>
       <li><strong>Save data stays on your device.</strong> Pilot name, ship selection, unlocked sectors, sector bests, high scores, settings (sound, CRT, motion) and any saved run are written to your browser's local storage, or to the embedded web view's local storage in the native apps, under the single key <code>typesmup198x.save.v1</code>.</li>
       <li><strong>Typing statistics stay on your device too.</strong> Per-key speed and misses, timing for the letter pairs you type most (up to 200), your average and best speeds, how long you usually take to find your next target, your best speed and accuracy in each sector, how many days you have played and the date of the last, a dated summary of each of your last 100 sessions (sector attempts, deaths included, daily sorties, drills and endless drifts), your daily sortie results for up to 60 days with your sortie count, streak and attempts that day, how many drills and endless drifts you have flown and your best of each, and when you finished or skipped the Flight Check are kept in the same save so the game can set the pace of the stream, show your Flight log, rate your daily sorties and aim words and drills at your weak keys. They are never sent anywhere and Reset save erases them.</li>
       <li><strong>One session flag.</strong> On phones, dismissing the "rotate to landscape" hint sets <code>typer.rotateHintDismissed</code> in session storage for that browser session only.</li>
-      <li><strong>Nothing leaves the device.</strong> There is no server account, no cloud save, no leaderboard upload. The pilot name is only used to label your own records and HUD. The game never reads or writes any other storage, cookie or identifier.</li>
+      <li><strong>Nothing leaves the device.</strong> There is no server account, no cloud save, and no leaderboard upload unless you turn on the optional daily sortie board described below. The pilot name is only used to label your own records and HUD, and, only if you opt in, your entry on that board. The game never reads or writes any other storage, cookie or identifier.</li>
+    </ul>
+
+    <h2>Daily sortie leaderboard (optional)</h2>
+    <p>The game can show a public board of today's daily sortie results. It is <strong>off by default</strong>: nothing in this section happens until you turn on <em>Share daily sortie scores</em> in Settings (the row only appears on a build where the board has been switched on by the publisher). While it is off, no request is made.</p>
+    <ul>
+      <li><strong>What is sent when you opt in.</strong> When a counted daily sortie ends, the game sends your pilot name (as typed, trimmed to 12 characters), an anonymous random identifier created on your device (so a better result of yours replaces your earlier entry for the day), the day, and the sortie's rating, words per minute, accuracy, score, sector, ship, rank and the game version. To show the board, the game also asks the server for today's entries, with your identifier when you have one, so it can mark your row.</li>
+      <li><strong>It is public.</strong> Your pilot name and result are shown to every player who opens the board that day. Do not use a name you would not want shown.</li>
+      <li><strong>What the server keeps.</strong> Entries are kept for 90 days, then deleted. To limit abuse the server also keeps, for at most 24 hours, a salted hash of the network address a submission came from; the address itself is never stored and the hash cannot be turned back into it. No cookies, accounts or third-party analytics are involved.</li>
+      <li><strong>Your controls.</strong> Turn the setting off at any time and nothing further is sent; entries already on the board stay until they expire. <strong>Reset save</strong> erases the identifier, so later entries are no longer linked to earlier ones. To have an entry removed sooner, write to the address below with your pilot name and the day.</li>
+      <li><strong>Where it runs.</strong> The board is served by typer198x.com itself or by a Cloudflare Worker the game names; either way the same rules above apply.</li>
     </ul>
 
     <h2>What is not collected</h2>
     <ul>
       <li>No personal identifiers: no email address, no account, no password, no advertising or analytics identifiers.</li>
       <li>No telemetry, crash reporting, fingerprinting or IP-based tracking.</li>
-      <li>No advertising SDKs, payment processors or third-party scripts. The web build makes no network calls while you play beyond fetching its own art, music and code from typer198x.com.</li>
+      <li>No advertising SDKs, payment processors or third-party scripts. The web build makes no network calls while you play beyond fetching its own art, music and code from typer198x.com, except the daily sortie board requests described above, and only after you opt in.</li>
     </ul>
 
     <h2>Offline-first by design</h2>
@@ -141,12 +151,12 @@
 
     <h2>Your controls</h2>
     <ul>
-      <li><strong>Reset save</strong> on the title screen (the link row under the pilot stats: Records · Re-read briefing · How to play · Settings · <em>Reset save</em>) erases everything the game stored, after a confirmation.</li>
+      <li><strong>Reset save</strong> on the title screen (the link row under the pilot stats: Records · Re-read briefing · How to play · Settings · <em>Reset save</em>) erases everything the game stored, after a confirmation, including the daily sortie board identifier and the sharing setting.</li>
       <li>Clearing your browser's site data for typer198x.com removes the same data; deleting the app removes it on iOS, iPadOS and macOS.</li>
     </ul>
 
     <h2>Children</h2>
-    <p>The game is rated for ages 9+ (mild fantasy violence). Because nothing is collected from anyone, no data is collected from children under 13.</p>
+    <p>The game is rated for ages 9+ (mild fantasy violence). Nothing is collected from anyone unless the optional daily sortie board is turned on, and even then only a chosen pilot name and a game result are shared; if a child has shared a name you want removed, write to the address below.</p>
 
     <h2>Changes and contact</h2>
     <p>If this policy changes, the effective date above is updated and the revised text is published on this page. Questions go to <a href="mailto:support@typer198x.com">support@typer198x.com</a>.</p>
