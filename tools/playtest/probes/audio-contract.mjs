@@ -137,7 +137,10 @@ try {
   })));
   check("unlock x5: one fetch each for laser/bigexplosion", requests.laser === 1 && requests.bigExplosion === 1, { laser: requests.laser, bigExplosion: requests.bigExplosion });
   check("unlock: both one-shots decoded, bus built, two routed media slots", unlocked.ctx && unlocked.laser && unlocked.big && unlocked.slots === 2 && unlocked.routed && Math.abs(unlocked.master - 0.8) < 0.001 && unlocked.comp === -12, unlocked);
-  check("unlock: decodeAudioData only for the two one-shots (no mp3)", unlocked.decodes.length === 2 && unlocked.decodes.every((n) => n < 1e6), unlocked.decodes);
+  // SOUND pass: the two sample banks (sfx-bank.mp3 ~460 KB, vo-bank.mp3 ~100 KB) decode at unlock as well; a music MP3
+  // (3 MB) still never does. --legacy serves no banks, so the count is 2 there.
+  const bankCount = await page.evaluate(() => { const b = game.sfx.bankSources; return b ? ["sfx", "vo"].filter((k) => b[k]).length : 0; });   // the runtime's view: a legacy manifest (no music/sfx members) has no banks
+  check("unlock: decodeAudioData only for the one-shots + the sample banks (no music mp3)", unlocked.decodes.length === 2 + bankCount && unlocked.decodes.every((n) => n < 1e6), { decodes: unlocked.decodes, bankCount });
 
   // 3. Registry after unlock
   const post = await page.evaluate(exerciseRegistry);

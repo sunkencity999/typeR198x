@@ -96,7 +96,7 @@ const defaultSave = () => ({
   lastUnlockedLevel: 1, // 1..10
   storySeen: false,
   keyboardHintSeen: false,
-  settings: { muted: false, crt: true, musicVolume: 0.7, sfxVolume: 0.8, crtIntensity: 0.75, reduceMotion: null, renderScaleCap: 2 },
+  settings: { muted: false, crt: true, musicVolume: 0.7, sfxVolume: 0.8, crtIntensity: 0.75, reduceMotion: null, renderScaleCap: 2, announcer: true },   // SOUND: announcer
   highScores: [],      // top 10: { runId, name, score, levelReached, startLevel, wpm, acc, maxCombo, ship, difficulty, date }
   sectorBests: {},     // "1".."10" -> { score, rank, wpm, acc, maxCombo, date }
   bestWpm: 0,
@@ -190,7 +190,8 @@ function normaliseSettings(s) {
     sfxVolume: num(s.sfxVolume, 0.8, 0, 1),
     crtIntensity: num(s.crtIntensity, 0.75, 0.25, 1),
     reduceMotion: s.reduceMotion === true ? true : s.reduceMotion === false ? false : null,
-    renderScaleCap: num(s.renderScaleCap, 2, 0.5, 2)
+    renderScaleCap: num(s.renderScaleCap, 2, 0.5, 2),
+    announcer: s.announcer !== false   // SOUND: radio announcer lines, default on
   };
 }
 

@@ -1,6 +1,10 @@
-// Type-R 198X — audio: transport, bus, music direction and the cue registry.
+// Type-R 198X — audio: transport, bus, music direction, the sample pool, the announcer and the cue registry.
 // Classic script (IIFE) exposing window.SFX. Loads before assets/js/core/00-util.js, so the
 // environment flags are detected here. Contract: scratchpad/design/CONTRACT.md section 6.
+// SOUND pass (2026-11): cues play round-robin samples from two MP3 banks (manifest.sfxBank / voBank, built by
+// tools/audio/*) through a voice pool with per-cue caps and stealing; every cue keeps its synth as the fallback
+// (bank missing or still decoding, legacy manifest, native / file:// shells) or as a parametric layer. A fast music
+// sidechain (musicDuck) dips under explosions, boss hits and the announcer; the master compressor is gentler (3:1).
 (function (global) {
   "use strict";
 
@@ -55,6 +59,17 @@
   const STATE_LEVEL = { wave: 1.0, boss: 0.55, finale: 0.3, end: 0.0 };
   const STATE_FILTER = { wave: 20000, boss: 900, finale: 20000, end: 20000, pause: 600 };
   const PAUSE_ATTENUATION = 0.5; // -6 dB
+
+  // Sample pool (SOUND pass). Banks are MP3 sprite sheets (tools/audio/pack-bank.mjs) listed in the manifest as
+  // sfxBank / voBank { src, rate, marker, cues: { name: { trim, voices, jitter, priority?, v: [[offset, dur], ...] } } }.
+  const POOL_MAX_VOICES = 32;         // global cap; the oldest voice fades out in 10 ms when exceeded
+  const POOL_DEFAULT_CAP = 3;         // per-cue cap when the bank table has none
+  const BANK_MARKER_THRESHOLD = 0.25; // the packer's 1 kHz marker is -6 dBFS; its first sample above this is the onset
+  const DUCK_DB = { explosionM: -3.0, explosionL: -4.0, bossHit: -3.0, bossKill: -4.0, damage: -3.0, vo: -4.0 };
+  const DUCK_HOLD_S = 0.35;
+  const CLIMB_BASE_RATE = 0.75;       // typing tick: playbackRate at progress 0 (2200 Hz sample -> 1650 Hz), x2 at the last glyph
+  const VO_LINES = ["warning", "boss_incoming", "sector_clear", "signal_lost", "perfect", "overdrive", "new_record", "rank_s", "rank_a", "rank_b", "rank_c", "rank_d", "ready", "go"];
+  const perfNow = () => (typeof performance !== "undefined" && performance.now ? performance.now() : Date.now());
 
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const lerp = (a, b, t) => a + (b - a) * t;
@@ -169,12 +184,34 @@
       this._resumeOnVisible = false;
       this._noiseBuf = null;
       this._timeShift = 0;         // probe seam: offsets _now() so offline renders can stagger cues
+
+      // SOUND pass: sample pool, sidechain and announcer state
+      this.banks = { sfx: null, vo: null };   // decoded banks: { kind, buffer, cues, shift, rr, voices, stats }
+      this._bankPromises = {};
+      this.loadStats = {};                     // src -> { bytes, fetchMs, decodeMs }
+      this.voGain = null;
+      this.musicDuck = null;
+      this.announcerOn = true;
+      this.lastVoice = null;                   // { cue, variant, rate, gain, bank } of the last sampled voice (probes)
+      this.lastTick = null;                    // { kind: "climb" | "resolve" | "miss", p, rate, hz } of the last typing tick
+      this.lastVo = null;                      // last announcer line that was scheduled
+      this._vo = null;                         // { line, priority, until, voice } while a line plays
+      this._voQueue = null;
+      this._voTimer = null;
+      this._pool = [];                         // live sampled voices, oldest first (global cap)
+      this._duckUntil = 0;
+      this._duckLevel = 1;
+      this.lastRank = null;                    // 88-audio-director.js stores results.rank / newHigh for rankStamp()
+      this.lastNewHigh = false;
+      this.pendingPerfect = false;             // set by the director on a perfect wave; waveClear() announces it
     }
 
     _applyManifest() {
       const m = this.manifest;
       this.musicTracks = (m ? m.music : LEGACY_MUSIC).slice();
       this.sfxSources = m ? { laser: m.sfx.laser, bigExplosion: m.sfx.bigExplosion } : { ...LEGACY_SFX };
+      // SOUND pass: the banks are optional manifest members (an older manifest simply has none -> synth cues)
+      this.bankSources = { sfx: (m && m.sfxBank && m.sfxBank.src && m.sfxBank.cues) ? m.sfxBank : null, vo: (m && m.voBank && m.voBank.src && m.voBank.cues) ? m.voBank : null };
     }
 
     // ------------------------------------------------------------------ transport
@@ -205,14 +242,20 @@
         this.htmlBigExplosion = createHtmlAudio(this.sfxSources.bigExplosion);
       }
       const loads = [];
+      let bankLoad = Promise.resolve(null);
       if (this.ctx && !this.forceHtmlAudio) {
         loads.push(this._fetchBuffer(this.sfxSources.laser).then((b) => { this.laserBuffer = b; }));
         loads.push(this._fetchBuffer(this.sfxSources.bigExplosion).then((b) => { this.bigExplosionBuffer = b; }));
+        // SOUND pass: the sample banks ride the same gesture but never hold Start past PRIME_TIMEOUT_MS; cues fall
+        // back to their synths until a bank is decoded (the vo bank only when the announcer is on).
+        const banks = [this._loadBank("sfx")];
+        if (this.announcerOn) banks.push(this._loadBank("vo"));
+        bankLoad = Promise.all(banks);
       }
-      // Only the two one-shot buffers gate Start. The media primes and ctx.resume() are raced against
+      // Only the two one-shot buffers gate Start. The media primes, the banks and ctx.resume() are raced against
       // PRIME_TIMEOUT_MS: a play() promise that never settles (seen in headless Chrome over HTTP under the
       // native UA) or a resume() stuck in 'interrupted' must not keep the player on the menu.
-      await withTimeout(Promise.all(primes), PRIME_TIMEOUT_MS);
+      await withTimeout(Promise.all([...primes, bankLoad]), PRIME_TIMEOUT_MS);
       await Promise.all(loads);
       const resumed = await withTimeout(this.resumeIfNeeded(), PRIME_TIMEOUT_MS);
       if (resumed !== "ok" && this.ctx && this.ctx.state !== "running") this.needsGesture = true;
@@ -225,12 +268,14 @@
 
     // Builds the bus on `ctx` (an OfflineAudioContext works too, which is how the probes render cues).
     _buildBus(ctx) {
+      // Gentle glue on the master (SOUND pass: 3:1, 5 / 150 ms; was 5:1, 3 / 120 ms): the sampled transients keep
+      // their attack and the sidechain below does the ducking the ratio used to do by brute force.
       const compressor = ctx.createDynamicsCompressor();
       compressor.threshold.value = -12;
       compressor.knee.value = 20;
-      compressor.ratio.value = 5;
-      compressor.attack.value = 0.003;
-      compressor.release.value = 0.12;
+      compressor.ratio.value = 3;
+      compressor.attack.value = 0.005;
+      compressor.release.value = 0.15;
       compressor.connect(ctx.destination);
 
       const master = ctx.createGain();
@@ -241,8 +286,16 @@
       sfxGain.gain.value = SFX_BASE * this.sfxVol * this.sfxVol;
       sfxGain.connect(master);
 
+      const voGain = ctx.createGain();      // announcer lines: under the SFX bus so SFX volume and mute apply
+      voGain.gain.value = 1;
+      voGain.connect(sfxGain);
+
+      const musicDuck = ctx.createGain();   // fast sidechain: explosions, boss hits and the announcer dip the music here
+      musicDuck.gain.value = 1;
+      musicDuck.connect(master);
+
       const musicGain = ctx.createGain();
-      musicGain.connect(master);
+      musicGain.connect(musicDuck);
 
       const musicFilter = ctx.createBiquadFilter();
       musicFilter.type = "lowpass";
@@ -250,9 +303,11 @@
       musicFilter.Q.value = 0.7;
       musicFilter.connect(musicGain);
 
-      Object.assign(this, { ctx, compressor, master, sfxGain, musicGain, musicFilter });
+      Object.assign(this, { ctx, compressor, master, sfxGain, musicGain, musicFilter, musicDuck, voGain });
       musicGain.gain.value = this._musicTarget();
       this._noiseBuf = null;
+      this._duckUntil = 0;
+      this._duckLevel = 1;
       ctx.onstatechange = () => this._onStateChange();
       return this;
     }
@@ -311,13 +366,17 @@
       const promise = (async () => {
         if (!this.ctx) return null;
         try {
+          const tFetch = perfNow();
           const resp = await fetch(versioned(src));
           if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
           const data = await resp.arrayBuffer();
+          const tDecode = perfNow();
+          const bytes = data.byteLength;
           const buf = await new Promise((resolve, reject) => {
             const r = this.ctx.decodeAudioData(data, resolve, reject);
             if (r && r.then) r.then(resolve, reject);
           });
+          this.loadStats[src] = { bytes, fetchMs: Math.round(tDecode - tFetch), decodeMs: Math.round(perfNow() - tDecode) };
           return (typeof AudioBuffer !== "undefined" && buf instanceof AudioBuffer) ? buf : null;
         } catch (err) {
           console.warn(`SFX: could not load ${src}; synth fallback in use`, err);
@@ -992,15 +1051,227 @@
       }
     }
 
+    // ------------------------------------------------------------------ sample pool (SOUND pass)
+
+    // Fetch + decode one bank (sfxBank | voBank). Never gates Start on its own (unlock() races it against
+    // PRIME_TIMEOUT_MS); every cue falls back to its synth until the bank is in. Resolves to the bank or null.
+    _loadBank(kind) {
+      const info = this.bankSources && this.bankSources[kind];
+      if (!info || !info.src || !info.cues || !this.ctx || this.forceHtmlAudio) return Promise.resolve(null);
+      if (this._bankPromises[kind]) return this._bankPromises[kind];
+      const p = this._fetchBuffer(info.src).then((buf) => {
+        if (!buf) return null;
+        const bank = { kind, buffer: buf, cues: info.cues, shift: this._bankShift(buf, info), rr: Object.create(null), voices: Object.create(null), stats: this.loadStats[info.src] || null };
+        this.banks[kind] = bank;
+        return bank;
+      });
+      this._bankPromises[kind] = p;
+      return p;
+    }
+
+    // Offset between the decoded buffer and the packer's timeline: the first sample above the threshold inside
+    // [0, marker + .15 s] is the 1 kHz marker's onset. A decoder that ignores the LAME gapless header leaves ~1105
+    // samples of pre-roll; this cancels it. Out-of-range results (no marker found, odd decode) fall back to 0.
+    _bankShift(buf, info) {
+      const marker = Number(info.marker) || 0;
+      const d = buf.getChannelData(0), sr = buf.sampleRate;
+      const end = Math.min(d.length, Math.round((marker + 0.15) * sr));
+      for (let i = 0; i < end; i++) {
+        if (Math.abs(d[i]) > BANK_MARKER_THRESHOLD) {
+          const shift = i / sr - marker;
+          return Math.abs(shift) <= 0.08 ? shift : 0;
+        }
+      }
+      return 0;
+    }
+
+    // One round-robin variant of `cue` from a bank as an AudioBufferSourceNode voice.
+    // o: { bank: "sfx" | "vo", t0, rate, jitter (fraction, default from the table), gain (x trim), dur (cap in buffer
+    //      seconds), dest, track (pool bookkeeping, default true), voices (per-cue cap) }
+    // Returns { cue, src, gain, variant, rate, dur (wall seconds), t0 } or null when no bank / cue is available.
+    _sample(cue, o = {}) {
+      const bank = this.banks[o.bank || "sfx"];
+      const ctx = this.ctx;
+      if (!bank || !ctx || !this.sfxGain) return null;
+      const row = bank.cues[cue];
+      if (!row || !row.v || !row.v.length) return null;
+      const n = row.v.length;
+      const last = bank.rr[cue];
+      // round-robin without immediate repeats: a random step of 1..n-1 from the previous pick
+      const variant = n === 1 ? 0 : last == null ? (Math.random() * n) | 0 : (last + 1 + ((Math.random() * (n - 1)) | 0)) % n;
+      bank.rr[cue] = variant;
+      const [off, len] = row.v[variant];
+      const jitter = o.jitter != null ? o.jitter : (row.jitter || 0);
+      const rate = clamp((o.rate || 1) * (jitter ? 1 + (Math.random() * 2 - 1) * jitter : 1), 0.25, 4);
+      const level = (o.gain != null ? o.gain : 1) * (row.trim != null ? row.trim : 0.5);
+      const t0 = o.t0 != null ? o.t0 : this._now();
+      const bufDur = o.dur != null ? Math.min(len, o.dur) : len;
+      const wall = bufDur / rate;
+      const src = ctx.createBufferSource();
+      src.buffer = bank.buffer;
+      src.playbackRate.value = rate;
+      const gain = ctx.createGain();
+      const g = gain.gain;
+      g.setValueAtTime(level, t0);
+      g.setValueAtTime(level, t0 + Math.max(0, wall - 0.008));
+      g.linearRampToValueAtTime(0.0001, t0 + wall);
+      src.connect(gain);
+      gain.connect(o.dest || this.sfxGain);
+      // the end is left to stop(): start()'s duration argument counts buffer seconds in the spec but not in every engine
+      src.start(t0, Math.max(0, off + bank.shift));
+      src.stop(t0 + wall + 0.01);
+      const voice = { cue, src, gain, variant, rate, dur: wall, t0 };
+      if (o.track !== false) this._poolAdd(bank, voice, o.voices || row.voices || POOL_DEFAULT_CAP);
+      else src.onended = () => { try { src.disconnect(); gain.disconnect(); } catch (_) {} };
+      this.lastVoice = { cue, variant, rate: +rate.toFixed(4), gain: +level.toFixed(3), bank: bank.kind };
+      return voice;
+    }
+
+    _poolAdd(bank, voice, cap) {
+      const list = bank.voices[voice.cue] || (bank.voices[voice.cue] = []);
+      list.push(voice);
+      this._pool.push(voice);
+      voice.src.onended = () => {
+        let i = list.indexOf(voice);
+        if (i >= 0) list.splice(i, 1);
+        i = this._pool.indexOf(voice);
+        if (i >= 0) this._pool.splice(i, 1);
+        try { voice.src.disconnect(); voice.gain.disconnect(); } catch (_) {}
+      };
+      while (list.length > cap) this._fadeStop(list.shift(), 0.01);       // per-cue stealing, oldest first
+      while (this._pool.length > POOL_MAX_VOICES) this._fadeStop(this._pool.shift(), 0.01);
+    }
+
+    // Click-free early stop (voice stealing, announcer interrupts).
+    _fadeStop(v, sec = 0.012) {
+      if (!v) return;
+      const now = this._now();
+      try {
+        v.gain.gain.cancelScheduledValues(now);
+        v.gain.gain.setValueAtTime(v.gain.gain.value, now);
+        v.gain.gain.linearRampToValueAtTime(0.0001, now + sec);
+        v.src.stop(now + sec + 0.005);
+      } catch (_) {}
+    }
+
+    // Fast music sidechain: musicDuck (between musicGain and master) drops `dbs` dB in 20 ms, holds, releases over
+    // .25 s. A deeper duck replaces a shallower one, a repeat extends the hold. Separate from duckMusic(), which
+    // drives musicGain's own timeline for the long stinger dips. Web Audio path only (the HTML path has no node).
+    _sideDuck(dbs, hold = DUCK_HOLD_S, t0) {
+      const node = this.musicDuck;
+      if (!node || this.forceHtmlAudio) return;
+      const now = this._now(), at = t0 != null ? Math.max(now, t0) : now;
+      const level = Math.pow(10, Math.min(0, Number(dbs) || 0) / 20);
+      if (at < this._duckUntil && level > this._duckLevel + 0.001) return; // a deeper duck is already holding
+      const g = node.gain;
+      try {
+        g.cancelScheduledValues(at);
+        g.setValueAtTime(g.value, at);
+        g.linearRampToValueAtTime(level, at + 0.02);
+        g.setValueAtTime(level, at + 0.02 + hold);
+        g.linearRampToValueAtTime(1, at + 0.02 + hold + 0.25);
+      } catch (_) { g.value = 1; return; }
+      this._duckUntil = at + 0.02 + hold;
+      this._duckLevel = level;
+    }
+
+    // Typing tick: climbs one octave across the word (continuous, so each glyph is higher than the one before) and
+    // resolves on the last glyph with a short root / fifth / octave chord. Sampled tick when the bank is in, else a sine.
+    _typeClimb(p, t0) {
+      const rate = CLIMB_BASE_RATE * Math.pow(2, p);
+      const resolve = p >= 0.999;
+      const hz = 2200 * rate;
+      const v = this._sample("tick", { t0, rate, jitter: 0.004, gain: resolve ? 1.25 : 1, voices: 4 });
+      if (!v) this._osc({ type: "sine", f0: hz, t0, dur: 0.03, a: 0.001, d: 0.008, s: 0.5, r: 0.021, peak: 0.1 });
+      if (resolve) {
+        for (const [k, peak] of [[0.5, 0.07], [0.75, 0.05], [1, 0.06]]) {
+          this._osc({ type: "sine", f0: hz * k, t0: t0 + 0.012, dur: 0.075, a: 0.004, d: 0.02, s: 0.6, r: 0.05, peak });
+        }
+      }
+      this.lastTick = { kind: resolve ? "resolve" : "climb", p: +p.toFixed(3), rate: +rate.toFixed(4), hz: Math.round(hz) };
+    }
+
+    // ------------------------------------------------------------------ announcer (SOUND pass)
+
+    // settings.announcer. Off cuts the current line; on fetches the vo bank if it is not in yet.
+    setAnnouncer(on) {
+      this.announcerOn = on !== false;
+      if (!this.announcerOn) this._voCut(0.03);
+      else if (this.ctx && !this.banks.vo) this._loadBank("vo");
+      return this.announcerOn;
+    }
+
+    // Radio line from the vo bank through voGain -> sfxGain (SFX volume and mute apply), ducking the music -4 dB.
+    // One line at a time: a higher priority interrupts, an equal or lower one with priority >= 2 waits in the single
+    // queue slot, the rest are dropped. Before the bank is decoded the line waits for it (it arrives within the first
+    // sector card). o: { delay (s), priority }. Returns true when the line was scheduled or queued. Not a cue: lastCue
+    // is untouched.
+    say(line, o = {}) {
+      if (!this.announcerOn || !this.ctx || this._hidden || this.forceHtmlAudio) return false;
+      const bank = this.banks.vo;
+      if (!bank) {
+        const p = this._loadBank("vo");
+        if (p && !this._voPending) {
+          this._voPending = true;
+          p.then((b) => { this._voPending = false; if (b && this.announcerOn) this.say(line, o); });
+        }
+        return false;
+      }
+      const row = bank.cues[line];
+      if (!row) return false;
+      const priority = o.priority != null ? o.priority : (row.priority != null ? row.priority : 2);
+      const now = this._now();
+      const cur = this._vo;
+      if (cur && cur.until > now) {
+        if (priority > cur.priority) this._voCut(0.03);
+        else {
+          if (priority >= 2 && (!this._voQueue || priority >= this._voQueue.priority)) {
+            this._voQueue = { line, priority };
+            clearTimeout(this._voTimer);
+            this._voTimer = setTimeout(() => {
+              const q = this._voQueue;
+              this._voQueue = null;
+              this._voTimer = null;
+              if (q) this.say(q.line, { priority: q.priority });
+            }, Math.max(0, (cur.until - now) * 1000) + 60);
+          }
+          return true;
+        }
+      }
+      const t0 = now + Math.max(0, Number(o.delay) || 0);
+      const v = this._sample(line, { bank: "vo", t0, dest: this.voGain || this.sfxGain, track: false, jitter: 0 });
+      if (!v) return false;
+      this._vo = { line, priority, until: t0 + v.dur, voice: v };
+      this.lastVo = line;
+      this._sideDuck(DUCK_DB.vo, v.dur + 0.05, t0);
+      return true;
+    }
+
+    _voCut(sec = 0.03) {
+      clearTimeout(this._voTimer);
+      this._voTimer = null;
+      this._voQueue = null;
+      const cur = this._vo;
+      this._vo = null;
+      if (cur && cur.voice) this._fadeStop(cur.voice, sec);
+    }
+
     // ------------------------------------------------------------------ cue registry
 
-    // Every correct key: the laser WAV trimmed to 0.16 s, pitched up across the word (progress 0..1).
+    // Every correct key: the laser (bank round-robin, else the laser WAV trimmed to 0.16 s, else a saw) pitched up
+    // across the word (progress 0..1), plus the typing tick that climbs the octave and resolves on the last glyph.
     zap(progress = 0) {
       this.lastCue = "zap";
       if (!this.ctx || !this.sfxGain) return;
       const p = clamp(Number(progress) || 0, 0, 1);
       const rate = 0.92 + 0.45 * p;
       const t0 = this._now();
+      const sampled = this._sample("laser", { t0, rate, track: false });
+      if (sampled) {
+        this._pushLaserVoice({ src: sampled.src, gain: sampled.gain });
+        this._typeClimb(p, t0);
+        return;
+      }
       const gain = this.ctx.createGain();
       gain.gain.setValueAtTime(0.4, t0);
       gain.gain.setValueAtTime(0.4, t0 + 0.06);
@@ -1026,6 +1297,7 @@
       src.start(t0);
       src.stop(t0 + 0.16);
       this._pushLaserVoice({ src, gain });
+      this._typeClimb(p, t0);
     }
 
     lock(kind = "enemy") {
@@ -1043,8 +1315,10 @@
         case "go":
           this._osc({ type: "sine", f0: 1320, t0, dur: 0.1, peak: 0.3 });
           this._osc({ type: "sine", f0: 2640, t0, dur: 0.08, peak: 0.1 });
+          this.say("go", { delay: 0.05 });
           break;
         default:
+          if (this._sample("lock", { t0 })) break;
           this._osc({ type: "sine", f0: 1900, f1: 2500, t0, dur: 0.035, a: 0.002, d: 0.012, s: 0.6, r: 0.021, peak: 0.3 });
           this._burst({ t0, dur: 0.015, a: 0.001, d: 0.005, s: 0.5, r: 0.009, peak: 0.15, filter: { type: "highpass", f0: 5000 } });
       }
@@ -1059,28 +1333,35 @@
     lockLost() {
       this.lastCue = "lockLost";
       if (!this.ctx) return;
+      if (this._sample("lock_lost")) return;
       this._osc({ type: "square", f0: 420, f1: 180, dur: 0.1, peak: 0.25, filter: { type: "lowpass", f0: 1400 } });
     }
 
-    // Hard miss. Dry fire uses error(0.45): 50 ms and quieter.
+    // Hard miss: the dull tick (sampled knock, else a low-passed square). Dry fire uses error(0.45): 50 ms and quieter.
     error(scale = 1) {
       this.lastCue = "error";
       if (!this.ctx) return;
       const s = clamp(Number(scale) || 1, 0.1, 1);
       const short = s < 0.6;
       const t0 = this._now();
+      this.lastTick = { kind: "miss", p: null, rate: 0, hz: 180 };
+      if (this._sample("error", { t0, gain: s, dur: short ? 0.06 : undefined })) return;
       const dur = short ? 0.05 : 0.16;
       const v = this._osc({ type: "square", f0: 180, t0, dur, a: 0.002, d: 0.02, s: 0.25, r: dur - 0.022, peak: 0.4 * s, filter: { type: "lowpass", f0: 1500 } });
       if (v && !short) v.osc.frequency.setValueAtTime(140, t0 + 0.05);
     }
 
-    // Kills: size 0..1 ((len-1)/11 for words, .15 minions, .7-1 boss bursts).
+    // Kills: size 0..1 ((len-1)/11 for words, .15 minions, .7-1 boss bursts). Three sampled sets by size (small under
+    // .3, medium under .7, large), the medium and large ones duck the music -3 / -4 dB for .35 s.
     explosion(size = 0.5) {
       this.lastCue = "explosion";
       if (!this.ctx) return;
       const s = clamp(Number(size) || 0, 0, 1);
       const det = 1 + (Math.random() * 0.16 - 0.08);
       const t0 = this._now();
+      if (s >= 0.7) this._sideDuck(DUCK_DB.explosionL);
+      else if (s >= 0.5) this._sideDuck(DUCK_DB.explosionM);
+      if (this._sample(s < 0.3 ? "explosion_s" : s < 0.7 ? "explosion_m" : "explosion_l", { t0, gain: 0.85 + 0.3 * s })) return;
       const dur = 0.12 + 0.2 * s;
       this._burst({ t0, dur, a: 0.003, d: dur * 0.25, s: 0.35, r: dur * 0.75, peak: 0.5 + 0.3 * s, filter: { type: "lowpass", f0: lerp(2200, 900, s) * det, f1: 120, Q: 0.8 } });
       this._burst({ t0, dur: 0.02, a: 0.001, d: 0.006, s: 0.4, r: 0.013, peak: 0.25, filter: { type: "highpass", f0: 2500 } });
@@ -1094,6 +1375,7 @@
       this.lastCue = "impact";
       if (!this.ctx) return;
       const t0 = this._now();
+      if (this._sample("impact", { t0 })) return;
       this._burst({ t0, dur: 0.09, a: 0.002, d: 0.03, s: 0.4, r: 0.058, peak: 0.45, filter: { type: "bandpass", f0: 2400, Q: 3 } });
       this._osc({ type: "sine", f0: 100, f1: 38, t0, dur: 0.2, a: 0.003, d: 0.06, s: 0.5, r: 0.137, peak: 0.5 });
     }
@@ -1103,6 +1385,8 @@
       this.lastCue = "damage";
       if (!this.ctx) return;
       const t0 = this._now();
+      this._sideDuck(DUCK_DB.damage);
+      if (this._sample("damage", { t0 })) return;
       this._osc({ type: "square", f0: 300, f1: 80, t0, dur: 0.18, a: 0.003, d: 0.05, s: 0.3, r: 0.127, peak: 0.7, filter: { type: "lowpass", f0: 1800 } });
       this._burst({ t0, dur: 0.15, a: 0.003, d: 0.04, s: 0.4, r: 0.107, peak: 0.4, filter: { type: "lowpass", f0: 600 } });
     }
@@ -1111,6 +1395,7 @@
       this.lastCue = "shieldHit";
       if (!this.ctx) return;
       const t0 = this._now();
+      if (this._sample("shield_hit", { t0 })) return;
       this._osc({ type: "sine", f0: 1320, t0, dur: 0.07, peak: 0.3 });
       this._osc({ type: "sine", f0: 1980, t0, dur: 0.07, peak: 0.2 });
       this._burst({ t0, dur: 0.03, a: 0.001, d: 0.01, s: 0.4, r: 0.019, peak: 0.1, filter: { type: "highpass", f0: 3000 } });
@@ -1120,6 +1405,8 @@
       this.lastCue = "shieldBreak";
       if (!this.ctx) return;
       const t0 = this._now();
+      this._sideDuck(DUCK_DB.bossHit);
+      if (this._sample("shield_break", { t0 })) return;
       this._osc({ type: "sine", f0: 1980, f1: 660, t0, dur: 0.25, peak: 0.35 });
       this._osc({ type: "sine", f0: 1320, f1: 440, t0, dur: 0.25, peak: 0.25 });
       this._burst({ t0, dur: 0.2, a: 0.002, d: 0.05, s: 0.4, r: 0.148, peak: 0.25, filter: { type: "bandpass", f0: 1500, Q: 1 } });
@@ -1130,7 +1417,7 @@
       this.lastCue = "lowHp:" + (on ? "on" : "off");
       if (on) {
         if (this._lowHpTimer || !this.ctx) return;
-        const beep = () => { if (this.ctx) this._osc({ type: "sine", f0: 880, dur: 0.06, a: 0.003, d: 0.02, s: 0.6, r: 0.037, peak: 0.2 }); };
+        const beep = () => { if (this.ctx && !this._sample("low_hp")) this._osc({ type: "sine", f0: 880, dur: 0.06, a: 0.003, d: 0.02, s: 0.6, r: 0.037, peak: 0.2 }); };
         beep();
         this._lowHpTimer = setInterval(beep, 500);
         return;
@@ -1160,10 +1447,12 @@
         }
         case "REPAIR":
         case "HEAL":
+          this._sample("pickup", { t0, gain: 0.5 });   // chime layer under the repair tones (C-G-C against E-A: consonant)
           this._arp([659, 880], { t0, step: 0.08, dur: 0.16, type: "sine", peak: 0.3 });
           this._osc({ type: "sine", f0: 1760, t0: t0 + 0.16, dur: 0.3, a: 0.01, d: 0.1, s: 0.3, r: 0.19, peak: 0.15 });
           break;
-        default: // SHIELD and the legacy powerup() shim
+        default: // SHIELD and the legacy powerup() shim: the sampled chime, else the sine arp
+          if (this._sample("pickup", { t0 })) break;
           this._arp([523, 784, 1046], { t0, step: 0.07, dur: 0.12, type: "sine", peak: 0.3 });
       }
     }
@@ -1171,6 +1460,7 @@
     powerDown() {
       this.lastCue = "powerDown";
       if (!this.ctx) return;
+      if (this._sample("power_down")) return;
       this._arp([1320, 880, 660], { step: 0.09, dur: 0.1, type: "triangle", peak: 0.3 });
     }
 
@@ -1190,7 +1480,8 @@
       const notes = [523, 659, 784];
       if (t >= 3) notes.push(1046);
       if (t >= 4) notes.push(1319);
-      this._arp(notes, { step: 0.06, dur: 0.09, type: "triangle", peak: 0.3 });
+      const layered = !!this._sample("combo_tier", { gain: 0.8 });   // sparkle layer; the arp carries the tier
+      this._arp(notes, { step: 0.06, dur: 0.09, type: "triangle", peak: layered ? 0.22 : 0.3 });
     }
 
     comboBreak(lost = 10) {
@@ -1198,15 +1489,18 @@
       if (!this.ctx) return;
       const t0 = this._now();
       const peak = 0.5 + 0.01 * Math.min(Math.max(Number(lost) || 0, 0), 30);
+      if (this._sample("combo_break", { t0, gain: peak / 0.5 })) return;
       this._osc({ type: "sawtooth", f0: 600, f1: 120, t0, dur: 0.26, a: 0.004, d: 0.08, s: 0.5, r: 0.176, peak, filter: { type: "lowpass", f0: 2500, f1: 300 } });
       this._burst({ t0, dur: 0.2, a: 0.003, d: 0.06, s: 0.4, r: 0.137, peak: 0.3, filter: { type: "lowpass", f0: 800 } });
     }
 
-    // Level intro t=0.
+    // Level intro t=0: the warp swell, then "Ready" from the announcer.
     sectorStart() {
       this.lastCue = "sectorStart";
       if (!this.ctx) return;
       const t0 = this._now();
+      this.say("ready", { delay: 0.35 });
+      if (this._sample("sector_start", { t0 })) return;
       for (const f0 of [220, 330, 440]) {
         this._osc({ type: "sawtooth", f0, t0, dur: 0.5, a: 0.01, d: 0.15, s: 0.5, r: 0.34, peak: 0.16, filter: { type: "lowpass", f0: 1200, f1: 400, sweep: 0.5 } });
       }
@@ -1225,17 +1519,21 @@
       if (!this.ctx) return;
       const k = Math.pow(2, (Number(n) || 0) / 12);
       this._arp([784 * k, 988 * k, 1319 * k], { step: 0.07, dur: 0.13, type: "triangle", peak: 0.3 });
+      if (this.pendingPerfect) { this.pendingPerfect = false; this.say("perfect", { delay: 0.3 }); }
     }
 
-    // Approach phase: klaxon twice.
+    // Approach phase: klaxon twice (sampled alarm, else two saw pulses) and "Warning".
     bossWarning() {
       this.lastCue = "bossWarning";
       if (!this.ctx) return;
       const t0 = this._now();
-      for (const at of [0, 0.42]) {
-        this._osc({ type: "sawtooth", f0: 440, f1: 330, t0: t0 + at, dur: 0.3, a: 0.01, d: 0.1, s: 0.6, r: 0.19, peak: 0.35, filter: { type: "lowpass", f0: 1500 } });
+      if (!this._sample("alarm", { t0 })) {
+        for (const at of [0, 0.42]) {
+          this._osc({ type: "sawtooth", f0: 440, f1: 330, t0: t0 + at, dur: 0.3, a: 0.01, d: 0.1, s: 0.6, r: 0.19, peak: 0.35, filter: { type: "lowpass", f0: 1500 } });
+        }
       }
       this.duckMusic(0.5, 1.0);
+      this.say("warning", { delay: 0.1 });
     }
 
     // Boss intro: 520->980->520 sweep per loop (0.8 s each), lowpass 2.5 kHz.
@@ -1265,20 +1563,27 @@
       osc.stop(t0 + total + 0.02);
       osc.onended = () => { try { osc.disconnect(); gain.disconnect(); } catch (_) {} };
       this.duckMusic(0.5, total);
+      this.say("boss_incoming", { delay: 0.45 });
     }
 
     segmentDown() {
       this.lastCue = "segmentDown";
       if (!this.ctx) return;
       const t0 = this._now();
+      this._sideDuck(DUCK_DB.bossHit);
+      if (this._sample("segment_down", { t0 })) return;
       this._osc({ type: "square", f0: 440, f1: 220, t0, dur: 0.12, a: 0.003, d: 0.04, s: 0.4, r: 0.077, peak: 0.35, filter: { type: "lowpass", f0: 2500 } });
       this._osc({ type: "sine", f0: 90, t0, dur: 0.15, a: 0.003, d: 0.05, s: 0.5, r: 0.097, peak: 0.3 });
       this._burst({ t0, dur: 0.08, a: 0.002, d: 0.02, s: 0.4, r: 0.058, peak: 0.2, filter: { type: "bandpass", f0: 1200, Q: 1 } });
     }
 
     bossPhaseClear() {
-      this.segmentDown();
-      this._arp([523, 659, 784], { t0: this._now() + 0.12, step: 0.07, dur: 0.14, type: "triangle", peak: 0.3 });
+      if (this.ctx && this._sample("phase_clear")) {
+        this._sideDuck(DUCK_DB.bossHit, 0.45);
+      } else {
+        this.segmentDown();
+        if (this.ctx) this._arp([523, 659, 784], { t0: this._now() + 0.12, step: 0.07, dur: 0.14, type: "triangle", peak: 0.3 });
+      }
       this.lastCue = "bossPhaseClear";
     }
 
@@ -1291,12 +1596,14 @@
       const t0 = this._now();
       const a = this._osc({ type: "sawtooth", f0: 200, f1: 1600, t0, dur: d, a: d * 0.85, d: d * 0.1, s: 0.8, r: 0.05, peak: 0.3, filter: { type: "lowpass", f0: 400, f1: 4000, sweep: d } });
       const b = this._burst({ t0, dur: d, a: d * 0.85, d: d * 0.1, s: 0.8, r: 0.05, peak: 0.2, filter: { type: "bandpass", f0: 400, f1: 4000, Q: 2, sweep: d } });
-      this._surge = [a, b].filter(Boolean);
+      // sampled 1.2 s noise texture stretched to the charge (a pitchless layer, so the rate change is free)
+      const c = this._sample("surge_charge", { t0, rate: clamp(1.2 / d, 0.5, 2), gain: 0.9, track: false });
+      this._surge = [a, b, c].filter(Boolean);
     }
 
     surgeFire() {
       this._cutSurge();
-      if (this.ctx) this._burst({ dur: 0.06, a: 0.001, d: 0.02, s: 0.4, r: 0.039, peak: 0.45, filter: { type: "bandpass", f0: 3000, Q: 2 } });
+      if (this.ctx && !this._sample("surge_fire")) this._burst({ dur: 0.06, a: 0.001, d: 0.02, s: 0.4, r: 0.039, peak: 0.45, filter: { type: "bandpass", f0: 3000, Q: 2 } });
       this.damage();
       this.lastCue = "surgeFire";
     }
@@ -1318,6 +1625,8 @@
       this.lastCue = "overdrive";
       if (!this.ctx) return;
       const t0 = this._now();
+      this.say("overdrive", { delay: 0.12 });
+      if (this._sample("overdrive", { t0 })) return;
       this._osc({ type: "sine", f0: 400, f1: 1600, t0, dur: 0.18, a: 0.01, d: 0.06, s: 0.6, r: 0.11, peak: 0.25 });
       this._arp([784, 1047, 1319], { t0: t0 + 0.08, step: 0.05, dur: 0.12, type: "triangle", peak: 0.2 });
       this._burst({ t0, dur: 0.25, a: 0.02, d: 0.08, s: 0.5, r: 0.15, peak: 0.12, filter: { type: "bandpass", f0: 800, f1: 4000, Q: 1, sweep: 0.25 } });
@@ -1328,6 +1637,7 @@
       this.lastCue = "overdriveVent";
       if (!this.ctx) return;
       const t0 = this._now();
+      if (this._sample("overdrive_vent", { t0 })) return;
       this._burst({ t0, dur: 0.35, a: 0.005, d: 0.1, s: 0.5, r: 0.245, peak: 0.22, filter: { type: "bandpass", f0: 6000, f1: 1500, Q: 0.8, sweep: 0.35 } });
       this._osc({ type: "sine", f0: 900, f1: 300, t0, dur: 0.18, peak: 0.12 });
     }
@@ -1347,7 +1657,9 @@
       }
       if (this.ctx) {
         const t0 = this._now();
-        this._burst({ t0, dur: 0.06, a: 0.001, d: 0.02, s: 0.4, r: 0.039, peak: 0.5, filter: { type: "bandpass", f0: 3000, Q: 1.5 } });
+        this._sideDuck(DUCK_DB.bossKill, 0.6);
+        // the crack over the bigexplosion master: sampled boss_crack (sub drop, debris, long tail), else the burst
+        if (!this._sample("boss_crack", { t0 })) this._burst({ t0, dur: 0.06, a: 0.001, d: 0.02, s: 0.4, r: 0.039, peak: 0.5, filter: { type: "bandpass", f0: 3000, Q: 1.5 } });
         if (typeof AudioBuffer !== "undefined" && this.bigExplosionBuffer instanceof AudioBuffer) {
           const src = this.ctx.createBufferSource();
           src.buffer = this.bigExplosionBuffer;
@@ -1388,16 +1700,19 @@
           voices(clear, { t0: t0 + 0.6, step: 0.12, dur: 0.25, type: "triangle", peak: 0.22, dest });
           voices([1046, 1319, 1568, [2093, 1.0]], { t0: t0 + 1.2, step: 0.12, dur: 0.25, type: "triangle", peak: 0.2, dest });
           this.duckMusic(0.3, 2.8);
+          this.say("sector_clear", { delay: 1.9 });
           break;
         }
         case "gameOver":
           this._arp([440, 415, 370, [330, 0.6]], { t0, step: 0.22, dur: 0.3, type: "square", peak: 0.25, filter: { type: "lowpass", f0: 1800 } });
           this._osc({ type: "sine", f0: 110, f1: 30, t0, dur: 1.5, a: 0.05, d: 0.5, s: 0.6, r: 0.95, peak: 0.35 });
           this.duckMusic(0.3, 1.8);
+          this.say("signal_lost", { delay: 0.3 });
           break;
         default:
           voices(clear, { t0, step: 0.12, dur: 0.25, type: "triangle", peak: 0.25 });
           this.duckMusic(0.3, 1.2);
+          this.say("sector_clear", { delay: 0.35 });
       }
     }
 
@@ -1407,27 +1722,31 @@
       if (!this.ctx) return;
       const t0 = this._now();
       switch (kind) {
-        case "confirm": this._osc({ type: "sine", f0: 1200, t0, dur: 0.03, peak: 0.2 }); break;
-        case "back": this._osc({ type: "sine", f0: 900, t0, dur: 0.03, peak: 0.2 }); break;
+        case "confirm": if (!this._sample("ui_confirm", { t0 })) this._osc({ type: "sine", f0: 1200, t0, dur: 0.03, peak: 0.2 }); break;
+        case "back": if (!this._sample("ui_back", { t0 })) this._osc({ type: "sine", f0: 900, t0, dur: 0.03, peak: 0.2 }); break;
         case "pause": this._osc({ type: "sine", f0: 1200, f1: 800, t0, dur: 0.06, peak: 0.2 }); break;
         case "resume": this._osc({ type: "sine", f0: 800, f1: 1200, t0, dur: 0.06, peak: 0.2 }); break;
         case "count": this._osc({ type: "sine", f0: 1500, t0, dur: 0.015, a: 0.001, d: 0.005, s: 0.5, r: 0.009, peak: 0.15 }); break;
         case "stamp":
+          if (this._sample("rank_stamp", { t0 })) break;
           this._osc({ type: "sine", f0: 180, f1: 60, t0, dur: 0.08, peak: 0.4 });
           this._burst({ t0, dur: 0.02, a: 0.001, d: 0.006, s: 0.4, r: 0.013, peak: 0.2, filter: { type: "lowpass", f0: 1200 } });
           break;
         case "slam":
+          if (this._sample("banner_slam", { t0 })) break;
           this._osc({ type: "sine", f0: 1000, t0, dur: 0.04, peak: 0.25 });
           this._burst({ t0, dur: 0.03, a: 0.001, d: 0.01, s: 0.4, r: 0.019, peak: 0.2, filter: { type: "bandpass", f0: 2000, Q: 1 } });
           break;
-        default: this._osc({ type: "sine", f0: 1200, t0, dur: 0.03, peak: 0.15 });
+        default: if (!this._sample("ui_tick", { t0 })) this._osc({ type: "sine", f0: 1200, t0, dur: 0.03, peak: 0.15 });
       }
     }
 
-    // Ending typewriter: 18 ms sine (empress 1800, typegrid 2600, else 2200).
-    typeTick(variant) {
+    // Ending typewriter: 18 ms sine (empress 1800, typegrid 2600, else 2200). With a progress (0..1) through the
+    // current word the tick climbs the octave and resolves on the last glyph like the gameplay keys (_typeClimb).
+    typeTick(variant, progress) {
       this.lastCue = "typeTick:" + (variant || "default");
       if (!this.ctx) return;
+      if (progress != null && Number.isFinite(Number(progress))) { this._typeClimb(clamp(Number(progress), 0, 1), this._now()); return; }
       const f0 = variant === "empress" ? 1800 : variant === "typegrid" ? 2600 : 2200;
       this._osc({ type: "sine", f0, dur: 0.018, a: 0.001, d: 0.006, s: 0.5, r: 0.011, peak: 0.12 });
     }
@@ -1446,7 +1765,14 @@
     bossDefeat() { this.fanfare("bossDown"); }
     bossExplosion() { this.bossKill(); }
     tallyTick() { this.uiTick("count"); }
-    rankStamp() { this.uiTick("stamp"); }
+    // The rank letter (S/A/B/C/D) comes from the argument or from the director's results-hook note (lastRank); a new
+    // high score adds "New record" after it. lastCue stays "uiTick:stamp" (the contract table's alias semantics).
+    rankStamp(rank) {
+      this.uiTick("stamp");
+      const r = String(rank != null ? rank : (this.lastRank || "")).trim().toUpperCase();
+      if (/^[SABCD]$/.test(r)) this.say("rank_" + r.toLowerCase(), { delay: 0.2 });
+      if (this.lastNewHigh) this.say("new_record", { delay: 0.3 });
+    }
     bannerSlam() { this.uiTick("slam"); }
     multTierUp(tier) { this.comboTier(tier); }
     uiConfirm() { this.uiTick("confirm"); }
@@ -1460,6 +1786,8 @@
   SFX.MUSIC_FOR_LEVEL = MUSIC_FOR_LEVEL;
   SFX.MUSIC_LOOP = MUSIC_LOOP;
   SFX.FORCE_HTML_AUDIO = FORCE_HTML_AUDIO;
+  SFX.VO_LINES = VO_LINES;
+  SFX.POOL = { maxVoices: POOL_MAX_VOICES, defaultCap: POOL_DEFAULT_CAP, climbBaseRate: CLIMB_BASE_RATE, duckDb: DUCK_DB };
   SFX.CUES = [
     "zap", "lock", "lockRelease", "lockLost", "error", "explosion", "impact", "damage", "shieldHit", "shieldBreak",
     "lowHp", "pickup", "powerDown", "chainZap", "comboTier", "comboBreak", "sectorStart", "waveStart", "waveClear",
