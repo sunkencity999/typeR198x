@@ -1,0 +1,147 @@
+{
+ "sampleRate": 22050,
+ "voice": "Daniel",
+ "rate": 172,
+ "cues": {
+  "warning": {
+   "files": [
+    "warning.wav"
+   ],
+   "trim": 0.9,
+   "voices": 1,
+   "jitter": 0.0,
+   "priority": 4,
+   "text": "Warning."
+  },
+  "boss_incoming": {
+   "files": [
+    "boss_incoming.wav"
+   ],
+   "trim": 0.9,
+   "voices": 1,
+   "jitter": 0.0,
+   "priority": 4,
+   "text": "Boss incoming."
+  },
+  "sector_clear": {
+   "files": [
+    "sector_clear.wav"
+   ],
+   "trim": 0.9,
+   "voices": 1,
+   "jitter": 0.0,
+   "priority": 5,
+   "text": "Sector clear."
+  },
+  "signal_lost": {
+   "files": [
+    "signal_lost.wav"
+   ],
+   "trim": 0.9,
+   "voices": 1,
+   "jitter": 0.0,
+   "priority": 5,
+   "text": "Signal lost."
+  },
+  "perfect": {
+   "files": [
+    "perfect.wav"
+   ],
+   "trim": 0.85,
+   "voices": 1,
+   "jitter": 0.0,
+   "priority": 2,
+   "text": "Perfect."
+  },
+  "overdrive": {
+   "files": [
+    "overdrive.wav"
+   ],
+   "trim": 0.85,
+   "voices": 1,
+   "jitter": 0.0,
+   "priority": 3,
+   "text": "Overdrive."
+  },
+  "new_record": {
+   "files": [
+    "new_record.wav"
+   ],
+   "trim": 0.9,
+   "voices": 1,
+   "jitter": 0.0,
+   "priority": 3,
+   "text": "New record."
+  },
+  "rank_s": {
+   "files": [
+    "rank_s.wav"
+   ],
+   "trim": 0.9,
+   "voices": 1,
+   "jitter": 0.0,
+   "priority": 4,
+   "text": "Rank S."
+  },
+  "rank_a": {
+   "files": [
+    "rank_a.wav"
+   ],
+   "trim": 0.9,
+   "voices": 1,
+   "jitter": 0.0,
+   "priority": 4,
+   "text": "Rank A."
+  },
+  "rank_b": {
+   "files": [
+    "rank_b.wav"
+   ],
+   "trim": 0.9,
+   "voices": 1,
+   "jitter": 0.0,
+   "priority": 4,
+   "text": "Rank B."
+  },
+  "rank_c": {
+   "files": [
+    "rank_c.wav"
+   ],
+   "trim": 0.9,
+   "voices": 1,
+   "jitter": 0.0,
+   "priority": 4,
+   "text": "Rank C."
+  },
+  "rank_d": {
+   "files": [
+    "rank_d.wav"
+   ],
+   "trim": 0.9,
+   "voices": 1,
+   "jitter": 0.0,
+   "priority": 4,
+   "text": "Rank D."
+  },
+  "ready": {
+   "files": [
+    "ready.wav"
+   ],
+   "trim": 0.8,
+   "voices": 1,
+   "jitter": 0.0,
+   "priority": 1,
+   "text": "Ready."
+  },
+  "go": {
+   "files": [
+    "go.wav"
+   ],
+   "trim": 0.85,
+   "voices": 1,
+   "jitter": 0.0,
+   "priority": 1,
+   "text": "Go!"
+  }
+ }
+}
