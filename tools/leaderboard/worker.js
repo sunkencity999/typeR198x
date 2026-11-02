@@ -87,10 +87,12 @@ function utcToday() {
   return new Date().toISOString().slice(0, 10);
 }
 
+// YYYY-MM-DD and a real calendar date (2026-02-30 rolls over and is refused), else null.
 function parseDay(v) {
   if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
-  const d = new Date(`${v}T00:00:00Z`);
-  return Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) !== v ? null : (d.toISOString().slice(0, 10) === v ? v : null);
+  const t = Date.parse(`${v}T00:00:00Z`);
+  if (Number.isNaN(t)) return null;
+  return new Date(t).toISOString().slice(0, 10) === v ? v : null;
 }
 
 function dayInWindow(day) {
@@ -104,7 +106,7 @@ function isUuid(v) {
 
 function sanitiseName(v) {
   let s = typeof v === "string" ? v : "";
-  s = s.replace(/[\u0000-\u001f\u007f-\u009f​-‏ -‮⁠-⁯﻿]/g, "");
+  s = s.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff]/g, "");
   s = s.replace(/\s+/g, " ").trim();
   s = Array.from(s).slice(0, RULES.nameMax).join("").trim();
   return s || RULES.nameFallback;

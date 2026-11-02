@@ -144,9 +144,12 @@ and a backend accepts a day within one day of its UTC date (`day_past` / `day_fu
 ```bash
 brew install php                                    # once; pdo_sqlite is built in
 tools/leaderboard/test-php.sh                       # php -S 127.0.0.1:8089 + curl: 34 checks, exit 0
+node tools/leaderboard/test-worker.mjs              # the Worker in Node with an in-memory KV: the same contract, exit 0
 cd tools/playtest && node probes/t-leaderboard.mjs --root ../..   # Playwright: off / consent off / consent on / 500 / reset
 ```
 
 `test-php.sh` sets `TYPER_LEADERBOARD_DB` to a temp directory, so it never touches `api/` or the private directory;
-`--keep` leaves the temp database for inspection. The Worker has no local test here; `npx wrangler dev` serves it on
-`http://127.0.0.1:8787` and the same curl calls from `test-php.sh` apply (add `-H 'Origin: https://typer198x.com'`).
+`--keep` leaves the temp database for inspection. `test-worker.mjs` imports `worker.js` (the `package.json` here marks
+the folder ESM, as wrangler expects) and drives `fetch(request, env)` with a fake `BOARD` namespace, so it needs no
+Cloudflare account; against a deployed Worker, `npx wrangler dev` serves it on `http://127.0.0.1:8787` and the curl
+calls from `test-php.sh` apply (add `-H 'Origin: https://typer198x.com'`).
