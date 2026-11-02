@@ -87,26 +87,54 @@ function getVictoryScript() {
   ];
 }
 
+// `unlock` is the campaign clear count (save.career.clears, CAREER) that opens the hull: 0 = always available. The
+// hangar (14-hangar.js) locks the card until then; `desc` is the card's tooltip. The three generated hulls come from
+// tools/art/gen_ships.py.
 const SHIP_CONFIGS = {
   coconut: {
     id: "coconut",
     name: "The S.S. Coconut",
-    src: "./assets/ships/S_S_Coconut.png"
+    src: "./assets/ships/S_S_Coconut.png",
+    unlock: 0
   },
   "little-dark-one": {
     id: "little-dark-one",
     name: "The S.S. Little Dark One",
-    src: "./assets/ships/S_S_littledarkone.png"
+    src: "./assets/ships/S_S_littledarkone.png",
+    unlock: 0
   },
   sofrito: {
     id: "sofrito",
     name: "The S.S. Sofrito",
-    src: "./assets/ships/S_S_Sofrito.png"
+    src: "./assets/ships/S_S_Sofrito.png",
+    unlock: 0
   },
   honeybee: {
     id: "honeybee",
     name: "The S.S. HoneyBee",
-    src: "./assets/ships/S_S_honeyBee.png"
+    src: "./assets/ships/S_S_honeyBee.png",
+    unlock: 0
+  },
+  paprika: {
+    id: "paprika",
+    name: "The S.S. Paprika",
+    src: "./assets/ships/S_S_Paprika.png",
+    desc: "Fast, loud, impossible to lose in a crowd.",
+    unlock: 1
+  },
+  nightjar: {
+    id: "nightjar",
+    name: "The S.S. Nightjar",
+    src: "./assets/ships/S_S_Nightjar.png",
+    desc: "You will not hear it coming. Neither will they.",
+    unlock: 5
+  },
+  moonpie: {
+    id: "moonpie",
+    name: "The S.S. Moonpie",
+    src: "./assets/ships/S_S_Moonpie.png",
+    desc: "Comfort class. The dashboard lights up like a diner at midnight.",
+    unlock: 12
   }
 };
 

@@ -133,6 +133,7 @@ Object.assign(Game.prototype, {
     const beamTier = this.careerBeamTier();
     this._careerLast = { entry, unlocked, beamUp: beamTier > beamBefore ? beamTier : 0, prestige: c.clears === CAREER.prestigeAt };
     this.careerStore();
+    if (typeof this.hangarRefresh === "function") { try { this.hangarRefresh({ newlyUnlocked: unlocked }); } catch (_) { /* hangar is cosmetic */ } }   // 14-hangar.js unlocks the cards
     this.hook("careerClear", { n: c.clears, commendation: entry, unlocked, beamTier });
     return entry;
   },

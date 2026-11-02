@@ -186,6 +186,9 @@ trim_sprite coconut          "$SRC/ships/S_S_Coconut.png"        ships 700 "./as
 trim_sprite little-dark-one  "$SRC/ships/S_S_littledarkone.png"  ships 700 "./assets/ships/S_S_littledarkone.png"
 trim_sprite sofrito          "$SRC/ships/S_S_Sofrito.png"        ships 700 "./assets/ships/S_S_Sofrito.png"
 trim_sprite honeybee         "$SRC/ships/S_S_honeyBee.png"       ships 700 "./assets/ships/S_S_honeyBee.png"
+trim_sprite paprika          "$SRC/ships/S_S_Paprika.png"        ships 700 "./assets/ships/S_S_Paprika.png"
+trim_sprite nightjar         "$SRC/ships/S_S_Nightjar.png"       ships 700 "./assets/ships/S_S_Nightjar.png"
+trim_sprite moonpie          "$SRC/ships/S_S_Moonpie.png"        ships 700 "./assets/ships/S_S_Moonpie.png"
 
 BOSS_FILES=(firstlevelBoss secondlevelboss thirdlevelboss fourthevelboss fifthlevelboss sixthlevelboss seventhlevelboss eigthlevelboss ninthlevelboss 10thlevelboss)
 for i in "${!BOSS_FILES[@]}"; do

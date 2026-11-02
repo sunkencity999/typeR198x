@@ -1,5 +1,5 @@
 {
- "version": "202611020055",
+ "version": "202611020252",
  "music": [
   "./assets/opt/audio/galactic_high_score_1.mp3",
   "./assets/opt/audio/galactic_high_score_2.mp3",
@@ -1274,6 +1274,93 @@
     "h": 466
    },
    "fallback": "./assets/ships/S_S_honeyBee.png"
+  },
+  "ships/paprika": {
+   "orig": {
+    "w": 2816,
+    "h": 1536
+   },
+   "crop": {
+    "x": 328,
+    "y": 172,
+    "w": 2160,
+    "h": 1192
+   },
+   "content": {
+    "x": 352,
+    "y": 196,
+    "w": 2112,
+    "h": 1144
+   },
+   "x1": {
+    "src": "./assets/opt/ships/paprika@1x.webp",
+    "w": 350,
+    "h": 193
+   },
+   "x2": {
+    "src": "./assets/opt/ships/paprika@2x.webp",
+    "w": 700,
+    "h": 386
+   },
+   "fallback": "./assets/ships/S_S_Paprika.png"
+  },
+  "ships/nightjar": {
+   "orig": {
+    "w": 2816,
+    "h": 1536
+   },
+   "crop": {
+    "x": 328,
+    "y": 172,
+    "w": 2160,
+    "h": 1192
+   },
+   "content": {
+    "x": 352,
+    "y": 196,
+    "w": 2112,
+    "h": 1144
+   },
+   "x1": {
+    "src": "./assets/opt/ships/nightjar@1x.webp",
+    "w": 350,
+    "h": 193
+   },
+   "x2": {
+    "src": "./assets/opt/ships/nightjar@2x.webp",
+    "w": 700,
+    "h": 386
+   },
+   "fallback": "./assets/ships/S_S_Nightjar.png"
+  },
+  "ships/moonpie": {
+   "orig": {
+    "w": 2816,
+    "h": 1536
+   },
+   "crop": {
+    "x": 328,
+    "y": 161,
+    "w": 2160,
+    "h": 1214
+   },
+   "content": {
+    "x": 352,
+    "y": 185,
+    "w": 2112,
+    "h": 1166
+   },
+   "x1": {
+    "src": "./assets/opt/ships/moonpie@1x.webp",
+    "w": 350,
+    "h": 197
+   },
+   "x2": {
+    "src": "./assets/opt/ships/moonpie@2x.webp",
+    "w": 700,
+    "h": 393
+   },
+   "fallback": "./assets/ships/S_S_Moonpie.png"
   },
   "bosses/1": {
    "orig": {
