@@ -50,7 +50,7 @@ if (SECURE !== "true" && SECURE !== "false") { console.error(`--secure must be t
 if (!PASSWORD && !DRY) { console.error("missing TYPER_FTP_PASSWORD (or --password-file)"); process.exit(2); }
 
 // ------------------------------------------------------------------ local file set
-const TOP_FILES = ["index.html", "game.js", "style.css", "privacy-policy.html", "privacy.html", "info.html", "support.html", "robots.txt", "sitemap.xml", "site.webmanifest"];
+const TOP_FILES = ["index.html", "game.js", "style.css", "sw.js", "privacy-policy.html", "privacy.html", "info.html", "support.html", "robots.txt", "sitemap.xml", "site.webmanifest"];   // sw.js: PLATFORM service worker (uploaded with the css/js group, before the pages)
 // api/ holds the optional daily-sortie leaderboard (api/leaderboard.php + api/.htaccess, see tools/leaderboard/README.md).
 const ASSET_DIRS = ["assets", "api"];
 // Never uploaded: OS cruft, git, and the leaderboard's fallback SQLite database / salt a local PHP test may have left in api/.

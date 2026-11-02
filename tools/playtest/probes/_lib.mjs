@@ -39,11 +39,13 @@ export const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 // ONBOARD (D13) harness flag contract: window.TypeRHarness.flightCheck = "skip" (no Flight Check: the default for every
 // probe, so a fresh-save Start lands on the sector card as before) | "play" (force it once per page session) | null
 // (the game's real eligibility rule). Init script: it runs before the game scripts on every navigation.
-export const FLIGHT_CHECK_FLAG = (m) => { window.TypeRHarness = Object.assign(window.TypeRHarness || {}, { flightCheck: m }); };
+// PLATFORM: TypeRHarness.sw = false (the default for every probe and harness row) keeps sw.js from registering, so no
+// probe ever runs against a cached shell; t-platform.mjs opens its own context with { sw: true } to test the worker.
+export const FLIGHT_CHECK_FLAG = ([m, sw]) => { window.TypeRHarness = Object.assign(window.TypeRHarness || {}, { flightCheck: m, sw }); };
 
-// Add the flag to a context a probe built itself (openProbe does this for its own context). flightCheck "auto" = null.
-export async function harnessFlags(context, { flightCheck = "skip" } = {}) {
-  await context.addInitScript(FLIGHT_CHECK_FLAG, flightCheck === "auto" ? null : flightCheck);
+// Add the flags to a context a probe built itself (openProbe does this for its own context). flightCheck "auto" = null.
+export async function harnessFlags(context, { flightCheck = "skip", sw = false } = {}) {
+  await context.addInitScript(FLIGHT_CHECK_FLAG, [flightCheck === "auto" ? null : flightCheck, sw === true]);
 }
 
 // Legacy-shaped fixtures (no schema / run.checkpoint / run.id), as the lead's A1 harness defines them.
@@ -92,7 +94,7 @@ export async function openProbe(name, opts = {}) {
     reducedMotion: opts.reducedMotion ? "reduce" : "no-preference",
     ...(opts.isMobile ? { isMobile: true, hasTouch: true } : {})
   });
-  await harnessFlags(context, { flightCheck: opts.flightCheck || "skip" });
+  await harnessFlags(context, { flightCheck: opts.flightCheck || "skip", sw: opts.sw === true });
   const page = await context.newPage();
   let cdpSession = null;
   let perfEnabled = false;

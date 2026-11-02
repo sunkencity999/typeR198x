@@ -96,7 +96,11 @@ const defaultSave = () => ({
   lastUnlockedLevel: 1, // 1..10
   storySeen: false,
   keyboardHintSeen: false,
-  settings: { muted: false, crt: true, musicVolume: 0.7, sfxVolume: 0.8, crtIntensity: 0.75, reduceMotion: null, renderScaleCap: 2, shareDailyScores: false },
+  settings: { muted: false, crt: true, musicVolume: 0.7, sfxVolume: 0.8, crtIntensity: 0.75, reduceMotion: null, renderScaleCap: 2,
+    shareDailyScores: false,   // LEADERBOARD (54-leaderboard.js): opt-in only
+    // ACCESS (12-access.js): plate colours neon | contrast, plate font mono | dyslexic, plate glyph scale 1..1.3, camera shake
+    // 0..1 (independent of reduceMotion), reduce flashes, keyboard layout auto | qwerty | azerty | qwertz | dvorak | colemak
+    plateColor: "neon", plateFont: "mono", plateScale: 1, shakeAmount: 1, reduceFlashes: false, keyboardLayout: "auto" },
   playerToken: "",     // LEADERBOARD (54-leaderboard.js): anonymous UUID for the public daily board, created on first use; Reset save rotates it
   highScores: [],      // top 10: { runId, name, score, levelReached, startLevel, wpm, acc, maxCombo, ship, difficulty, date }
   sectorBests: {},     // "1".."10" -> { score, rank, wpm, acc, maxCombo, date }
@@ -192,7 +196,14 @@ function normaliseSettings(s) {
     crtIntensity: num(s.crtIntensity, 0.75, 0.25, 1),
     reduceMotion: s.reduceMotion === true ? true : s.reduceMotion === false ? false : null,
     renderScaleCap: num(s.renderScaleCap, 2, 0.5, 2),
-    shareDailyScores: s.shareDailyScores === true   // LEADERBOARD: opt-in only; anything but a stored true is off
+    shareDailyScores: s.shareDailyScores === true,   // LEADERBOARD: opt-in only; anything but a stored true is off
+    // ACCESS (12-access.js): enumerations fall back to their default, numbers are clamped, plateScale snaps to .1 steps
+    plateColor: s.plateColor === "contrast" ? "contrast" : "neon",
+    plateFont: s.plateFont === "dyslexic" ? "dyslexic" : "mono",
+    plateScale: Math.round(num(s.plateScale, 1, 1, 1.3) * 10) / 10,
+    shakeAmount: num(s.shakeAmount, 1, 0, 1),
+    reduceFlashes: s.reduceFlashes === true,
+    keyboardLayout: ["qwerty", "azerty", "qwertz", "dvorak", "colemak"].includes(s.keyboardLayout) ? s.keyboardLayout : "auto"
   };
 }
 

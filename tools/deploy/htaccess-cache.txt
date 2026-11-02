@@ -30,6 +30,12 @@
   <FilesMatch "^manifest\.js$">
     Header set Cache-Control "no-cache, max-age=0, must-revalidate"
   </FilesMatch>
+  # PLATFORM (sw.js / site.webmanifest): the service worker script and the web manifest are registered without a ?v=
+  # and must revalidate on every check, or a new release's worker (its SW_VERSION is the shell token) is never seen.
+  # After the .js block above so this `set` wins for sw.js.
+  <FilesMatch "^(sw\.js|site\.webmanifest)$">
+    Header set Cache-Control "no-cache, max-age=0, must-revalidate"
+  </FilesMatch>
 </IfModule>
 
 <IfModule mod_mime.c>
@@ -37,4 +43,5 @@
   AddType font/woff2 .woff2
   AddType audio/mpeg .mp3
   AddType application/javascript .js
+  AddType application/manifest+json .webmanifest
 </IfModule>

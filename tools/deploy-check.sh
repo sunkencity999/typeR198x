@@ -16,8 +16,17 @@
 #   * the footer privacy target names the save key (typesmup198x.save.v1) and links back to the game;
 #     privacy.html is a meta-refresh stub; the served privacy-policy.html carries the local file's effective date
 #     (WARN, FAIL with --strict: an older cached policy is still answering)
+#   * PWA (PLATFORM): sw.js answers 200 with a JavaScript type, passes `node --check`, its SW_VERSION equals the served
+#     shell token (FAIL otherwise: shell and worker from different releases) and is served no-cache (WARN, FAIL with
+#     --strict); site.webmanifest answers 200, parses as JSON with 192 + 512 icons in both "any" and "maskable" purposes
+#     (FAIL), is served as application/manifest+json (WARN) and no-cache (WARN / strict FAIL); every manifest icon
+#     answers 200 as image/png (FAIL)
 # Local mode (--local), source checks against --root (default: this repo):
 #   * every <script src> in index.html exists and passes `node --check`
+#   * sw.js exists, passes `node --check`, its SW_VERSION equals index.html's shell token, its PRECACHE list is what
+#     tools/gen-sw-precache.mjs --check derives from index.html and every entry exists on disk; site.webmanifest parses
+#     with the 192 / 512 any + maskable icons present on disk, start_url and display "standalone"; index.html links
+#     the manifest (PLATFORM)
 #   * assets/opt/manifest.js version === assets/opt/manifest.json version (MANIFEST_ONLY=1 tools/build-web-assets.sh),
 #     and every assets/opt ?v= token in index.html (the ship-card <img> tags) === that version (tools/bump-version.sh)
 #   * tools/check-globals.sh finds no duplicate top-level declarations across the classic scripts
@@ -269,6 +278,47 @@ NODE
       [[ "$st" == "403" || "$st" == "404" ]] && pass "$f is not served ($st)" || fail "$f answers $st (must be 403/404)"
     done
   else info "leaderboard: external endpoint $lb_ep (not checked here; see tools/leaderboard/README.md)"; fi
+  # PWA (PLATFORM): service worker + web manifest + icons
+  shell_tok=$(printf '%s\n' "$TOKENS" | sed '/^$/d' | head -1)
+  st="$(fetch "$URL/sw.js" "$TMP/sw.js")"; ct="$(ctype "$TMP/sw.js.h")"
+  if [[ "$st" == "200" ]]; then
+    case "$ct" in text/javascript|application/javascript|application/x-javascript) pass "sw.js 200 $ct" ;; *) fail "sw.js Content-Type '$ct' (expected a JavaScript type)" ;; esac
+    if [[ $HAVE_NODE -eq 1 ]]; then node --check "$TMP/sw.js" 2>"$TMP/chk" && pass "node --check sw.js" || fail "node --check sw.js: $(head -c 200 "$TMP/chk")"; fi
+    sw_v=$(grep -oE 'const SW_VERSION = "[^"]+"' "$TMP/sw.js" | head -1 | cut -d'"' -f2)
+    if [[ -z "$sw_v" ]]; then fail "served sw.js has no SW_VERSION const"
+    elif [[ -n "$shell_tok" && "$sw_v" != "$shell_tok" ]]; then fail "served sw.js SW_VERSION '$sw_v' != shell token '$shell_tok' (shell and worker from different releases; run tools/bump-version.sh)"
+    else pass "served sw.js SW_VERSION $sw_v matches the shell token"; fi
+    cc="$(hdr "$TMP/sw.js.h" cache-control)"
+    if [[ "$cc" =~ no-cache|no-store|max-age=0 ]]; then okcc=1; else okcc=0; fi
+    gate "$okcc" "sw.js Cache-Control '${cc:-<none>}' (needs no-cache: a cached worker script hides the next release)"
+  else fail "sw.js status $st"; fi
+  st="$(fetch "$URL/site.webmanifest" "$TMP/site.webmanifest")"; ct="$(ctype "$TMP/site.webmanifest.h")"
+  if [[ "$st" == "200" ]]; then
+    pass "site.webmanifest 200"
+    case "$ct" in application/manifest+json) pass "site.webmanifest Content-Type $ct" ;; *) warn "site.webmanifest Content-Type '$ct' (expected application/manifest+json; tools/deploy/htaccess-cache.txt adds the type)" ;; esac
+    cc="$(hdr "$TMP/site.webmanifest.h" cache-control)"
+    if [[ "$cc" =~ no-cache|no-store|max-age=0 ]]; then okcc=1; else okcc=0; fi
+    gate "$okcc" "site.webmanifest Cache-Control '${cc:-<none>}' (needs no-cache)"
+    if [[ $HAVE_NODE -eq 1 ]]; then
+      if node -e '
+        const m = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+        const need = [["192x192","any"],["512x512","any"],["192x192","maskable"],["512x512","maskable"]];
+        const has = (s, p) => (m.icons || []).some((i) => i.sizes === s && String(i.purpose || "any").split(/\s+/).includes(p));
+        const missing = need.filter(([s, p]) => !has(s, p)).map(([s, p]) => `${s}/${p}`);
+        if (!m.name || !m.start_url || m.display !== "standalone" || missing.length) { console.error(`name=${!!m.name} start_url=${!!m.start_url} display=${m.display} missing icons: ${missing.join(" ") || "none"}`); process.exit(1); }
+        console.log((m.icons || []).map((i) => i.src).join("\n"));
+      ' "$TMP/site.webmanifest" > "$TMP/manifest-icons" 2>"$TMP/chk"; then
+        pass "site.webmanifest parses: name, start_url, display standalone, icons 192/512 any + maskable"
+        i=0
+        while IFS= read -r icon; do
+          [[ -z "$icon" ]] && continue
+          i=$((i+1))
+          st="$(fetch "$(abs "$icon")" "$TMP/icon$i.png" -r 0-255)"; ct="$(ctype "$TMP/icon$i.png.h")"
+          [[ ("$st" == "200" || "$st" == "206") && "$ct" == "image/png" ]] && pass "manifest icon $icon $st image/png" || fail "manifest icon $icon status $st Content-Type '$ct'"
+        done < "$TMP/manifest-icons"
+      else fail "site.webmanifest invalid: $(head -c 200 "$TMP/chk")"; fi
+    fi
+  else fail "site.webmanifest status $st"; fi
 fi
 
 # ---------------------------------------------------------------- local native-sync mode
@@ -315,6 +365,33 @@ if [[ $LOCAL -eq 1 ]]; then
     if [[ -f "$ROOT/tools/check-globals.sh" ]]; then
       if bash "$ROOT/tools/check-globals.sh" "$ROOT/index.html" > "$TMP/globals" 2>&1; then pass "$(head -1 "$TMP/globals")"; else fail "check-globals: $(grep -v '^duplicate' "$TMP/globals" | tr -s ' \n' ' ' | head -c 200)"; fi
     else warn "tools/check-globals.sh not found"; fi
+    # PWA (PLATFORM): sw.js versioned by the shell token with a current precache list; site.webmanifest + icons; the manifest link
+    if [[ -f "$ROOT/sw.js" ]]; then
+      if [[ $HAVE_NODE -eq 1 ]] && ! node --check "$ROOT/sw.js" 2>"$TMP/chk"; then fail "node --check sw.js: $(head -c 160 "$TMP/chk" | tr '\n' ' ')"; else pass "sw.js exists and parses"; fi
+      idx_tok=$(grep -oE '<script[^>]*src="[^"]*[?&]v=[^"&]+' "$ROOT/index.html" | head -1 | sed -E 's/.*[?&]v=//')
+      sw_v=$(grep -oE 'const SW_VERSION = "[^"]+"' "$ROOT/sw.js" | head -1 | cut -d'"' -f2)
+      if [[ -z "$sw_v" ]]; then fail "sw.js has no 'const SW_VERSION = \"...\"' line (tools/bump-version.sh rewrites it)"
+      elif [[ -n "$idx_tok" && "$sw_v" != "$idx_tok" ]]; then fail "sw.js SW_VERSION '$sw_v' != index.html shell token '$idx_tok' (run tools/bump-version.sh)"
+      else pass "sw.js SW_VERSION $sw_v matches index.html's shell token"; fi
+      if [[ $HAVE_NODE -eq 1 && -f "$ROOT/tools/gen-sw-precache.mjs" ]]; then
+        if node "$ROOT/tools/gen-sw-precache.mjs" --root "$ROOT" --check > "$TMP/precache" 2>&1; then pass "$(head -1 "$TMP/precache")"; else fail "$(head -1 "$TMP/precache" | head -c 220)"; fi
+      fi
+    else fail "sw.js missing (PLATFORM service worker; tools/gen-sw-precache.mjs writes its precache list)"; fi
+    if [[ -f "$ROOT/site.webmanifest" ]]; then
+      if [[ $HAVE_NODE -eq 1 ]]; then
+        if node -e '
+          const fs = require("fs"), path = require("path"); const root = process.argv[2];
+          const m = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+          const need = [["192x192","any"],["512x512","any"],["192x192","maskable"],["512x512","maskable"]];
+          const has = (s, p) => (m.icons || []).some((i) => i.sizes === s && String(i.purpose || "any").split(/\s+/).includes(p));
+          const missing = need.filter(([s, p]) => !has(s, p)).map(([s, p]) => `${s}/${p}`);
+          const absent = (m.icons || []).map((i) => i.src).filter((s) => !fs.existsSync(path.join(root, s.replace(/^\.\//, "").replace(/[?#].*$/, ""))));
+          if (!m.name || !m.start_url || m.display !== "standalone" || missing.length || absent.length) { console.error(`name=${!!m.name} start_url=${!!m.start_url} display=${m.display} missing icons: ${missing.join(" ") || "none"}; icon files absent: ${absent.join(" ") || "none"}`); process.exit(1); }
+          console.log(`${(m.icons || []).length} icons on disk, start_url ${m.start_url}, display ${m.display}`);
+        ' "$ROOT/site.webmanifest" "$ROOT" > "$TMP/wm" 2>"$TMP/chk"; then pass "site.webmanifest valid: $(head -1 "$TMP/wm")"; else fail "site.webmanifest invalid: $(head -c 200 "$TMP/chk")"; fi
+      fi
+      grep -qiE '<link[^>]*rel="manifest"[^>]*href="\./site\.webmanifest"' "$ROOT/index.html" && pass "index.html links ./site.webmanifest" || fail "index.html has no <link rel=\"manifest\" href=\"./site.webmanifest\">"
+    else fail "site.webmanifest missing (PLATFORM: the installable app's manifest)"; fi
     # footer privacy link -> local file with the save key and a back link; privacy.html stub; back links on the secondary pages
     src_privacy=$(grep -oE '<a[^>]*href="[^"]*privacy[^"]*"' "$ROOT/index.html" | head -1 | sed -E 's/.*href="([^"]*)".*/\1/')
     if [[ -z "$src_privacy" ]]; then fail "index.html has no footer privacy link"

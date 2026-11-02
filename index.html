@@ -13,6 +13,13 @@
   <link rel="icon" type="image/png" sizes="32x32" href="./assets/icons/generated/macos/Icon-App-32.png" />
   <link rel="icon" type="image/png" sizes="16x16" href="./assets/icons/generated/macos/Icon-App-16.png" />
   <link rel="apple-touch-icon" sizes="180x180" href="./assets/ui/apple-touch-icon.png" />
+  <!-- PLATFORM (12-access.js / sw.js): installable PWA. The manifest and sw.js are served no-cache, so no ?v= here. -->
+  <link rel="manifest" href="./site.webmanifest" />
+  <link rel="icon" type="image/png" sizes="192x192" href="./assets/ui/icons/icon-192.png" />
+  <link rel="icon" type="image/png" sizes="512x512" href="./assets/ui/icons/icon-512.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Type-R" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="preload" as="font" type="font/woff2" href="./assets/fonts/Orbitron-Variable.woff2" crossorigin />
   <link rel="stylesheet" href="./assets/style/tokens.css?v=20261031a" />
   <link rel="stylesheet" href="./style.css?v=20261031a" />
@@ -211,6 +218,9 @@
             <button id="btnBriefing" class="btn-link" type="button">Re-read briefing</button>
             <button id="btnHelp" class="btn-link" type="button">How to play</button>
             <button id="btnMenuSettings" class="btn-link" type="button">Settings</button>
+            <!-- PLATFORM (12-access.js): shown only on beforeinstallprompt / when an update is waiting -->
+            <button id="btnInstall" class="btn-link hidden" type="button">Install</button>
+            <button id="btnPwaReload" class="btn-link hidden" type="button">Reload to update</button>
             <button id="btnResetSave" class="btn-link danger" type="button">Reset save</button>
           </div>
         </div>
@@ -264,6 +274,46 @@
                   <option value="system">Follow system</option>
                   <option value="reduced">Reduced</option>
                   <option value="full">Full</option>
+                </select>
+              </div>
+              <!-- PLATFORM / ACCESS rows (12-access.js): plate colours, plate font, plate size, screen shake, reduce flashes, keyboard layout -->
+              <div class="settingsRow">
+                <label for="setPlateColor">Plate colours</label>
+                <select id="setPlateColor" class="selectNeon" aria-label="Plate colours">
+                  <option value="neon">Neon</option>
+                  <option value="contrast">High contrast</option>
+                </select>
+              </div>
+              <div class="settingsRow">
+                <label for="setPlateFont">Plate font</label>
+                <select id="setPlateFont" class="selectNeon" aria-label="Plate font">
+                  <option value="mono">Mono (default)</option>
+                  <option value="dyslexic">Dyslexia-friendly</option>
+                </select>
+              </div>
+              <div class="settingsRow">
+                <label for="setPlateSize">Plate size</label>
+                <input id="setPlateSize" class="rangeNeon" type="range" min="100" max="130" step="10" value="100" aria-label="Plate size" />
+                <output id="setPlateSizeOut" for="setPlateSize">100%</output>
+              </div>
+              <div class="settingsRow">
+                <label for="setShake">Screen shake</label>
+                <input id="setShake" class="rangeNeon" type="range" min="0" max="100" step="10" value="100" aria-label="Screen shake" />
+                <output id="setShakeOut" for="setShake">100%</output>
+              </div>
+              <div class="settingsRow">
+                <label for="setReduceFlashes">Reduce flashes</label>
+                <input id="setReduceFlashes" class="toggleNeon" type="checkbox" role="switch" aria-label="Reduce flashes" />
+              </div>
+              <div class="settingsRow">
+                <label for="setKeyboardLayout">Keyboard layout</label>
+                <select id="setKeyboardLayout" class="selectNeon" aria-label="Keyboard layout for the Flight log">
+                  <option value="auto">Auto</option>
+                  <option value="qwerty">QWERTY</option>
+                  <option value="azerty">AZERTY</option>
+                  <option value="qwertz">QWERTZ</option>
+                  <option value="dvorak">Dvorak</option>
+                  <option value="colemak">Colemak</option>
                 </select>
               </div>
               <div class="settingsRow">
@@ -595,6 +645,7 @@
               <ul>
                 <li>Settings (title screen or pause) hold music and sound sliders, mute, the CRT filter and its intensity, a motion option (follow system, reduced, full) and fullscreen.</li>
                 <li>Reduced motion removes shake, flashes, scanline roll and noise; screen changes become fades and count-ups land instantly.</li>
+                <li>Readability: <strong>Plate colours</strong> (Neon or High contrast: white, yellow, orange and violet plates, a second white bracket pair on your locked target and a dashed line under plates past the danger line), <strong>Plate font</strong> (the mono stack or a dyslexia-friendly monospace), <strong>Plate size</strong> (100–130 %), <strong>Screen shake</strong> (0–100 %, separate from the motion option) and <strong>Reduce flashes</strong> (dimmer flashes, no storm lightning). <strong>Keyboard layout</strong> (Auto / QWERTY / AZERTY / QWERTZ / Dvorak / Colemak) only arranges the Flight log's key map: typing works on any Latin layout as is.</li>
                 <li>Pauses, sector clears, deaths and boss arrivals are announced to screen readers. Every control shows a cyan focus ring.</li>
               </ul>
             </details>
@@ -696,6 +747,7 @@
   <script src="./game.js?v=20261031a"></script>
   <script src="./assets/js/game/05-boot.js?v=20261031a"></script>
   <script src="./assets/js/game/10-ui.js?v=20261031a"></script>
+  <script src="./assets/js/game/12-access.js?v=20261031a"></script>
   <script src="./assets/js/game/15-screens.js?v=20261031a"></script>
   <script src="./assets/js/game/17-onboarding.js?v=20261031a"></script>
   <script src="./assets/js/game/20-run.js?v=20261031a"></script>

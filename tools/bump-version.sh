@@ -10,6 +10,10 @@
 #     with max-age=15552000 and ignores the query, so the in-site links carry the shell token to reach a browser that
 #     cached an older page (release 20261024a, findings CT-02 / R2). Links without a ?v= are left alone.
 #   * const ASSET_VERSION = "...";                         in game.js
+#   * const SW_VERSION = "...";  and every ?v=<token> in the PRECACHE list   in sw.js (when present; PLATFORM): the
+#     service worker is versioned by the shell token (a new token = a new worker, a new shell cache and the "new
+#     version ready" toast), and its precache URLs must be the exact URLs the new shell requests (same URL rule as the
+#     pages, assets/opt entries -> ART token). The list itself is written by tools/gen-sw-precache.mjs.
 # and leaves the withAssetVersion literal line (`return `${path}${sep}v=${ASSET_VERSION}`;`) untouched,
 # because native/sync-web.sh patches that exact line by sed.
 #
@@ -144,6 +148,22 @@ function rewriteGame() {
   return { src, out, replaced, hasConst, literalOk };
 }
 
+// sw.js (PLATFORM): SW_VERSION takes the shell token; every quoted "...?v=<token>" string (the PRECACHE list) follows the
+// URL rule of the pages (assets/opt -> ART token, else shell token). Nothing else in the file is touched.
+const swVersionRe = /(const\s+SW_VERSION\s*=\s*["'])([^"']*)(["'])/;
+function rewriteSw() {
+  const src = read("sw.js");
+  let replaced = 0, artCount = 0;
+  let out = src.replace(swVersionRe, (_, a, old, c) => `${a}${TOKEN}${c}`);   // the const is reported on its own below
+  out = out.replace(/(["'])([^"'\s]*?[?&]v=)([^"'&\s]*)(\1)/g, (m, q, pre, old, q2) => {
+    const isOpt = /(^|\/)assets\/opt\//.test(pre) && !/manifest\.js\?/.test(pre);
+    const token = (isOpt && ART) ? ART : TOKEN;
+    if (old !== token) { replaced++; if (isOpt && ART) artCount++; }
+    return `${q}${pre}${token}${q2}`;
+  });
+  return { src, out, replaced, artCount, hasConst: swVersionRe.test(src) };
+}
+
 function lineDiff(file, a, b) {
   const al = a.split("\n"), bl = b.split("\n");
   const lines = [];
@@ -167,6 +187,13 @@ for (const f of HTML_FILES) {
   if (!r.literalOk) { console.error("warning: game.js no longer contains the withAssetVersion literal line that native/sync-web.sh patches"); }
   if (changed) { totalChanges++; diffs.push(...lineDiff("game.js", r.src, r.out)); if (!DRY) fs.writeFileSync(path.join(ROOT, "game.js"), r.out); }
 }
+if (exists("sw.js")) {
+  const r = rewriteSw();
+  const changed = r.out !== r.src;
+  summary.push(`${"sw.js".padEnd(20)} ${changed ? "rewrite" : "ok     "}  SW_VERSION: ${r.hasConst ? (changed && swVersionRe.exec(r.src)[2] !== TOKEN ? "updated" : "unchanged") : "NOT FOUND"}, precache ?v= rewritten: ${r.replaced}${r.artCount ? ` (${r.artCount} opt -> ${ART})` : ""}`);
+  if (!r.hasConst) { console.error("warning: sw.js has no `const SW_VERSION = \"...\"` line; the service worker will not be versioned by this token"); }
+  if (changed) { totalChanges++; diffs.push(...lineDiff("sw.js", r.src, r.out)); if (!DRY) fs.writeFileSync(path.join(ROOT, "sw.js"), r.out); }
+}
 
 console.log(`bump-version: shell token ${currentShell || "(none)"} -> ${TOKEN}${ART ? `, art token ${ART} (assets/opt/manifest.json)` : ""}${DRY ? " [dry run]" : ""}`);
 for (const s of summary) console.log("  " + s);
@@ -175,12 +202,13 @@ if (!totalChanges) console.log("no changes (already at this token)");
 
 // Informational: other version strings that still carry an old-looking token.
 const stale = [];
-for (const f of ["index.html", "game.js", "assets/audio/sfx.js"]) {
+for (const f of ["index.html", "game.js", "assets/audio/sfx.js", "sw.js"]) {
   if (!exists(f)) continue;
   read(f).split("\n").forEach((line, i) => {
     const m = line.match(/\bv=(20\d{6}[a-z]?)\b/) || line.match(/VERSION\s*=\s*["']([^"']+)["']/);
     // review R44: in a dry run game.js's own ASSET_VERSION line is the one this script rewrites, not a stale string
     if (DRY && f === "game.js" && assetVersionRe.test(line)) return;
+    if (DRY && f === "sw.js" && (swVersionRe.test(line) || /[?&]v=/.test(line))) return;   // the SW_VERSION and PRECACHE lines are rewritten too
     if (m && m[1] !== TOKEN && m[1] !== ART && !(DRY && m[1] === currentShell) && !line.includes("${ASSET_VERSION}")) stale.push(`  ${f}:${i + 1}: ${line.trim()}`);
   });
 }

@@ -231,6 +231,7 @@ Object.assign(Game.prototype, {
     this.bootReason = reason;
     clearTimeout(this._bootSoftTimer);
     clearTimeout(this._bootHardTimer);
+    if (typeof this.registerServiceWorker === "function") this.registerServiceWorker();   // PLATFORM (12-access.js): only after the first load; a no-op on file:, the native UA and in the harness
     const overlay = (this.bootEls && this.bootEls.overlay) || this.loadingOverlay;
     if (this.bootEls && this.bootEls.error) this.bootEls.error.classList.add("hidden");
     if (!overlay) return;
