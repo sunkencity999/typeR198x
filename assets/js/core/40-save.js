@@ -107,6 +107,7 @@ const defaultSave = () => ({
   sectorBests: {},     // "1".."10" -> { score, rank, wpm, acc, maxCombo, date }
   bestWpm: 0,
   victories: 0,
+  career: null,        // CAREER (56-career.js): { clears, loop, pure, boons[], picks, commendations[] }, created by normaliseCareer from victories
   legacySeeded: false,
   tutorialSeen: { lock: false, finish: false, powerup: false, boss: false, release: false, accuracy: false, phrase: false, surge: false, overdrive: false },
   onboardingDone: 0,   // ONBOARD (D13): ms epoch when the Flight Check was passed or skipped; 0 = not yet
@@ -209,6 +210,39 @@ function normaliseSettings(s) {
   };
 }
 
+// CAREER (56-career.js): the meta-progression block. A save from before the block (or a broken one) is rebuilt from the
+// victories count: that many clears, each with a generic commendation and an unredeemed boon pick (capped at the seven boons).
+const CAREER_BOON_IDS = ["shieldStart", "absorb", "longBurn", "safeRelease", "fieldRepair", "wideSpread", "hotEngine"];
+function normaliseCareer(c, victories) {
+  const v = Math.max(0, victories | 0);
+  const num = (x, d, lo, hi) => (Number.isFinite(x) ? clamp(x, lo, hi) : d);
+  const out = { clears: 0, loop: 0, pure: false, boons: [], picks: 0, commendations: [] };
+  if (c && typeof c === "object") {
+    out.clears = num(c.clears, 0, 0, 100000) | 0;
+    out.pure = c.pure === true;
+    out.boons = Array.isArray(c.boons) ? c.boons.filter((id, i, a) => CAREER_BOON_IDS.includes(id) && a.indexOf(id) === i) : [];
+    out.commendations = Array.isArray(c.commendations) ? c.commendations.filter((e) => e && typeof e === "object" && Number.isFinite(e.n)).map((e) => ({
+      n: e.n | 0, date: Number.isFinite(e.date) ? e.date : 0, rank: /^[SABCD]$/.test(e.rank) ? e.rank : "C", ship: typeof e.ship === "string" ? e.ship : "coconut",
+      loop: num(e.loop, 0, 0, 9) | 0, score: num(e.score, 0, 0, 1e9) | 0, wpm: num(e.wpm, 0, 0, 999) | 0, acc: num(e.acc, 0, 0, 100) | 0, boons: num(e.boons, 0, 0, 7) | 0, pure: e.pure === true
+    })).slice(-60) : [];
+    out.picks = num(c.picks, 0, 0, 7) | 0;
+    out.loop = num(c.loop, 0, 0, 5) | 0;
+  }
+  // backfill: clears never below the victories count; every clear without an entry gets a generic one
+  if (out.clears < v) {
+    const missing = v - out.clears;
+    out.clears = v;
+    out.picks = clamp(out.picks + missing, 0, Math.max(0, CAREER_BOON_IDS.length - out.boons.length));
+  }
+  while (out.commendations.length < Math.min(out.clears, 60)) {
+    const n = out.commendations.length + 1 + Math.max(0, out.clears - 60);
+    out.commendations.push({ n, date: 0, rank: "C", ship: "coconut", loop: 0, score: 0, wpm: 0, acc: 0, boons: 0, pure: false });
+  }
+  out.picks = clamp(out.picks, 0, Math.max(0, CAREER_BOON_IDS.length - out.boons.length));
+  out.loop = clamp(out.loop, 0, Math.min(out.clears, 5));
+  return out;
+}
+
 // LEADERBOARD: the anonymous board token is kept only when it is UUID-shaped; anything else starts over as "".
 const PLAYER_TOKEN_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function normalisePlayerToken(v) {
@@ -228,6 +262,7 @@ function migrateSave(obj) {
   save.lastUnlockedLevel = clamp(Number.isFinite(obj.lastUnlockedLevel) ? obj.lastUnlockedLevel : 1, 1, 10);
   save.bestWpm = Number.isFinite(obj.bestWpm) ? obj.bestWpm : 0;
   save.victories = Number.isFinite(obj.victories) ? obj.victories : 0;
+  save.career = normaliseCareer(obj.career, save.victories);   // CAREER
   save.playerName = typeof obj.playerName === "string" ? obj.playerName : "";
   save.selectedShip = typeof obj.selectedShip === "string" && obj.selectedShip ? obj.selectedShip : "coconut";
   save.playerToken = normalisePlayerToken(obj.playerToken);   // LEADERBOARD

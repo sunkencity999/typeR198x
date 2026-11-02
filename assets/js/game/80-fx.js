@@ -463,6 +463,8 @@ Object.assign(Game.prototype, {
     const ox = this.player.x + 22;
     const oy = this.player.y;
     this.pushBullet(new Bullet({ x: ox, y: oy, tx, ty, width: baseWidth, color: tint, hot }));
+    // CAREER beam tier 4 (Aurora): a sparkle at the impact point
+    if (typeof this.careerBeamTier === "function" && this.careerBeamTier() >= 4 && typeof this.addSparks === "function") this.addSparks(tx, ty, 3);
     if (this.power.spread > 0) {
       const w = Math.max(2, (3 + this.levelIndex * 0.7) * 0.65);   // side beams keep their width in Overdrive
       this.pushBullet(new Bullet({ x: ox, y: oy, tx: tx + rand(-20, 20), ty: ty + rand(-80, -20), width: w, color: "magenta", impact: false }));

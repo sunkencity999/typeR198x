@@ -118,6 +118,15 @@
                 </div>
                 <p class="tagline">Type to lock on. Finish the word to fire.</p>
               </div>
+              <!-- CAREER (56-career.js): hidden until the first campaign clear -->
+              <section id="serviceRecord" class="serviceRecord hidden" aria-label="Service record">
+                <div class="srHead"><span class="label">Service record</span><span id="srMeta" class="srMeta mono"></span></div>
+                <div id="srBadges" class="srBadges" aria-label="Commendations"></div>
+                <div class="srRow">
+                  <div id="srLoops" class="srLoops" role="radiogroup" aria-label="Loop for the next run"></div>
+                  <div id="srBoons" class="srBoons" aria-label="Boons"></div>
+                </div>
+              </section>
               <p id="pressStart" class="pressStart"><span class="pressStart__kbd">Press Enter to start</span><span class="pressStart__tap">Tap start</span></p>
 
               <section id="resumeCard" class="resumeCard hidden" aria-label="Saved run">
@@ -254,6 +263,10 @@
                 <label for="setSfx">Sound FX</label>
                 <input id="setSfx" class="rangeNeon" type="range" min="0" max="100" step="5" value="80" />
                 <output id="setSfxOut" for="setSfx">80%</output>
+              </div>
+              <div class="settingsRow"><!-- CAREER (56-career.js): off = PURE runs (no boons, loop 0) -->
+                <label for="setCareer">Career boons &amp; loops</label>
+                <input id="setCareer" class="toggleNeon" type="checkbox" role="switch" checked aria-label="Career boons and loops (off: runs are tagged Pure)" />
               </div>
               <div class="settingsRow"><!-- SOUND: radio announcer lines (settings.announcer) -->
                 <label for="setAnnouncer">Announcer</label>
@@ -436,6 +449,17 @@
             <div class="weakSignal hidden" data-typist="weak"><span class="weakSignal__label">Weak signal</span><ul class="weakSignal__chips" aria-label="Weak signal"></ul></div>
             <ul class="bonusList"></ul>
           </div>
+          <!-- CAREER (56-career.js): the commendation, the boon pick and the wallpaper slot (58-wallpaper.js fills it) -->
+          <section id="careerPanel" class="careerPanel hidden" aria-labelledby="careerStamp">
+            <p id="careerStamp" class="careerStamp">COMMENDATION</p>
+            <p id="careerSub" class="careerSub small"></p>
+            <ul id="careerNotes" class="careerNotes hidden"></ul>
+            <p id="careerPicked" class="careerPicked small hidden"></p>
+            <div class="careerActions">
+              <button id="btnCareerPick" class="btn-arcade primary hidden" type="button">Choose your boon</button>
+              <div id="careerWallpaperSlot" class="careerWallpaper"></div>
+            </div>
+          </section>
           <p id="victoryText" class="small"></p>
           <p id="creditsLine" class="creditsText hidden">Thank you from Christopher Bradford for work well done!</p>
           <div class="endingActions">
@@ -557,6 +581,19 @@
         <div class="modalActions">
           <button id="btnConfirmCancel" class="btn-arcade" type="button">Cancel</button>
           <button id="btnConfirmOk" class="btn-arcade" type="button">OK</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- CAREER (56-career.js): boon pick -->
+    <div id="boonModal" class="modalOverlay is-dismissed" role="dialog" aria-modal="true" aria-labelledby="boonTitle" aria-describedby="boonBody">
+      <div class="modalInner compact boonModal">
+        <p class="modalEyebrow">Commendation</p>
+        <h2 id="boonTitle" class="neon-text">Choose a boon</h2>
+        <p id="boonBody" class="modalBody small"></p>
+        <div id="boonOffers" class="boonOffers"></div>
+        <div class="modalActions">
+          <button id="btnBoonLater" class="btn-arcade" type="button">Later</button>
         </div>
       </div>
     </div>
@@ -764,6 +801,7 @@
   <script src="./assets/js/game/50-boss.js?v=20261101a"></script>
   <script src="./assets/js/game/52-modes.js?v=20261101a"></script>
   <script src="./assets/js/game/54-leaderboard.js?v=20261101a"></script>
+  <script src="./assets/js/game/56-career.js?v=20261101a"></script>
   <script src="./assets/js/game/60-hud.js?v=20261101a"></script>
   <script src="./assets/js/game/70-render.js?v=20261101a"></script>
   <script src="./assets/js/game/72-atmos.js?v=20261101a"></script>

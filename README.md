@@ -29,15 +29,16 @@ the play-test harness has its own [tools/playtest/README.md](./tools/playtest/RE
 9. [Music and sound](#music-and-sound)
 10. [Budgets (measured)](#budgets-measured)
 11. [Browser floor and render scale](#browser-floor-and-render-scale)
-12. [Save data](#save-data)
-13. [Play-test harness](#play-test-harness)
-14. [Tools](#tools)
-15. [Deployment](#deployment)
-16. [Native wrappers](#native-wrappers)
-17. [Daily sortie leaderboard (optional)](#daily-sortie-leaderboard-optional)
-18. [Privacy](#privacy)
-19. [Credits](#credits)
-20. [Changelog](#changelog)
+12. [Career: commendations, boons, loops, ships, beams](#career-commendations-boons-loops-ships-beams)
+13. [Save data](#save-data)
+14. [Play-test harness](#play-test-harness)
+15. [Tools](#tools)
+16. [Deployment](#deployment)
+17. [Native wrappers](#native-wrappers)
+18. [Daily sortie leaderboard (optional)](#daily-sortie-leaderboard-optional)
+19. [Privacy](#privacy)
+20. [Credits](#credits)
+21. [Changelog](#changelog)
 
 ## The game
 
@@ -184,7 +185,7 @@ days flown and a goal line built from the last five sessions (also on the title 
 ## Settings, reduced motion and touch play
 
 The settings panel (title screen link row or the pause screen) has **Music** (default 70 %), **SFX**
-(80 %), **Mute**, **CRT filter** and its **intensity** (on, 75 %), **Motion** (*Follow system* /
+(80 %), **Mute**, **Career boons & loops** (on; off = PURE runs, see Career), **CRT filter** and its **intensity** (on, 75 %), **Motion** (*Follow system* /
 *Reduced* / *Full*), the accessibility rows below and a **Fullscreen** button. All of it persists in the save.
 
 **Accessibility options (PLATFORM, `assets/js/game/12-access.js`).** Six more rows in the same panel, each stored in
@@ -537,13 +538,45 @@ pixels and drawn at logical size; a `renderScale` change above 10 % re-prepares 
 Lower `settings.renderScaleCap` in the save (hidden setting, default 2) to trade sharpness for fill rate
 on an integrated GPU.
 
+## Career: commendations, boons, loops, ships, beams
+
+Every clear of sector 10 earns a **commendation** (rank, ship, loop, score, speed, accuracy, date) in the **service
+record**, a strip under the title hero that appears after the first clear: one hexagonal badge per commendation (the
+twentieth is a star, the Electromancer's Seal), the **loop** selector for the next run, the **boons** you hold and a
+CHOOSE BOON button while a pick is waiting. The same strip's data feeds a Commendations table in the records modal
+and the LOOP n / BOONS / PURE tags on results cards and high-score rows. `assets/js/game/56-career.js`; probe
+`tools/playtest/probes/t-career.mjs`.
+
+**Boons** (one pick per clear, three offered at a time, seven in all, permanent, campaign only):
+
+| Boon | Effect |
+| --- | --- |
+| Shield Start | Every sector opens with a 4 s shield already up |
+| Absorb | The first plate to reach the hull in each sector is absorbed |
+| Long Burn | Powerups last half as long again |
+| Safe Release | Once per wave, releasing a lock keeps the letters you typed |
+| Field Repair | Repair kits restore half as much hull again |
+| Wide Spread | Spread blasts reach 40 % further |
+| Hot Engine | The Overdrive meter charges 25 % faster |
+
+**Loops** (New Game+, one unlocked per clear up to loop 5): plates +6 % speed per loop (on top of the pace
+controller), the boss carries one more segment per loop (its longest segments repeat; phases keep their starts) and
+every point scores +10 % per loop. Boons and loops never apply to the Daily Sortie, Endless Drift or Drill, and the
+**Career boons & loops** setting turns both off for campaign runs (loop 0, no boons, the run is tagged PURE), so a
+pure campaign is always one toggle away. The run record carries `loop`, `boons` and `pure`, so a saved run resumes
+with what it started with.
+
+**Unlocks by clears:** ships Paprika (1), Nightjar (5), Moonpie (12) in the hangar; cosmetic beam tiers for the main
+weapon, Twin Rail (1), Prism (5), Lance (12), Aurora (20), drawn inside the beam's additive batch in `75-fx-draw.js`;
+the commendation wallpaper (desktop and phone) from the victory screen and the records modal (`58-wallpaper.js`).
+
 ## Save data
 
 One `localStorage` key, **`typesmup198x.save.v1`**, schema 3 (`assets/js/core/40-save.js`):
 `playerName`, `selectedShip`, `highScore`, `lastUnlockedLevel` (1..10), `storySeen`, `settings`
 (`muted`, `crt`, `musicVolume`, `sfxVolume`, `crtIntensity`, `reduceMotion`, `renderScaleCap`, `shareDailyScores`, the
 leaderboard opt-in, default false, anything but a stored `true` reads as off, and the PLATFORM rows `plateColor`, `plateFont`,
-`plateScale`, `shakeAmount`, `reduceFlashes`, `keyboardLayout`), `playerToken` (LEADERBOARD: the anonymous
+`plateScale`, `shakeAmount`, `reduceFlashes`, `keyboardLayout`), `career` (CAREER: `{ clears, loop, pure, boons[], picks, commendations[] }`, rebuilt from `victories` for older saves), `playerToken` (LEADERBOARD: the anonymous
 board UUID, `""` until the first opt-in or counted daily sortie with the board on, kept only when UUID-shaped, erased by
 Reset save), `highScores` (top 10), `sectorBests` ("1".."10" -> score, rank, wpm, acc, maxCombo, date), `bestWpm`,
 `victories`, `tutorialSeen` (the overhaul's tips plus `phrase`, the first two-word tip, one write per save lifetime,

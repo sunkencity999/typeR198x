@@ -315,11 +315,76 @@ Object.assign(Game.prototype, {
   // ------------------------- Beams (L7) -------------------------
   // Three passes per beam in one additive batch: w*3 at .22, w at .95, 1 px white at .60, round caps. The visible
   // segment runs from the detached tail to the travelling head (Bullet.tailT / headT). No shadowBlur.
+  // CAREER beam tiers (cosmetic, by campaign clears: 1 Twin Rail, 5 Prism, 12 Lance, 20 Aurora). Everything stays inside
+  // this additive batch: extra rails, a gradient core, a dashed sheath that runs along the beam, a hue-cycling sheath.
+  beamTier() {
+    return typeof this.careerBeamTier === "function" ? this.careerBeamTier() : 0;
+  },
+
+  drawBeamTierPasses(ctx, list, tier) {
+    const t = this.starT || 0;
+    const seg = (b) => {
+      const a = typeof b.alpha === "function" ? b.alpha() : clamp(1 - b.t / b.life, 0, 1);
+      if (a <= 0 || b.impact === false) return null;
+      const head = typeof b.headT === "function" ? b.headT() : 1, tail = typeof b.tailT === "function" ? b.tailT() : 0;
+      if (head <= tail) return null;
+      return { a, x0: lerp(b.x, b.tx, tail), y0: lerp(b.y, b.ty, tail), x1: lerp(b.x, b.tx, head), y1: lerp(b.y, b.ty, head) };
+    };
+    if (tier >= 1) {
+      // twin rails: two thin lines either side of the core
+      for (const b of list) {
+        const s = seg(b); if (!s) continue;
+        const dx = b.tx - b.x, dy = b.ty - b.y, len = Math.hypot(dx, dy) || 1;
+        const nx = -dy / len, ny = dx / len, off = b.width * 1.6 + 2;
+        const col = BULLET_COLORS[b.color] || BULLET_COLORS.cyan;
+        ctx.globalAlpha = s.a * 0.55;
+        ctx.strokeStyle = b.hot ? BULLET_COLORS.text.core : col.core;
+        ctx.lineWidth = Math.max(1, b.width * 0.45);
+        for (const k of [-1, 1]) {
+          ctx.beginPath();
+          ctx.moveTo(s.x0 + nx * off * k, s.y0 + ny * off * k);
+          ctx.lineTo(s.x1 + nx * off * k, s.y1 + ny * off * k);
+          ctx.stroke();
+        }
+      }
+    }
+    if (tier >= 2) {
+      // prism: a gradient core (accent -> magenta -> white) over the plain one
+      for (const b of list) {
+        const s = seg(b); if (!s) continue;
+        const g = ctx.createLinearGradient(b.x, b.y, b.tx, b.ty);
+        g.addColorStop(0, PALETTE.rgba(b.color === "danger" ? "danger" : "cyan", 0.9));
+        g.addColorStop(0.55, PALETTE.rgba("magenta", 0.85));
+        g.addColorStop(1, PALETTE.rgba("text", 0.95));
+        ctx.globalAlpha = s.a * 0.8;
+        ctx.strokeStyle = g;
+        ctx.lineWidth = b.width * 1.25;
+        ctx.beginPath(); ctx.moveTo(s.x0, s.y0); ctx.lineTo(s.x1, s.y1); ctx.stroke();
+      }
+    }
+    if (tier >= 3) {
+      // lance: a dashed sheath racing along the beam (aurora: the sheath cycles hue)
+      ctx.setLineDash([7, 11]);
+      ctx.lineDashOffset = -((t * 320) % 18);
+      for (const b of list) {
+        const s = seg(b); if (!s) continue;
+        ctx.globalAlpha = s.a * 0.4;
+        ctx.strokeStyle = tier >= 4 ? `hsl(${Math.round((t * 140 + b.x) % 360)} 100% 68%)` : PALETTE.rgba("cyan", 0.9);
+        ctx.lineWidth = b.width * 2.8;
+        ctx.beginPath(); ctx.moveTo(s.x0, s.y0); ctx.lineTo(s.x1, s.y1); ctx.stroke();
+      }
+      ctx.setLineDash([]);
+      ctx.lineDashOffset = 0;
+    }
+  },
+
   drawBullets(ctx) {
     const list = this.bullets;
     if (!list.length) return;
     ctx.globalCompositeOperation = "lighter";
     ctx.lineCap = "round";
+    const tier = this.beamTier();
+    if (tier > 0) this.drawBeamTierPasses(ctx, list, tier);
     for (let pass = 0; pass < 3; pass++) {
       for (const b of list) {
         const a = typeof b.alpha === "function" ? b.alpha() : clamp(1 - b.t / b.life, 0, 1);

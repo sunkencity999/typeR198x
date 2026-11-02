@@ -27,6 +27,7 @@
 //   assets/js/game/45-feedback.js    Game.prototype: banner system (bossIntro/bossClear/sector/wave/callout), floaters
 //   assets/js/game/50-boss.js        Game.prototype: boss fight (phases, minions, Counter-Signal, intro/outro, finale tally)
 //   assets/js/game/52-modes.js       Game.prototype: Daily Sortie, Endless Drift, Drill (MODES)
+//   assets/js/game/56-career.js      Game.prototype: CAREER commendations, boon picks + effects, loops (speed / boss segments / score), service record strip, results tags
 //   assets/js/game/60-hud.js         Game.prototype: DOM HUD (diffed writes on a 5 Hz commit cadence), chips, boss bar, live WPM
 //   assets/js/game/70-render.js      Game.prototype: resizeCanvas, plates/capsules/rails, boss art + slab, parallax, stars, render() layer order
 //   assets/js/game/72-atmos.js       Game.prototype: ATMOS seam-dissolve parallax tiles, per-sector grade / lane haze / storm hue (baked once)
