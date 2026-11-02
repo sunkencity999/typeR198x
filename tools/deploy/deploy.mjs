@@ -238,7 +238,25 @@ async function remoteWalkScoped(root, out = []) {
     if (htaccessSkipped) {
       // nothing uploaded
     } else if (existing.includes(marker)) {
-      console.log(`.htaccess: cache policy already present, left unchanged (copy at ${prev})`);
+      // The policy block is already there: replace it when the local snippet moved on (2026-11: the PLATFORM rules for
+      // sw.js / site.webmanifest). The block runs from the marker comment through its second </IfModule>; anything the
+      // host keeps before or after it stays as it is.
+      const start = existing.indexOf("# " + marker);
+      const close = "</IfModule>";
+      const first = existing.indexOf(close, start);
+      const second = first >= 0 ? existing.indexOf(close, first + close.length) : -1;
+      const end = second >= 0 ? second + close.length : -1;
+      const block = start >= 0 && end > start ? existing.slice(start, end) : null;
+      if (block && block.trim() === snippet.trim()) {
+        console.log(`.htaccess: cache policy already current, left unchanged (copy at ${prev})`);
+      } else if (block) {
+        const merged = existing.slice(0, start) + snippet.trim() + existing.slice(end);
+        fs.writeFileSync(mergedPath, merged);
+        await client.uploadFrom(mergedPath, remotePath);
+        console.log(`.htaccess: cache policy block replaced with the current tools/deploy/htaccess-cache.txt (previous copy kept at ${prev}; uploaded text at ${mergedPath})`);
+      } else {
+        console.log(`.htaccess: the marker is present but the block's end could not be found; ${byHand} (copy at ${prev})`);
+      }
     } else {
       const merged = existing ? `${existing.replace(/\s*$/, "")}\n\n${snippet}` : snippet;
       fs.writeFileSync(mergedPath, merged);
