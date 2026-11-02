@@ -1,4 +1,9 @@
 // Game-path audio acceptance for Type-R 198X (PLAN D10/D11, CONTRACT section 6).
+// SOUND pass: the music may ride either transport, the streamed element pair ("stream") or the decoded layer pair
+// ("layers", desktop Web Audio once a track's pair is decoded: sector 1 hands over at its first loop boundary, later
+// sectors start on it). mix() reports the path; the loop captures seek whichever carries the music and judge the same
+// RMS continuity either way (the buffered loop is sample-accurate by construction, so its alignment check is the
+// wrap time); the "same element" checks become "same carrier, continuous position".
 // audio-contract.mjs drives sfx.js directly; this probe drives the GAME (Start, mute button, Escape, Restart,
 // forced boss, finale, Next sector, game over, Try Again) and watches what the transport does, through a cue
 // log installed on the SFX prototype before the page scripts run.
@@ -100,7 +105,11 @@ const now = () => g(() => performance.now());
 const shot = (name) => page.screenshot({ path: path.join(OUT, name) });
 // Cue names since a page timestamp, as "name" or "name:firstStringArg".
 const cuesSince = (t) => g((t) => window.__cueLog.filter((c) => c.t >= t).map((c) => c.n + (typeof c.a[0] === "string" ? ":" + c.a[0] : "")), t);
-const mix = () => g(() => { const s = game.sfx; const a = s.active; return { mode: game.mode, levelIndex: game.levelIndex, track: s.currentTrack, state: s.musicState, playing: !!s.music, slot: a && a.id, t: a && +a.el.currentTime.toFixed(3), paused: a && a.el.paused, master: +s.master.gain.value.toFixed(3), musicGain: +s.musicGain.gain.value.toFixed(3), filter: Math.round(s.musicFilter.frequency.value), ctx: s.ctx.state, needsGesture: s.needsGesture }; });
+const mix = () => g(() => { const s = game.sfx; const a = s.active; const path = s.musicPath(); const pos = s.musicPosition(); return { mode: game.mode, levelIndex: game.levelIndex, track: s.currentTrack, state: s.musicState, playing: !!s.music, path, layers: s._layerPlay ? s._layerPlay.track : null, slot: a && a.id, t: pos != null ? +pos.toFixed(3) : null, paused: path === "layers" ? false : (a && a.el.paused), master: +s.master.gain.value.toFixed(3), musicGain: +s.musicGain.gain.value.toFixed(3), filter: Math.round(s.musicFilter.frequency.value), ctx: s.ctx.state, needsGesture: s.needsGesture, mem: s.layerStats && s.layerStats.residentMB, parked: s._layerParked ? s._layerParked.track : null }; });
+// Same carrier: the same element on the stream path, the same decoded track on the layers path (a parked pair after
+// 'end' counts as that track's carrier: Try Again resumes it at the parked position).
+const carrierOf = (m) => m.path === "layers" ? "L" + m.layers : (m.path == null && m.parked != null) ? "L" + m.parked : "S" + m.slot;
+const sameCarrier = (m1, m2) => carrierOf(m1) === carrierOf(m2);
 const nextKey = () => g(() => {
   const gm = window.game;
   try {
@@ -129,7 +138,11 @@ async function autoType(seconds, until) {
 async function captureLoop(seekBefore) {
   return g(async (seekBefore) => {
     const s = game.sfx, ctx = s.ctx, a = s.active;
-    const [ls, le] = s._loopFor(a.index);
+    const layers = s.musicPath() === "layers";
+    const track = layers ? s._layerPlay.track : a.index;
+    const [ls, le0] = s._loopFor(track);
+    // the pair's body ends at X = loopEnd - LOOP_FADE (where the incoming element would start); keep le in the element's convention
+    const le = layers ? s._layerPlay.pair.start + s._layerPlay.pair.len + 0.6 : le0;
     const id0 = a.id;
     const spn = ctx.createScriptProcessor(1024, 1, 1), sink = ctx.createGain(); sink.gain.value = 0;
     const chunks = []; let total = 0; const max = ctx.sampleRate * 5;
@@ -139,19 +152,19 @@ async function captureLoop(seekBefore) {
     const t0 = performance.now();
     await sl(700);
     const preSamples = total;
-    a.el.currentTime = le - seekBefore;
+    if (layers) s.seekMusic(le - seekBefore); else a.el.currentTime = le - seekBefore;
     const tSeek = performance.now();
     const timeline = [];
     for (let i = 0; i < 70; i++) {
       await sl(50);
       const o = s.musicEls.find((x) => x.id !== id0);
-      timeline.push({ t: Math.round(performance.now() - tSeek), oldT: +a.el.currentTime.toFixed(3), oldPaused: a.el.paused, oldLevel: a.level, newT: +o.el.currentTime.toFixed(3), newPaused: o.el.paused, newLevel: o.level, newReady: o.el.readyState, active: s.active.id });
+      timeline.push({ t: Math.round(performance.now() - tSeek), oldT: +a.el.currentTime.toFixed(3), oldPaused: a.el.paused, oldLevel: a.level, newT: +o.el.currentTime.toFixed(3), newPaused: o.el.paused, newLevel: o.level, newReady: o.el.readyState, active: s.active.id, path: s.musicPath(), pos: s.musicPosition() == null ? null : +s.musicPosition().toFixed(3), layerTrack: s._layerPlay ? s._layerPlay.track : null });
     }
     try { s.musicGain.disconnect(spn); spn.disconnect(); sink.disconnect(); } catch (e) {}
     const pcm = new Float32Array(total); let o = 0; for (const c of chunks) { pcm.set(c, o); o += c.length; }
     const win = Math.round(ctx.sampleRate * 0.005), n = Math.floor(pcm.length / win), rms = [];
     for (let w = 0; w < n; w++) { let acc = 0; for (let i = 0; i < win; i++) { const v = pcm[w * win + i]; acc += v * v; } rms.push(+(20 * Math.log10(Math.sqrt(acc / win) || 1e-9)).toFixed(1)); }
-    return { sampleRate: ctx.sampleRate, winMs: 5, rms, preWindows: Math.floor(preSamples / win), ls, le, track: a.index, slot: id0, timeline, captureMs: Math.round(performance.now() - t0) };
+    return { sampleRate: ctx.sampleRate, winMs: 5, rms, preWindows: Math.floor(preSamples / win), ls, le, track, slot: id0, layers, seekBefore, timeline, captureMs: Math.round(performance.now() - t0) };
   }, seekBefore);
 }
 // gap = longest run of 5 ms windows more than 30 dB under the pre-seek median (a dropout; the music itself
@@ -163,11 +176,28 @@ function analyseLoop(cap) {
   const runs = (thr) => { let best = 0, cur = 0; for (const v of post) { if (v < ref - thr) { cur++; if (cur > best) best = cur; } else cur = 0; } return best * cap.winMs; };
   const tail = post.slice(Math.floor(post.length * 0.6)).sort((x, y) => x - y);
   const postMedian = tail[Math.floor(tail.length / 2)];
+  const last = cap.timeline[cap.timeline.length - 1];
+  const common = { track: cap.track, path: cap.layers ? "layers" : "stream", refDb: ref, postMedianDb: postMedian, energyDropDb: +(ref - postMedian).toFixed(1), gap30Ms: runs(30), dip20Ms: runs(20), minPostDb: Math.min(...post), ls: cap.ls, le: cap.le, windows: post.length };
+  if (cap.layers) {
+    // Buffered loop: the sources wrap from X = le - .6 to loopStart on their own; the wrap is the row whose position
+    // fell back under the seek point. Expected (seekBefore - .6) s after the seek; the error is that difference.
+    const wrap = cap.timeline.find((r) => r.path === "layers" && r.pos != null && r.pos < cap.le - cap.seekBefore - 0.5);
+    const expectMs = (cap.seekBefore - 0.6) * 1000;
+    return { ...common, takeoverMs: wrap ? wrap.t : null, alignErrMs: wrap ? Math.round(wrap.t - expectMs) : null,
+      handedOver: !!(wrap && last && last.path === "layers" && last.layerTrack === cap.track && last.pos != null && last.pos < cap.ls + (last.t - wrap.t) / 1000 + 0.3 && last.oldPaused) };
+  }
+  const toLayers = cap.timeline.find((r) => r.path === "layers" && r.pos != null);
+  if (toLayers) {
+    // Stream -> layers at this boundary (the decoded pair was waiting on the element): the pair starts at loopStart
+    // while the element fades, so at any instant (element position - fade point) must equal (pair position -
+    // loopStart); the difference is the carrier alignment error, the same quantity as the element pair's check.
+    const alignErrMs = Math.round(((toLayers.oldT - (cap.le - 0.6)) - (toLayers.pos - cap.ls)) * 1000);
+    return { ...common, path: "stream->layers", takeoverMs: toLayers.t, alignErrMs,
+      handedOver: !!(last && last.path === "layers" && last.layerTrack === cap.track && last.oldPaused && last.oldLevel === 0) };
+  }
   const first = cap.timeline.find((r) => !r.newPaused && r.newLevel > 0 && r.newT >= cap.ls - 0.05);
   const alignErrMs = first ? Math.round(((first.oldT - (cap.le - 0.6)) - (first.newT - cap.ls)) * 1000) : null;
-  const last = cap.timeline[cap.timeline.length - 1];
-  return { track: cap.track, refDb: ref, postMedianDb: postMedian, energyDropDb: +(ref - postMedian).toFixed(1), gap30Ms: runs(30), dip20Ms: runs(20), minPostDb: Math.min(...post),
-    takeoverMs: first ? first.t : null, alignErrMs, handedOver: !!(last && last.active !== cap.slot && last.oldPaused && last.newLevel === 1 && !last.newPaused), ls: cap.ls, le: cap.le, windows: post.length };
+  return { ...common, takeoverMs: first ? first.t : null, alignErrMs, handedOver: !!(last && last.active !== cap.slot && last.oldPaused && last.newLevel === 1 && !last.newPaused) };
 }
 
 try {
@@ -201,7 +231,7 @@ try {
   await sleep(200);
   const m2 = await mix();
   const unCues = await cuesSince(tUn);
-  check("unmute (#btnMute) -> master .8 within .2 s, music still playing on the same element (setMuted master-gain only)", m2.master > 0.6 && m2.playing && !m2.paused && m2.slot === m1.slot && m2.t >= m1.t && unCues.includes("setMuted"), { ...m2, cues: unCues.slice(0, 6) });
+  check("unmute (#btnMute) -> master .8 within .2 s, music still playing on the same carrier (setMuted master-gain only)", m2.master > 0.6 && m2.playing && !m2.paused && sameCarrier(m1, m2) && m2.t >= m1.t && unCues.includes("setMuted"), { ...m2, cues: unCues.slice(0, 6) });
 
   // 3. Pause / resume through Escape.
   const tP = await now();
@@ -238,7 +268,7 @@ try {
   await sleep(400);
   const after = await mix();
   const restartCues = await cuesSince(tR);
-  check("Restart (#btnRestart): playMusic called, same element keeps playing, currentTime continuous", after.playing && after.slot === before.slot && after.t >= before.t - 0.05 && after.t < before.t + 3 && after.track === 0 && restartCues.includes("playMusic") && restartCues.includes("setMusicState:wave"), { before, after, cues: restartCues.filter((c) => /playMusic|setMusicState|sectorStart|stopMusic/.test(c)) });
+  check("Restart (#btnRestart): playMusic called, same carrier keeps playing, position continuous", after.playing && sameCarrier(before, after) && after.t >= before.t - 0.05 && after.t < before.t + 3 && after.track === 0 && restartCues.includes("playMusic") && restartCues.includes("setMusicState:wave"), { before, after, cues: restartCues.filter((c) => /playMusic|setMusicState|sectorStart|stopMusic/.test(c)) });
 
   // 5. Loop boundary on the sector-1 track (track 0: the one with the 7 s lead-in).
   await sleep(300);
@@ -247,7 +277,8 @@ try {
   report.loops.track0 = { ...an0, timeline: cap0.timeline, rms: cap0.rms };
   check("loop (track 0): no dropout > 20 ms across the boundary (5 ms RMS, -30 dB under the pre-seek median)", an0.gap30Ms <= 20 && an0.handedOver, an0);
   check("loop (track 0): the music after the boundary keeps body loudness (post median within 6 dB of pre)", an0.energyDropDb <= 6, { refDb: an0.refDb, postMedianDb: an0.postMedianDb, energyDropDb: an0.energyDropDb });
-  check("loop (track 0): incoming element starts at loopStart within 60 ms of the outgoing fade point (beat alignment)", an0.alignErrMs != null && Math.abs(an0.alignErrMs) <= 60 && an0.takeoverMs != null && an0.takeoverMs <= 1800, { alignErrMs: an0.alignErrMs, takeoverMs: an0.takeoverMs, ls: an0.ls, le: an0.le });
+  check(an0.path === "layers" ? "loop (track 0, layers): the pair wraps to loopStart within 60 ms of the expected moment (sample-accurate loop) and keeps carrying" : an0.path === "stream->layers" ? "loop (track 0, stream -> layers): the decoded pair takes over at loopStart within 60 ms of the element's fade point and the element parks" : "loop (track 0): incoming element starts at loopStart within 60 ms of the outgoing fade point (beat alignment)", an0.alignErrMs != null && Math.abs(an0.alignErrMs) <= 60 && an0.takeoverMs != null && an0.takeoverMs <= 1800, { path: an0.path, alignErrMs: an0.alignErrMs, takeoverMs: an0.takeoverMs, ls: an0.ls, le: an0.le });
+  note("music path after the first loop (layers = decoded pair carries the track)", await g(() => game.sfx.musicLayerInfo()));
 
   // 6. Boss: approach klaxon, intro siren, boss music state; then the fight, finale and level clear.
   await page.waitForFunction(() => !game.levelIntro, null, { timeout: 5000 }).catch(() => {});
@@ -280,9 +311,11 @@ try {
   const tN = Date.now();
   await page.click("#btnNextLevel");
   await page.waitForFunction(() => game.mode === "playing" && game.levelIndex === 1, null, { timeout: 10000 });
-  const rolling2 = await page.waitForFunction(() => { const s = game.sfx; const a = s.active; return !!(s.music && s.currentTrack === 5 && a && a.el.currentTime > s.MUSIC_LOOP[5][0] + 0.02); }, null, { timeout: 5000 }).then(() => true).catch(() => false);
+  const rolling2 = await page.waitForFunction(() => { const s = game.sfx; const p = s.musicPosition(); return !!(s.music && s.currentTrack === 5 && p != null && p > s.MUSIC_LOOP[5][0] + 0.02); }, null, { timeout: 5000 }).then(() => true).catch(() => false);
   const n2 = await mix();
-  check("sector 2: track 5 (MUSIC_FOR_LEVEL[1]) playing on the other element within 1 s of Next", rolling2 && n2.track === 5 && n2.slot !== lc.slot && n2.state === "wave" && Date.now() - tN <= 3500, { ms: Date.now() - tN, ...n2, prevSlot: lc.slot });
+  // stream path: the other element; layers path: the decoded pair for track 5 (prefetched during sector 1, decoded behind the card)
+  const newCarrier = n2.path === "layers" ? n2.layers === 5 : n2.slot !== lc.slot;
+  check("sector 2: track 5 (MUSIC_FOR_LEVEL[1]) playing on a new carrier within 1 s of Next", rolling2 && n2.track === 5 && newCarrier && n2.state === "wave" && Date.now() - tN <= 3500, { ms: Date.now() - tN, ...n2, prevSlot: lc.slot });
 
   // 8. Game over: hull to 5 and let the wave leak.
   await page.waitForFunction(() => !game.levelIntro, null, { timeout: 5000 }).catch(() => {});
@@ -294,7 +327,7 @@ try {
   const goCues = await cuesSince(tGO - 400);
   const go1 = await mix();
   await sleep(500);
-  const go2 = await g(() => ({ paused: game.sfx.active.el.paused, music: game.sfx.music === null, lowHp: !!game.sfx._lowHpTimer, lastCue: game.sfx.lastCue }));
+  const go2 = await g(() => ({ paused: game.sfx.active.el.paused && !game.sfx._layerPlay, music: game.sfx.music === null, lowHp: !!game.sfx._lowHpTimer, lastCue: game.sfx.lastCue, parked: game.sfx._layerParked }));
   await shot("04-game-over.png");
   check("game over: fanfare:gameOver + setMusicState('end'); musicGain < .01 within 1 s; element paused within 1.5 s; lowHp beeper off", dead && goCues.includes("fanfare:gameOver") && goCues.includes("setMusicState:end") && gains[19] < 0.01 && go2.paused && go2.music && !go2.lowHp, { gainsEvery50ms: gains, ...go1, after1500: go2, cues: goCues.filter((c) => /fanfare|setMusicState|lowHp/.test(c)) });
 
@@ -307,14 +340,15 @@ try {
   await sleep(500); // the 'wave' gain ramp is 0.4 s
   const ta = await mix();
   const taCues = await cuesSince(tTA);
-  check("Try Again: music playing again within 1 s, same element as before the death, state wave, gain restored after the .4 s ramp", back && ta.slot === go1.slot && ta.t >= go1.t - 0.05 && ta.state === "wave" && ta.musicGain > 0.3 && taCues.includes("playMusic"), { backMs, ...ta, deathSlot: go1.slot, deathT: go1.t, cues: taCues.filter((c) => /playMusic|setMusicState/.test(c)) });
+  check("Try Again: music playing again within 1 s, same carrier as before the death, position continuous, state wave, gain restored after the .4 s ramp", back && sameCarrier(go1, ta) && ta.t >= go1.t - 0.05 && ta.t < go1.t + 3 && ta.state === "wave" && ta.musicGain > 0.3 && taCues.includes("playMusic"), { backMs, ...ta, deathSlot: go1.slot, deathT: go1.t, deathPath: go1.path, cues: taCues.filter((c) => /playMusic|setMusicState/.test(c)) });
 
   // 10. Loop boundary on track 5 (sector 2) as well.
   await sleep(600);
   const cap5 = await captureLoop(1.5);
   const an5 = analyseLoop(cap5);
   report.loops.track5 = { ...an5, timeline: cap5.timeline, rms: cap5.rms };
-  check("loop (track 5): no dropout > 20 ms, body loudness kept, incoming aligned within 60 ms", an5.gap30Ms <= 20 && an5.handedOver && an5.energyDropDb <= 6 && an5.alignErrMs != null && Math.abs(an5.alignErrMs) <= 60, an5);
+  check("loop (track 5): no dropout > 20 ms, body loudness kept, incoming aligned within 60 ms (either path)", an5.track === 5 && an5.gap30Ms <= 20 && an5.handedOver && an5.energyDropDb <= 6 && an5.alignErrMs != null && Math.abs(an5.alignErrMs) <= 60, an5);
+  note("adaptive music after sector 2 (resident / peak decoded MB include the sample banks)", await g(() => game.sfx.musicLayerInfo()));
 
   // 11. Hidden/visible through the document (the shell's visibilitychange hook), then a final error check.
   const vis = await g(async () => {
@@ -322,11 +356,11 @@ try {
     Object.defineProperty(document, "hidden", { configurable: true, get: () => true });
     document.dispatchEvent(new Event("visibilitychange"));
     await new Promise((r) => setTimeout(r, 250));
-    const hidden = { mode: game.mode, ctx: s.ctx.state, paused: s.active.el.paused, reason: game.pauseReason };
+    const hidden = { mode: game.mode, ctx: s.ctx.state, paused: s.active.el.paused, path: s.musicPath(), reason: game.pauseReason };
     Object.defineProperty(document, "hidden", { configurable: true, get: () => false });
     document.dispatchEvent(new Event("visibilitychange"));
     await new Promise((r) => setTimeout(r, 350));
-    return { hidden, visible: { mode: game.mode, ctx: s.ctx.state, paused: s.active.el.paused, needsGesture: s.needsGesture } };
+    return { hidden, visible: { mode: game.mode, ctx: s.ctx.state, paused: s.active.el.paused, path: s.musicPath(), needsGesture: s.needsGesture } };
   });
   check("tab hidden -> context suspended + element paused (+ game paused 'hidden'); visible -> context running, no gesture needed", vis.hidden.ctx === "suspended" && vis.hidden.paused && vis.visible.ctx === "running" && !vis.visible.needsGesture, vis);
   note("pause on hidden (shell wiring, informational)", { modeWhileHidden: vis.hidden.mode, reason: vis.hidden.reason });

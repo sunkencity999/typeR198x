@@ -1,0 +1,305 @@
+{
+ "sampleRate": 44100,
+ "peakDb": -1.0,
+ "cues": {
+  "laser": {
+   "files": [
+    "laser_1.wav",
+    "laser_2.wav",
+    "laser_3.wav",
+    "laser_4.wav"
+   ],
+   "trim": 0.38,
+   "voices": 4,
+   "jitter": 0.04
+  },
+  "tick": {
+   "files": [
+    "tick_1.wav",
+    "tick_2.wav",
+    "tick_3.wav"
+   ],
+   "trim": 0.22,
+   "voices": 4,
+   "jitter": 0.0
+  },
+  "impact": {
+   "files": [
+    "impact_1.wav",
+    "impact_2.wav",
+    "impact_3.wav",
+    "impact_4.wav"
+   ],
+   "trim": 0.5,
+   "voices": 3,
+   "jitter": 0.04
+  },
+  "explosion_s": {
+   "files": [
+    "explosion_s_1.wav",
+    "explosion_s_2.wav",
+    "explosion_s_3.wav",
+    "explosion_s_4.wav"
+   ],
+   "trim": 0.5,
+   "voices": 4,
+   "jitter": 0.05
+  },
+  "explosion_m": {
+   "files": [
+    "explosion_m_1.wav",
+    "explosion_m_2.wav",
+    "explosion_m_3.wav",
+    "explosion_m_4.wav"
+   ],
+   "trim": 0.55,
+   "voices": 3,
+   "jitter": 0.05
+  },
+  "explosion_l": {
+   "files": [
+    "explosion_l_1.wav",
+    "explosion_l_2.wav",
+    "explosion_l_3.wav"
+   ],
+   "trim": 0.5,
+   "voices": 2,
+   "jitter": 0.04
+  },
+  "lock": {
+   "files": [
+    "lock_1.wav",
+    "lock_2.wav",
+    "lock_3.wav"
+   ],
+   "trim": 0.28,
+   "voices": 2,
+   "jitter": 0.02
+  },
+  "lock_lost": {
+   "files": [
+    "lock_lost_1.wav",
+    "lock_lost_2.wav",
+    "lock_lost_3.wav"
+   ],
+   "trim": 0.3,
+   "voices": 2,
+   "jitter": 0.03
+  },
+  "error": {
+   "files": [
+    "error_1.wav",
+    "error_2.wav",
+    "error_3.wav"
+   ],
+   "trim": 0.42,
+   "voices": 2,
+   "jitter": 0.03
+  },
+  "pickup": {
+   "files": [
+    "pickup_1.wav",
+    "pickup_2.wav",
+    "pickup_3.wav"
+   ],
+   "trim": 0.38,
+   "voices": 2,
+   "jitter": 0.01
+  },
+  "shield_hit": {
+   "files": [
+    "shield_hit_1.wav",
+    "shield_hit_2.wav",
+    "shield_hit_3.wav"
+   ],
+   "trim": 0.36,
+   "voices": 2,
+   "jitter": 0.02
+  },
+  "shield_break": {
+   "files": [
+    "shield_break_1.wav",
+    "shield_break_2.wav",
+    "shield_break_3.wav"
+   ],
+   "trim": 0.45,
+   "voices": 1,
+   "jitter": 0.02
+  },
+  "damage": {
+   "files": [
+    "damage_1.wav",
+    "damage_2.wav",
+    "damage_3.wav"
+   ],
+   "trim": 0.45,
+   "voices": 2,
+   "jitter": 0.04
+  },
+  "alarm": {
+   "files": [
+    "alarm_1.wav",
+    "alarm_2.wav"
+   ],
+   "trim": 0.4,
+   "voices": 1,
+   "jitter": 0.01
+  },
+  "segment_down": {
+   "files": [
+    "segment_down_1.wav",
+    "segment_down_2.wav",
+    "segment_down_3.wav"
+   ],
+   "trim": 0.48,
+   "voices": 2,
+   "jitter": 0.03
+  },
+  "phase_clear": {
+   "files": [
+    "phase_clear_1.wav",
+    "phase_clear_2.wav"
+   ],
+   "trim": 0.45,
+   "voices": 1,
+   "jitter": 0.01
+  },
+  "boss_crack": {
+   "files": [
+    "boss_crack_1.wav",
+    "boss_crack_2.wav"
+   ],
+   "trim": 0.5,
+   "voices": 1,
+   "jitter": 0.03
+  },
+  "ui_tick": {
+   "files": [
+    "ui_tick_1.wav",
+    "ui_tick_2.wav",
+    "ui_tick_3.wav"
+   ],
+   "trim": 0.18,
+   "voices": 2,
+   "jitter": 0.01
+  },
+  "ui_confirm": {
+   "files": [
+    "ui_confirm_1.wav",
+    "ui_confirm_2.wav"
+   ],
+   "trim": 0.22,
+   "voices": 1,
+   "jitter": 0.005
+  },
+  "ui_back": {
+   "files": [
+    "ui_back_1.wav",
+    "ui_back_2.wav"
+   ],
+   "trim": 0.22,
+   "voices": 1,
+   "jitter": 0.005
+  },
+  "rank_stamp": {
+   "files": [
+    "rank_stamp_1.wav",
+    "rank_stamp_2.wav"
+   ],
+   "trim": 0.5,
+   "voices": 1,
+   "jitter": 0.02
+  },
+  "banner_slam": {
+   "files": [
+    "banner_slam_1.wav",
+    "banner_slam_2.wav"
+   ],
+   "trim": 0.32,
+   "voices": 1,
+   "jitter": 0.02
+  },
+  "surge_charge": {
+   "files": [
+    "surge_charge_1.wav",
+    "surge_charge_2.wav"
+   ],
+   "trim": 0.3,
+   "voices": 1,
+   "jitter": 0.0
+  },
+  "surge_fire": {
+   "files": [
+    "surge_fire_1.wav",
+    "surge_fire_2.wav",
+    "surge_fire_3.wav"
+   ],
+   "trim": 0.5,
+   "voices": 2,
+   "jitter": 0.04
+  },
+  "combo_tier": {
+   "files": [
+    "combo_tier_1.wav",
+    "combo_tier_2.wav",
+    "combo_tier_3.wav"
+   ],
+   "trim": 0.3,
+   "voices": 2,
+   "jitter": 0.01
+  },
+  "combo_break": {
+   "files": [
+    "combo_break_1.wav",
+    "combo_break_2.wav"
+   ],
+   "trim": 0.5,
+   "voices": 1,
+   "jitter": 0.03
+  },
+  "low_hp": {
+   "files": [
+    "low_hp_1.wav",
+    "low_hp_2.wav"
+   ],
+   "trim": 0.2,
+   "voices": 1,
+   "jitter": 0.0
+  },
+  "overdrive": {
+   "files": [
+    "overdrive_1.wav",
+    "overdrive_2.wav"
+   ],
+   "trim": 0.35,
+   "voices": 1,
+   "jitter": 0.005
+  },
+  "overdrive_vent": {
+   "files": [
+    "overdrive_vent_1.wav",
+    "overdrive_vent_2.wav"
+   ],
+   "trim": 0.28,
+   "voices": 1,
+   "jitter": 0.02
+  },
+  "power_down": {
+   "files": [
+    "power_down_1.wav",
+    "power_down_2.wav"
+   ],
+   "trim": 0.3,
+   "voices": 1,
+   "jitter": 0.005
+  },
+  "sector_start": {
+   "files": [
+    "sector_start_1.wav"
+   ],
+   "trim": 0.3,
+   "voices": 1,
+   "jitter": 0.0
+  }
+ }
+}

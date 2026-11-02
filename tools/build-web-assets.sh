@@ -7,7 +7,11 @@
 #     bosses/<n>@1x.webp   trimmed boss art (alpha), @2x up to 1600px wide
 #     ships/<id>@1x.webp   trimmed ship art (alpha), @2x up to 700px wide
 #     fx/explosions.webp   explosion sprite sheet (alpha, full resolution)
-#     audio/*.mp3          music tracks (VBR ~190 kbps) + compact mono SFX wavs
+#     audio/*.mp3          music tracks (VBR ~130 kbps) + compact mono SFX wavs
+#     audio/sfx-bank.mp3   sample bank: every gameplay / UI cue's round-robin variants in one MP3 (+ .json cue table)
+#     audio/vo-bank.mp3    announcer bank: the radio lines (+ .json cue table); both built by tools/audio/pack-bank.mjs
+#     audio/galactic_high_score_N_nodrums.mp3 / _drums.mp3   adaptive-music layers (drumless stereo ~130 kbps, drums mono
+#                          ~60 kbps) from the Demucs stems (tools/audio/split_stems.sh); manifest "musicLayers"
 #     manifest.js          window.TYPER_ASSET_MANIFEST = {...} (trim boxes, sizes)
 #     manifest.json        same data for tooling
 #   assets/ui/og-card.jpg  1200x630 social card rendered from assets/screenshot.png (skipped when missing)
@@ -23,7 +27,9 @@
 # generated vistas (tools/art/gen_vista.py) for sectors 6 / 8 / 9.
 #
 # The original PNG/WAV masters stay untouched where they are (the native wrappers
-# and this script both read them). Requires: magick (ImageMagick 7), cwebp, ffmpeg.
+# and this script both read them). Requires: magick (ImageMagick 7), cwebp, ffmpeg, node.
+# The SFX / VO WAV masters under assets/audio/sfx and assets/audio/vo come from tools/audio/gen_sfx.py and gen_vo.py
+# (run those first when a recipe or a line changes; this script only packs what is there).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -207,17 +213,35 @@ MANIFEST_ENTRIES+=("\"fx/drones\":{\"src\":\"./assets/opt/fx/drones.webp\",\"w\"
 echo "fx/drones -> $(du -h "$OUT/fx/drones.webp" | cut -f1)"
 
 # ---------------------------------------------------------------- audio
+# Full mixes at -q:a 5 (~130 kbps VBR; -q:a 2 / ~190 kbps until the SOUND pass, lowered to make room for the layers
+# under the 45 MB assets/opt budget; the LAME lowpass moves from ~18.5 to ~16.5 kHz, checked on spectrograms).
 MUSIC=()
+LAYERS=()
+STEMS="$SRC/audio/stems/htdemucs"
 for n in 1 2 3 4 5 6; do
   in="$SRC/audio/Galactic_High_Score_${n}.wav"
   out="$OUT/audio/galactic_high_score_${n}.mp3"
   if encoding; then
-    ffmpeg -v error -y -i "$in" -codec:a libmp3lame -q:a 2 -ar 44100 -ac 2 -map_metadata -1 "$out"
+    ffmpeg -v error -y -i "$in" -codec:a libmp3lame -q:a 5 -ar 44100 -ac 2 -map_metadata -1 "$out"
   else
     require_file "$out"
   fi
   MUSIC+=("\"./assets/opt/audio/galactic_high_score_${n}.mp3\"")
   echo "music $n -> $(du -h "$out" | cut -f1)"
+  # Adaptive layers: base = the drumless stem (stereo, -q:a 5, heard alone at calm moments), top = the drums stem (mono,
+  # -q:a 7: 95-99 % of the drums' energy is mid, measured on the stems). Encoded from assets/audio/stems when present, otherwise the committed
+  # outputs are kept (the stems are not in git: tools/audio/split_stems.sh regenerates them).
+  nd="$STEMS/Galactic_High_Score_${n}/no_drums.wav"; dr="$STEMS/Galactic_High_Score_${n}/drums.wav"
+  base="$OUT/audio/galactic_high_score_${n}_nodrums.mp3"; top="$OUT/audio/galactic_high_score_${n}_drums.mp3"
+  if encoding && [[ -f "$nd" && -f "$dr" ]]; then
+    ffmpeg -v error -y -i "$nd" -codec:a libmp3lame -q:a 5 -ar 44100 -ac 2 -map_metadata -1 "$base"
+    ffmpeg -v error -y -i "$dr" -codec:a libmp3lame -q:a 7 -ar 44100 -ac 1 -map_metadata -1 "$top"
+  else
+    [[ -f "$base" && -f "$top" ]] || { echo "music layers $n: no stems in $STEMS and no committed $base (run tools/audio/split_stems.sh)" >&2; exit 1; }
+    encoding && echo "music layers $n: stems absent, keeping the committed files"
+  fi
+  LAYERS+=("{\"base\":\"./assets/opt/audio/galactic_high_score_${n}_nodrums.mp3\",\"top\":\"./assets/opt/audio/galactic_high_score_${n}_drums.mp3\"}")
+  echo "layers $n -> $(du -h "$base" | cut -f1) + $(du -h "$top" | cut -f1)"
 done
 # One-shot SFX stay PCM (no decoder latency / loop padding), but mono + 22.05 kHz.
 if encoding; then
@@ -227,11 +251,27 @@ else
   require_file "$OUT/audio/laser.wav"; require_file "$OUT/audio/bigexplosion.wav"
 fi
 echo "sfx -> $(du -h "$OUT/audio/laser.wav" | cut -f1) / $(du -h "$OUT/audio/bigexplosion.wav" | cut -f1)"
+# Sample banks (SOUND pass): one MP3 sprite sheet + cue table per set (tools/audio/pack-bank.mjs over the generated
+# WAV masters). The manifest carries each table as "sfxBank" / "voBank"; sfx.js decodes a bank once and plays cues as
+# buffer-source voices, falling back to its synths when a bank is absent (older manifests keep working).
+BANKS=()
+pack_bank() {   # pack_bank <manifestKey> <wavDir> <outBaseWithoutExt> <lameQ>
+  local key="$1" dir="$2" base="$3" q="$4"
+  if encoding; then
+    [[ -f "$dir/index.json" ]] || { echo "sample bank: missing $dir/index.json (run tools/audio/gen_sfx.py / gen_vo.py)" >&2; exit 1; }
+    node "$ROOT/tools/audio/pack-bank.mjs" --dir "$dir" --out "$base" --q "$q"
+  else
+    require_file "$base.mp3"; require_file "$base.json"
+  fi
+  BANKS+=("\"$key\":$(cat "$base.json")")
+}
+pack_bank sfxBank "$SRC/audio/sfx" "$OUT/audio/sfx-bank" 4
+pack_bank voBank  "$SRC/audio/vo"  "$OUT/audio/vo-bank"  5
 
 # ---------------------------------------------------------------- manifest
 VERSION="$(date -u +%Y%m%d%H%M)"
 {
-  printf '{"version":"%s","music":[%s],"sfx":{"laser":"./assets/opt/audio/laser.wav","bigExplosion":"./assets/opt/audio/bigexplosion.wav"},"images":{' "$VERSION" "$(IFS=,; echo "${MUSIC[*]}")"
+  printf '{"version":"%s","music":[%s],"musicLayers":[%s],"sfx":{"laser":"./assets/opt/audio/laser.wav","bigExplosion":"./assets/opt/audio/bigexplosion.wav"},%s,"images":{' "$VERSION" "$(IFS=,; echo "${MUSIC[*]}")" "$(IFS=,; echo "${LAYERS[*]}")" "$(IFS=,; echo "${BANKS[*]}")"
   first=1
   for e in "${MANIFEST_ENTRIES[@]}"; do
     if [[ $first -eq 1 ]]; then first=0; else printf ','; fi
@@ -250,10 +290,13 @@ for(const [k,e] of Object.entries(j.images)){
   check(e.src); check(e.x1&&e.x1.src); check(e.x2&&e.x2.src); check(e.fallback);
 }
 for(const m of j.music) check(m); for(const s of Object.values(j.sfx)) check(s);
+if(!Array.isArray(j.musicLayers)||j.musicLayers.length!==j.music.length){ console.error("manifest: musicLayers must pair every music track"); process.exit(1); }
+for(const L of j.musicLayers){ check(L.base); check(L.top); }
+for(const k of ["sfxBank","voBank"]){ const b=j[k]; if(!b||!b.src||!b.cues||!Object.keys(b.cues).length){ console.error("manifest: "+k+" missing or empty"); process.exit(1);} check(b.src); }
 if(missing.length){ console.error("manifest references missing files:\n  "+missing.join("\n  ")); process.exit(1); }
 fs.writeFileSync(p,JSON.stringify(j,null,1));
 fs.writeFileSync(p.replace(/\.json$/,".js"),"// generated by tools/build-web-assets.sh — do not edit by hand\nwindow.TYPER_ASSET_MANIFEST = "+JSON.stringify(j)+";\n");
-console.log("manifest ok:",Object.keys(j.images).length,"images, version",j.version)' "$OUT/manifest.json" "$ROOT"
+console.log("manifest ok:",Object.keys(j.images).length,"images,",Object.keys(j.sfxBank.cues).length,"sfx cues,",Object.keys(j.voBank.cues).length,"vo lines, version",j.version)' "$OUT/manifest.json" "$ROOT"
 
 build_og_card
 

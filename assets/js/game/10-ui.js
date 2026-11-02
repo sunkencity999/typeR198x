@@ -990,6 +990,7 @@ Object.assign(Game.prototype, {
       music: $("setMusic"), musicOut: $("setMusicOut"),
       sfx: $("setSfx"), sfxOut: $("setSfxOut"),
       mute: $("setMute"), crt: $("setCRT"),
+      announcer: $("setAnnouncer"),   // SOUND
       crtInt: $("setCRTIntensity"), crtIntOut: $("setCRTIntensityOut"),
       motion: $("setMotion"), fs2: $("btnFullscreen2"),
       share: $("setShareScores"),   // LEADERBOARD (54-leaderboard.js): opt-in toggle; its row stays hidden while the board is off
@@ -1007,6 +1008,7 @@ Object.assign(Game.prototype, {
       s.sfx.addEventListener("change", () => this.uiTick("tick"));
     }
     if (s.mute) s.mute.addEventListener("change", () => this.setSetting("muted", !!s.mute.checked));
+    if (s.announcer) s.announcer.addEventListener("change", () => this.setSetting("announcer", !!s.announcer.checked));   // SOUND
     if (s.crt) s.crt.addEventListener("change", () => this.setSetting("crt", !!s.crt.checked));
     if (s.crtInt) s.crtInt.addEventListener("input", () => this.setSetting("crtIntensity", clamp(pct(s.crtInt), 0.25, 1)));
     if (s.motion) {
@@ -1072,6 +1074,7 @@ Object.assign(Game.prototype, {
       if (typeof sfx.setMusicVolume === "function") sfx.setMusicVolume(st.musicVolume ?? 0.7);
       if (typeof sfx.setSfxVolume === "function") sfx.setSfxVolume(st.sfxVolume ?? 0.8);
       sfx.setMuted(!!st.muted);
+      if (typeof sfx.setAnnouncer === "function") sfx.setAnnouncer(st.announcer !== false);   // SOUND
     }
     if (this.btnMute) this.btnMute.setAttribute("aria-pressed", st.muted ? "false" : "true");
     if (this.btnCRT) this.btnCRT.setAttribute("aria-pressed", st.crt ? "true" : "false");
@@ -1095,6 +1098,7 @@ Object.assign(Game.prototype, {
     setRange(s.sfx, s.sfxOut, st.sfxVolume ?? 0.8);
     setRange(s.crtInt, s.crtIntOut, st.crtIntensity ?? 0.75);
     if (s.mute) s.mute.checked = !!st.muted;
+    if (s.announcer) s.announcer.checked = st.announcer !== false;   // SOUND
     if (s.crt) s.crt.checked = !!st.crt;
     if (s.crtInt) s.crtInt.disabled = !st.crt;
     if (s.motion) {

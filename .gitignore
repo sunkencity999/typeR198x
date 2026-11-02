@@ -11,3 +11,5 @@ api/*.sqlite-shm
 api/.ht_leaderboard.sqlite*
 api/*.salt
 tools/leaderboard/wrangler.toml
+assets/audio/stems/
+tools/audio/preview_sfx.png

@@ -98,6 +98,7 @@ const defaultSave = () => ({
   keyboardHintSeen: false,
   settings: { muted: false, crt: true, musicVolume: 0.7, sfxVolume: 0.8, crtIntensity: 0.75, reduceMotion: null, renderScaleCap: 2,
     shareDailyScores: false,   // LEADERBOARD (54-leaderboard.js): opt-in only
+    announcer: true,           // SOUND: radio announcer lines
     // ACCESS (12-access.js): plate colours neon | contrast, plate font mono | dyslexic, plate glyph scale 1..1.3, camera shake
     // 0..1 (independent of reduceMotion), reduce flashes, keyboard layout auto | qwerty | azerty | qwertz | dvorak | colemak
     plateColor: "neon", plateFont: "mono", plateScale: 1, shakeAmount: 1, reduceFlashes: false, keyboardLayout: "auto" },
@@ -197,6 +198,7 @@ function normaliseSettings(s) {
     reduceMotion: s.reduceMotion === true ? true : s.reduceMotion === false ? false : null,
     renderScaleCap: num(s.renderScaleCap, 2, 0.5, 2),
     shareDailyScores: s.shareDailyScores === true,   // LEADERBOARD: opt-in only; anything but a stored true is off
+    announcer: s.announcer !== false,   // SOUND: radio announcer lines, default on
     // ACCESS (12-access.js): enumerations fall back to their default, numbers are clamped, plateScale snaps to .1 steps
     plateColor: s.plateColor === "contrast" ? "contrast" : "neon",
     plateFont: s.plateFont === "dyslexic" ? "dyslexic" : "mono",

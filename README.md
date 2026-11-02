@@ -433,19 +433,62 @@ fallbacks, sprite maths, prefetch, gc, native-UA bare paths, synthesised manifes
 
 ## Music and sound
 
-Everything audio lives in `assets/audio/sfx.js`. The six *Galactic High Score* tracks are **streamed
-MP3s** (`assets/opt/audio`): two `HTMLMediaElement`s per track feed the Web Audio bus and hand over at a
-measured loop point with a 0.6 s equal-power crossfade, so a sector's music never stops or re-downloads.
-`MUSIC_FOR_LEVEL = [0,5,2,2,1,1,4,4,3,3]` keeps the one duplicate song (tracks 1 and 6) inside the
-sector 1-2 tier; the same track across adjacent sectors is left running, a tier change crossfades.
-`MUSIC_LOOP` is measured, not guessed: `tools/measure-loops.sh [audio-dir]` (ffmpeg + node, about a
-minute) finds the sustained body of each track, beat-aligns the loop end and prints a paste-ready table;
-the method is summarised above the constant and in the harness README.
+Everything audio lives in `assets/audio/sfx.js` (`window.SFX`); `assets/js/game/88-audio-director.js` feeds it from
+the game hooks. The generators, packers and the regeneration steps are in [tools/audio/README.md](./tools/audio/README.md).
 
-The two one-shots (`laser.wav`, `bigexplosion.wav`) are decoded buffers; every other cue is synthesised.
-Audio unlocks on the first gesture (Start/Continue), mute is a master gain so unmuting resumes mid-track,
-pause applies -6 dB and a low-pass, hidden tabs pause the transport. Defaults: music 0.7, SFX 0.8.
-`tools/playtest/probes/audio-contract.mjs` and `audio-lifecycle.mjs` are the acceptance sets.
+**Music.** The six *Galactic High Score* tracks are MP3s in `assets/opt/audio` (`-q:a 5`, ~130 kbps, since the SOUND
+pass; ~190 kbps before). `MUSIC_FOR_LEVEL = [0,5,2,2,1,1,4,4,3,3]` keeps the one duplicate song (tracks 1 and 6) inside
+the sector 1-2 tier; the same track across adjacent sectors is left running, a tier change crossfades. `MUSIC_LOOP` is
+measured, not guessed: `tools/measure-loops.sh [audio-dir]` (ffmpeg + node, about a minute) finds the sustained body of
+each track, beat-aligns the loop end and prints a paste-ready table; the method is summarised above the constant and in
+the harness README. Two transports share the bus and the state machine (wave / boss / finale / end / pause, the
+low-pass, `duckMusic`, the boss pulse):
+
+* **Streamed** (`musicPath() === "stream"`): two `HTMLMediaElement`s per track hand over at the loop point with a
+  0.6 s equal-power crossfade, so a sector's music never stops or re-downloads. This is the path for touch-first
+  devices, the native shells, `file://`, `navigator.deviceMemory < 4`, any decode failure, and for a track whose layers
+  are not decoded yet.
+* **Adaptive layers** (`"layers"`, desktop Web Audio): the track plays as two decoded `AudioBufferSourceNode`s looping
+  sample-accurately over the body `[loopStart, loopEnd - 0.6)` (a 12 ms splice makes the wrap seamless): the
+  **drumless stem** (stereo, `-q:a 5`) at unity and the **drums stem** (mono, `-q:a 7`; 95-99 % of the drums' energy is
+  mid, measured) at `setIntensity(v)`, so calm moments lose the drums and combos, Overdrive, a low hull and the boss
+  bring them back. The stems come from Demucs (`htdemucs`, `tools/audio/split_stems.sh`; not committed), the encodes
+  are `manifest.musicLayers[i] = {base, top}`. Only one track's pair is resident: `prefetchMusic(next)` fetches the next
+  sector's bytes a quarter of the way in, the level clear releases the old pair and decodes the next one behind the
+  results card (160-180 ms for both on an M4), so sectors 2-10 start on the layers; sector 1 starts streaming and the
+  pair takes over at its first loop boundary (the element fades over the same 0.6 s). Measured resident decoded audio:
+  56-67 MB for a pair plus 10.4 MB of sample banks (budget ~90 MB). A streaming element is never hijacked mid-play
+  (the two clocks cannot be aligned closer than the element's jitter); the handover happens only at a loop boundary or
+  when nothing carries the track (Try Again / Next resume the parked position). `88-audio-director.js` eases the
+  intensity target (wave phase .12-.55, approach .7, boss .75 + .25 x hull lost, + .08 per combo tier up to .3, + .2
+  Overdrive, + .15 low hull) at <= 1.4/s on the tick hook, so no key press ever jumps it. Debug seams:
+  `musicLayerInfo()`, `seekMusic(t)`, `setLayersEnabled(on)`.
+
+**Sound.** Cues play **round-robin samples** from two MP3 sprite banks (`assets/opt/audio/sfx-bank.mp3`, 462 KB /
+44.6 s: 31 cues x 1-4 variants rendered by `tools/audio/gen_sfx.py`; `vo-bank.mp3`, 96 KB: 14 announcer lines from
+macOS `say` through a radio chain, `gen_vo.py`), decoded at unlock inside the gesture (28 + 6 ms) and never holding
+Start past `PRIME_TIMEOUT_MS`. `_sample(cue)` picks a variant (never the same twice in a row), applies the table trim
+and a +-1-5 % `playbackRate` jitter, and plays through a pool with per-cue caps and a 32-voice ceiling (oldest voice
+stolen with a 10 ms fade). Every cue keeps its synth as the fallback (bank missing or still decoding, legacy manifest,
+native / `file://`) or as a parametric layer (the tier arpeggio under the combo sparkle, the siren, the surge riser
+under its noise texture). The two WAV one-shots stay: `laser.wav` is the fallback laser, `bigexplosion.wav` the boss
+kill under the sampled crack. Every correct key is the laser pitched up across the word plus a **typing tick that climbs
+one octave** across the word (`0.75 x 2^progress` on the tick sample) and resolves on the last glyph with a
+root / fifth / octave chord; a miss is the dull knock. **Mix bus:** master `DynamicsCompressor` -12 dB / knee 20 / 3:1 /
+5 ms / 150 ms into a soft-clip `WaveShaper` (bit-exact below .6, tanh shoulder to a .88 ceiling: five onsets on one
+instant outrun a 5 ms attack); a fast sidechain on the music (`musicDuck`, musicGain -> musicDuck -> master) dips -3 dB for medium
+explosions, boss hits and hull damage and -4 dB for large explosions, the boss kill and announcer lines (20 ms in,
+.35 s hold, .25 s out); the long stinger dips still use `duckMusic()` on `musicGain`. **Announcer** (`say(line)`, the
+*Announcer* setting, `settings.announcer`, default on): Warning, Boss incoming, Sector clear, Signal lost, Perfect,
+Overdrive, New record, Rank S/A/B/C/D, Ready, Go, through `voGain -> sfxGain` (SFX volume and mute apply), one line at a
+time with a priority queue, fired from the existing cues (`bossWarning`, `bossSiren`, `sectorStart`, `lock("go")`,
+`overdrive`, `waveClear` on a perfect wave, `fanfare`, `rankStamp(rank)`; the director stores the results' rank and
+new-high flag for the stamp).
+
+Audio unlocks on the first gesture (Start/Continue), mute is a master gain so unmuting resumes mid-track, pause applies
+-6 dB and a low-pass, hidden tabs suspend the context (and pause a streaming element). Defaults: music 0.7, SFX 0.8,
+announcer on. `tools/playtest/probes/audio-contract.mjs`, `audio-lifecycle.mjs` (both path-aware) and
+`audio-sound.mjs` (pool, climb, sidechain, announcer, layers, intensity) are the acceptance sets.
 
 ## Budgets (measured)
 
@@ -456,7 +499,9 @@ unchanged because the training update adds no art:
 | Metric | Measured | Budget |
 | --- | --- | --- |
 | Non-media bytes finished before the first keystroke | 2.11 MB at DPR 1, 2.57 MB at DPR 2 (1.94 / 2.39 for `20261024a`); 2.34 MB for the `fixture-legacy-inboss` matrix row, which loads a boss before its first keystroke | <= 2.5 MB at DPR 1, <= 2.75 MB at DPR 2 and for `fixture-legacy-inboss` (CONTRACT 8.y W2, 8.z Z11) |
-| `assets/opt` (everything the web build can download) | 29 MB | <= 35 MB whole game |
+| `assets/opt` (everything the web build can download) | 42.96 MB (29 MB before the SOUND pass: +0.56 MB sample banks, +18.2 MB music layers, -5.9 MB music MP3s at `-q:a 5`) | <= 45 MB whole game (SOUND pass budget; was 35) |
+| Decoded audio resident (one music layer pair + the two sample banks) | 56-67 MB (track 1: 66.4, track 6: 66.6; banks 10.4 MB; peak equals resident, the old pair is released before the next decodes) | <= ~90 MB |
+| Audio decode at unlock / per sector | sample banks 28 + 6 ms inside the unlock gesture (never gating Start past 1.5 s); a music layer pair 160-180 ms behind the results card | Start unaffected (`startToPlayingMs` 67-136 ms in the probes) |
 | Frame rate (menu, gameplay, boss, finale windows) | 60 fps at DPR 1 and DPR 2 | >= 58 |
 | `render()` wall time | 3.7 ms max at DPR 1, 8.1 ms at DPR 2 | <= 16 ms |
 | `shadowBlur` sets per frame in steady state | 0 | <= 2 |
