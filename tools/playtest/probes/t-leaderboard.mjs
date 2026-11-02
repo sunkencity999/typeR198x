@@ -143,10 +143,11 @@ const post = mock.posts[before];
 const body = post && post.body;
 const r = iii1.debug.run;
 const sector24 = await P.g(() => ({ plan: modesDailySectorFor(20261024, 5), result: window.game._modes && window.game._modes.result && window.game._modes.result.sector }));
+const shellTok = await P.g(() => (typeof ASSET_VERSION === "string" ? ASSET_VERSION : null));
 const schemaOk = body && Object.keys(body).sort().join() === "acc,day,name,rank,rating,score,sector,ship,speed,token,version" &&
   body.day === "2026-10-24" && body.token === tokenA && body.name === "MODES" && Number.isInteger(body.rating) && body.rating > 0 && body.rating <= 3000 &&
   Number.isInteger(body.speed) && body.speed > 0 && body.speed <= 300 && typeof body.acc === "number" && body.acc >= 0 && body.acc <= 100 && Math.abs(body.rating - Math.round(body.speed * Math.pow(body.acc / 100, 2))) <= 1 &&
-  Number.isInteger(body.score) && body.score >= 0 && body.sector === sector24.plan && body.sector === sector24.result && body.ship === "coconut" && (body.rank === null || /^[SABCD]$/.test(body.rank)) && body.version === "20261031a";
+  Number.isInteger(body.score) && body.score >= 0 && body.sector === sector24.plan && body.sector === sector24.result && body.ship === "coconut" && (body.rank === null || /^[SABCD]$/.test(body.rank)) && body.version === shellTok;   // the shell token of this build (bumped per release)
 P.check("(iii) exactly one POST for the counted sortie: JSON body {day, token, name, rating, speed, acc, score, sector, ship, rank, version} with the contract's types and bounds, rating = round(speed x (acc/100)^2), Content-Type application/json",
   mock.posts.length === before + 1 && schemaOk && /application\/json/.test(post.headers["content-type"] || "") && post.url === EP, { body, sector24, ct: post && post.headers["content-type"], url: post && post.url });
 P.check("(iii) the results board renders the top rows with the pilot's row 3 highlighted (is-you, aria-current) and 'You: #3 of 12'; run status posted; the board GET carried the token",

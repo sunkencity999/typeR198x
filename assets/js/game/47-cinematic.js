@@ -1,7 +1,8 @@
 // Type-R 198X — CINEMATIC (presentation pass 2026-11): framing for the big moments, on top of the banner system.
 // Methods are mixed into Game.prototype; load order is defined in index.html (after 45-feedback.js). Draws in the
 // renderOverlay hook (unshaken, over the banners) and sets game.cameraZoom, which render() applies around the screen
-// centre before the world layers (zoom >= 1 only, so the shake margin stays covered).
+// centre to the WORLD layers only (L1-L4: backdrop, stars, mid strip, near parallax, storm; zoom >= 1 so the shake margin
+// stays covered). The play layer is never scaled: plates and the ship keep their geometry, the world rushes in behind.
 //
 // 1. Camera. Sector entry drops out of warp: zoom 1.08 -> 1 over the sector card (with the star streaks). The boss
 //    warning punches 1 -> 1.035 at the title slam and settles by 1.2 s; the boss kill punches 1.05 and settles in .5 s.

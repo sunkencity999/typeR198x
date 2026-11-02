@@ -1367,15 +1367,18 @@ Object.assign(Game.prototype, {
     ctx.save();
     ctx.translate(sx, sy);
     if (rot) { ctx.translate(this.w / 2, this.h / 2); ctx.rotate(rot); ctx.translate(-this.w / 2, -this.h / 2); }
-    const zoom = (typeof this.cameraZoom === "number" && this.cameraZoom > 1) ? this.cameraZoom : 1;   // CINEMATIC (47-cinematic.js): >= 1 only, the shake margin stays covered
-    if (zoom !== 1) { ctx.translate(this.w / 2, this.h / 2); ctx.scale(zoom, zoom); ctx.translate(-this.w / 2, -this.h / 2); }
-
+    // CINEMATIC (47-cinematic.js): the camera zoom (>= 1 only, the shake margin stays covered) applies to the WORLD layers
+    // L1-L4 only: the play layer (plates, ship, boss, effects) stays pixel-exact, so the drop-in reads as the world rushing
+    // in behind the cockpit and every plate-sampling probe keeps its geometry.
+    const zoom = (typeof this.cameraZoom === "number" && this.cameraZoom > 1) ? this.cameraZoom : 1;
+    if (zoom !== 1) { ctx.save(); ctx.translate(this.w / 2, this.h / 2); ctx.scale(zoom, zoom); ctx.translate(-this.w / 2, -this.h / 2); }
     this.drawBackground(ctx);                                  // L1
     this.drawStars(ctx);                                       // L2
     if (typeof this.drawMidLayer === "function") this.drawMidLayer(ctx);          // L2b (AMBIENT): mid-depth silhouettes
     this.drawForegroundParallax(ctx);                          // L3
     if (typeof this.drawAmbientFront === "function") this.drawAmbientFront(ctx);  // L3b (AMBIENT): explosion light, weather, bolts
     this.drawThemeFx(ctx);                                     // L4 (storm tint / lightning)
+    if (zoom !== 1) ctx.restore();
     this.drawLaneRails(ctx);                                   // L5
     const boss = (this.inBoss && this.boss) ? this.boss : null;
     if (boss) this.drawBossArt(ctx, boss);                     // L6

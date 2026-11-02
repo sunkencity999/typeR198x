@@ -4,6 +4,9 @@ import { openProbe, sleep, harnessFlags } from "./_lib.mjs";
 
 const argDpr = Number((process.argv.find((a, i, arr) => arr[i - 1] === "--dpr")) || 1);
 const P = await openProbe("d3-dpr" + argDpr, { dpr: argDpr });
+// AMBIENT / DRONES (2026-11) animate the pixels under and around the plates (explosion light splashes, blinking lights,
+// the mid strip, drone bodies and tethers); this probe samples single pixels, so both layers are frozen for the whole run.
+await P.g(() => { window.TypeRHarness = Object.assign(window.TypeRHarness || {}, { ambient: false, drones: false }); });
 const page = P.page;
 
 // shadowBlur sets inside render() per frame (bakes in idle callbacks are counted separately).
