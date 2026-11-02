@@ -356,9 +356,9 @@ Object.assign(Game.prototype, {
         g.addColorStop(0, PALETTE.rgba(b.color === "danger" ? "danger" : "cyan", 0.9));
         g.addColorStop(0.55, PALETTE.rgba("magenta", 0.85));
         g.addColorStop(1, PALETTE.rgba("text", 0.95));
-        ctx.globalAlpha = s.a * 0.8;
+        ctx.globalAlpha = s.a * 0.85;
         ctx.strokeStyle = g;
-        ctx.lineWidth = b.width * 1.25;
+        ctx.lineWidth = b.width * 1.5;
         ctx.beginPath(); ctx.moveTo(s.x0, s.y0); ctx.lineTo(s.x1, s.y1); ctx.stroke();
       }
     }
@@ -368,9 +368,9 @@ Object.assign(Game.prototype, {
       ctx.lineDashOffset = -((t * 320) % 18);
       for (const b of list) {
         const s = seg(b); if (!s) continue;
-        ctx.globalAlpha = s.a * 0.4;
+        ctx.globalAlpha = s.a * (tier >= 4 ? 0.55 : 0.4);
         ctx.strokeStyle = tier >= 4 ? `hsl(${Math.round((t * 140 + b.x) % 360)} 100% 68%)` : PALETTE.rgba("cyan", 0.9);
-        ctx.lineWidth = b.width * 2.8;
+        ctx.lineWidth = b.width * (tier >= 4 ? 3.4 : 2.8);
         ctx.beginPath(); ctx.moveTo(s.x0, s.y0); ctx.lineTo(s.x1, s.y1); ctx.stroke();
       }
       ctx.setLineDash([]);
