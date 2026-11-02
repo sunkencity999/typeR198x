@@ -68,7 +68,7 @@ the change, 2.34 after).
 node tools/deploy/deploy.mjs --dry-run --user <ftp-user>
 ```
 
-Prints the local set in upload order (about 200 files, 199 for 20261025a as for 20261024b and 20261024a, ~370 MB listed; on a real run the
+Prints the local set in upload order (about 230 files for 20261101a: the AAA pass adds `sw.js`, `site.webmanifest`, `assets/ui/icons/`, the dyslexic font, the drone and mid-strip WebPs, the audio banks and music layers, and `api/` (the leaderboard backend, uploaded even while the client is off); 199 for 20261025a as for 20261024b and 20261024a, ~370 MB listed; on a real run the
 ~341 MB of PNG/WAV masters are skipped when the remote size matches) and exits without connecting, so no password
 is needed. Check that `index.html` is last, `assets/opt/manifest.js` just before it, the other pages (`info.html`,
 `privacy-policy.html`, `privacy.html`, `support.html`) just before that and after `style.css`, and that

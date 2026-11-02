@@ -299,18 +299,22 @@ Module map, in `index.html` load order:
 | `assets/js/game/40-combat.js` | Spawning, lanes, waves (a Z5 cap ends a paced wave only with plates alive; a floor wave's table cap always ends it) and approach, kills, powerups, damage, `update(dt)` |
 | `assets/js/game/42-pacing.js` | Pace controller (`paceMul` per wave from MEASURE's speed and acquisition time into `waveTuning`), floor waves (paceMul 1.0, no carry) on the table's wave rule, perfect wave by quota, computed wave caps, timed-out waves (the escaping plates) and their quota carry, hull carry from sector 4, the Cadet assist and the `diff()` row (PACE) |
 | `assets/js/game/45-feedback.js` | Banner system (sector, wave, boss intro/clear, callouts) and score floaters |
+| `assets/js/game/47-cinematic.js` | CINEMATIC: camera zoom (`game.cameraZoom`, sector drop-in / boss slam / kill punch), the sector card's location + telemetry subtitles and the boss warning's hazard chevrons, THREAT readout and red edge pulse in the letterbox bar, the `#cineWipe` scanline sweep between screens, the title hero power-on |
 | `assets/js/game/50-boss.js` | Boss v2: phases, minions, intro and finale; Counter-Signal (surge cadence, `surgeWindow` from the pilot's speed, telegraph, fail reset, counter, DOM charge bar) (ARCADE) |
 | `assets/js/game/52-modes.js` | Daily Sortie (date seed, per-wave mulberry32 through `this.rand()`, medal, streak, share line), Endless Drift and Drill streams (`waveTuning`, own text picker), the title deck, the mode results screen, `save.modes` (MODES) |
 | `assets/js/game/54-leaderboard.js` | LEADERBOARD: the optional public daily-sortie board (`LEADERBOARD.endpoint`, empty = off: no UI, no network); opt-in `settings.shareDailyScores`, anonymous `save.playerToken`, POST on `modesRunEnd` with one retry, "Today's board" under the sortie card (wraps `renderModeResults`), the menu teaser (`menuRender`, one GET per 5 min), `TypeRHarness.leaderboardEndpoint` for probes |
 | `assets/js/game/60-hud.js` | DOM HUD with write-on-change diffing: score, combo and multiplier, HP meter, chips, boss meter |
 | `assets/js/game/70-render.js` | `resizeCanvas`/`renderScale`, plates, capsules and rails, dying and escaping plates, boss art (Counter-Signal glow) and console slab, warp-in, storms, parallax, stars, `render()` in layer order |
 | `assets/js/game/72-atmos.js` | ATMOS: parallax tiles baked once per sector into offscreen canvases with a seam-dissolve edge (the masters do not wrap), a per-sector multiply tint + saturation pull + lane haze, and a hue shift for sectors 6 / 8 / 9 that share art with 3 / 4 / 5 (`ATMOS_GRADES`) |
+| `assets/js/game/73-ambient.js` | AMBIENT: mid-depth silhouette strip (`mid/*`, `AMBIENT_MID_FOR_LEVEL`), blinking emissives derived from the baked tiles with blend modes only (two phase groups + dropouts, half resolution), per-sector weather (rain / ash / embers / motes), explosion light splashes under the plates, visible lightning bolts on the storm flash; `TypeRHarness.ambient = false` freezes it |
+| `assets/js/game/74-drones.js` | DRONES: the plate bodies (scout / interceptor / hauler / pod from `fx/drones`, hull + accent bands baked per sector accent, idle bob / roll / flicker, tether, lime lock brackets, wrecks after kills and leaks, attract ghosts too); drawn before every plate in `drawEnemies` / `drawAttract`; `TypeRHarness.drones = false` freezes it |
 | `assets/js/game/75-fx-draw.js` | Ship, beams, rings/bolts/debris, particles, overlays, vignette, active-target redraw |
 | `assets/js/game/76-bloom.js` | BLOOM: the frame so far drawn at quarter resolution, multiplied by itself twice (luminance^3 threshold), blurred by a 1/16 round trip and added back at `BLOOM.alpha`; two offscreen composite sets per frame, self-disables when its own cost stays above `BLOOM.budgetMs` |
 | `assets/js/game/78-bossfx.js` | BOSSFX: overrides `drawBossArt` / `drawBossDissolve` with roll + breathing + phase punch, an emissive pulse extracted from the sprite (luminance^3, no pixel reads), three damage states baked per fight (seeded scorch blotches, cracks, char) with a crossfade, intro slide ghosts, sparks and smoke from the tick hook (`BOSSFX`) |
 | `assets/js/game/80-fx.js` | Effects clock: trauma camera and `shakeOffset`, hit-stop/slow-mo, flash channels, `onKeyFx`/`onKillFx`, ambient step |
 | `assets/js/game/82-overdrive.js` | Overdrive: burst meter relative to the pilot's speed (MEASURE's intervals), the shield-ring arc, white-hot beams / plume, +25 % on kill / boss-letter / segment score, vent / slow exit, card note, `pilotWpm()` (ARCADE) |
 | `assets/js/game/85-attract.js` | Attract mode on the title screen: ghost plates from `LEVELS[0].words`, selected-ship cruise, 20 fps drift after 90 s idle (`startAttract`/`stopAttract`/`updateAttract`/`drawAttract`) |
+| `assets/js/game/88-audio-director.js` | SOUND: the announcer feed from the results / wave hooks and the eased music intensity for `sfx.setIntensity` (waves .35-.55, approach .7, boss .75 + hull lost, combo tier, Overdrive, low hull) |
 | `assets/js/99-boot.js` | `const game = new Game(); window.game = game; window.TypeRDebug / TypeRAssets` |
 
 Adding a file means adding its `<script>` tag at the right position with the same `?v=` token as its
@@ -388,7 +392,9 @@ The browser build never downloads the PNG/WAV masters. `tools/build-web-assets.s
 | `assets/opt/bosses/<n>@1x.webp`, `@2x` | Trimmed boss art (trim box and opaque box recorded in the manifest) |
 | `assets/opt/ships/<id>@1x.webp`, `@2x` | Trimmed ship art |
 | `assets/opt/fx/explosions.webp` | Explosion sprite sheet at full resolution |
-| `assets/opt/audio/*.mp3`, `laser.wav`, `bigexplosion.wav` | Music (VBR ~190 kbps) and the two compact mono one-shots |
+| `assets/opt/fx/drones.webp` | Enemy drone sheet (lossless WebP, 8 KB; `tools/art/gen_drones.py`), pinned and critical |
+| `assets/opt/mid/<id>@1x.webp`, `@2x` | The three mid-depth silhouette strips (`tools/art/gen_midlayer.py`), pinned |
+| `assets/opt/audio/*.mp3`, `laser.wav`, `bigexplosion.wav` | Music (`-q:a 5` MP3s, ~130 kbps) plus the `_nodrums` / `_drums` adaptive layers per track, the `sfx-bank.mp3` / `vo-bank.mp3` sample banks with their cue tables, and the two compact mono one-shots |
 | `assets/opt/manifest.js` / `manifest.json` | `window.TYPER_ASSET_MANIFEST` for the page, the same data for tooling, plus the ART version |
 | `assets/ui/og-card.jpg` | 1200x630 social card rendered from `assets/screenshot.png` (<= 250 KB) |
 
@@ -492,9 +498,9 @@ announcer on. `tools/playtest/probes/audio-contract.mjs`, `audio-lifecycle.mjs` 
 
 ## Budgets (measured)
 
-Numbers from the harness at a 1440x900 viewport. The byte, frame-rate and render rows were re-measured for release
-`20261024b` with `play.mjs --scenario all` at DPR 1 and 2 (training at the copy pass, `e15b279`); the art rows are
-unchanged because the training update adds no art:
+Numbers from the harness at a 1440x900 viewport. The frame-rate and render rows were re-measured for release
+`20261101a` (the AAA pass: drones, ambient layers, cinematic framing, HUD, sound) with `play.mjs --scenario all` and
+`probes/e2-budget.mjs`; the byte rows for `20261024b` / the SOUND pass as noted:
 
 | Metric | Measured | Budget |
 | --- | --- | --- |
@@ -502,8 +508,8 @@ unchanged because the training update adds no art:
 | `assets/opt` (everything the web build can download) | 42.96 MB (29 MB before the SOUND pass: +0.56 MB sample banks, +18.2 MB music layers, -5.9 MB music MP3s at `-q:a 5`) | <= 45 MB whole game (SOUND pass budget; was 35) |
 | Decoded audio resident (one music layer pair + the two sample banks) | 56-67 MB (track 1: 66.4, track 6: 66.6; banks 10.4 MB; peak equals resident, the old pair is released before the next decodes) | <= ~90 MB |
 | Audio decode at unlock / per sector | sample banks 28 + 6 ms inside the unlock gesture (never gating Start past 1.5 s); a music layer pair 160-180 ms behind the results card | Start unaffected (`startToPlayingMs` 67-136 ms in the probes) |
-| Frame rate (menu, gameplay, boss, finale windows) | 60 fps at DPR 1 and DPR 2 | >= 58 |
-| `render()` wall time | 3.7 ms max at DPR 1, 8.1 ms at DPR 2 | <= 16 ms |
+| Frame rate (menu, gameplay, boss, finale windows) | 60 fps at DPR 1 and DPR 2 (`20261101a`: all / mobile / reduced-motion 60-61; the native-UA scenario reads 30 on `fa06754` as well) | >= 58 |
+| `render()` wall time | 4.8 ms max at DPR 1 (`--scenario all`), 5.4 ms at renderScale 2 in the budget scene (14 plates with drones, a lock, chips, toast, banner; 5 composite sets) | <= 16 ms |
 | `shadowBlur` sets per frame in steady state | 0 | <= 2 |
 | Translucent full-frame fill alpha | .12 (storm tint .22 multiply is the documented exception) | <= .12 |
 | Decoded bitmap pixels at DPR 2, sector 1 | ~10.9 Mpx (~19 Mpx with the next sector prefetched) | <= 12 Mpx resident |
@@ -623,6 +629,9 @@ Full flag, field and fixture tables: [tools/playtest/README.md](./tools/playtest
 | --- | --- |
 | `tools/build-web-assets.sh` | Masters -> `assets/opt` + manifest (+ og-card); `MANIFEST_ONLY=1`, `OG_ONLY=1`, `SKIP_OG=1` |
 | `tools/art/gen_explosions.py` | Generates the explosion sheet master (neon pixel art, 21 rects in `EXPLOSION_FRAMES` order) + preview; see `tools/art/README.md` |
+| `tools/art/gen_drones.py <out_dir> [seed]` | Generates the enemy drone sheet master (`assets/sprites/drones.png`: hull band + accent band, four classes x three silhouettes x two frames) + preview; see `tools/art/README.md` |
+| `tools/art/gen_midlayer.py <out_dir> [seed]` | Generates the three mid-depth silhouette strips (`assets/midgrounds/{wreckage,gantry,asteroids}.png`, seamless, alpha) + preview |
+| `tools/audio/gen_sfx.py`, `gen_vo.py`, `pack-bank.mjs`, `split_stems.sh` | The SOUND generators: 82 round-robin SFX masters + `index.json`, the 14 radio announcer lines (macOS `say` through a radio chain), the MP3 sprite-bank packer, the Demucs two-stem split; see `tools/audio/README.md` |
 | `tools/art/pixelize.py` | Pixel-consistency pass for a sprite master (box downsample to the backdrops' art density, k-means palette, hard alpha, edge darkening, nearest upscale back to master size) |
 | `tools/bump-version.sh [token] [--root] [--dry-run] [--add-missing] [--quiet]` | Single writer of the shell token (pages, `game.js`, and `sw.js`'s `SW_VERSION` + precache `?v=`) |
 | `tools/gen-sw-precache.mjs [--root] [--check]` | Writes `sw.js`'s `PRECACHE` block from `index.html` (+ pages, manifest, fonts, `assets/ui`); `--check` exits 1 on drift (run by `deploy-check.sh --local`) |
@@ -773,6 +782,100 @@ If you stream, teach or hack on typing games, fork the project and share improve
 remixes are welcome.
 
 ## Changelog
+
+### 2026-11-01 AAA pass (release token `20261101a`, art token `202611020055`)
+
+The follow-up to the presentation pass: the layers a AAA title has that the build did not. Seven workstreams, three of
+them built in parallel worktrees and merged (sound, platform, leaderboard). Gameplay, balance and saves are unchanged
+apart from new settings keys; the per-frame budgets hold (composite sets <= 6, shadowBlur 0, no filters, no pixel reads;
+budget probe 60 fps, maxRenderMs 5.4 at renderScale 2, 5 composite sets with 14 plates, a lock, chips, a toast and a banner).
+
+**Enemy bodies (DRONES, `assets/js/game/74-drones.js`, `tools/art/gen_drones.py`).** A plate was the only thing on screen
+without a sprite. Every plate is now the call-sign tag of a small pixel-art drone flying a dozen pixels behind it, tethered
+by a hairline in the sector accent: scout (single letters), interceptor (2-4 letters), hauler (5+), pod (boss minions),
+three silhouettes each and two frames (engine flicker, nav blink), drawn on the same 2-logical-px art grid as the ships.
+The sheet (`fx/drones`, lossless WebP, 8 KB, pinned and critical) has a hull band and an accent band; at sector start they
+are composited into one canvas per accent (three blend-mode sets at bake, none per frame). Idle bob, roll and flicker are
+phase-offset per drone; lime corner brackets mark the locked one; a killed plate's drone tumbles for .22 s and pops (small
+sprite, debris, sparks), a leaked plate's drone streaks past the ship and fades. Attract-mode ghosts get them too. Every
+drone of the frame is drawn before any plate, so no body ever sits over a neighbour's text.
+
+**Living world (AMBIENT, `assets/js/game/73-ambient.js`, `tools/art/gen_midlayer.py`).** (1) A mid-depth silhouette
+strip between the backdrop and the near layer (wreckage / gantry / asteroids, `AMBIENT_MID_FOR_LEVEL`; `mid/*` manifest
+keys, graded through the ATMOS bake) scrolls at a speed between the two. (2) The painted lights blink: from each baked tile a
+dim layer is derived with blend modes only (`T x (1 - lum(T^4))`: lights go dark, nothing else changes), cut into two phase
+groups by a 128 px cell hash and drawn over the tile at a pulsing alpha with random dropouts; half resolution, so a quarter
+of the tiles' memory. (3) Weather per sector: rain (Abyssal Relay), ash (Logic Foundry), embers (Night Engine), motes in the
+nebula and the finale city. (4) Every explosion sprite drops a warm radial light splash on the environment under the
+plates. (5) The storm flash strikes a visible jagged bolt in the sector accent with a white core (cadence 4-8 s, was 6-11).
+Harness switches `TypeRHarness.ambient = false` / `drones = false` freeze these layers for pixel probes.
+
+**Cinematic framing (`assets/js/game/47-cinematic.js`).** Camera zoom (`game.cameraZoom`, applied around the screen
+centre, >= 1 only): the sector card drops out of warp from 1.08 with the star streaks, the boss warning punches 1.035 at
+the title slam, the boss kill 1.05. The sector card's letterbox bar carries the sector's location (`CINE_LOCATIONS`, typed
+at 40 cps) and a telemetry readout; the boss warning's bar gets scrolling hazard chevrons, a THREAT readout and a red edge
+pulse while the intro is locked. A scanline wipe (`#cineWipe`) sweeps the stage on mode changes between screens (not
+playing <-> paused). Reduce-motion: no zoom, scroll, pulse or wipe; subtitles fade in.
+
+**HUD.** Stacked label/value cells, the score as the hero in the display face (22 px, tabular), a combo tier progress bar
+under the count (`#hudComboBar`, `--p` toward the next `COMBO_TIERS` step), the chosen ship's silhouette beside a skewed,
+segmented hull meter, the boss bar with a portrait (`#bossPortrait`, the boss art at x1) and phase ticks that break off the
+meter as phases fall (`.isBroken`). Every id and the responsive contract (3-column grid at <= 1024 px, WPM hidden, pilot
+hidden on phones) are kept; `#hud` stays `rgba(5,6,11,.74)` in play.
+
+**Title screen.** A hero block (the mark + the wordmark on one line, power-on flicker on every menu entry via
+`cineHeroReveal`) over the live attract scene: the glass blur is gone, the scrim is lighter and each column sits in its
+own translucent card, so the drones, ghosts and parallax show between them; Start is the one primary action, the deck,
+sector grid and hangar sit below it at lower visual weight. The DOM contract the probes encode (deck after Start and before
+the sector grid, 5 x 2 grid visible, fieldset hangar, tab order, 1280 x 720 fit, footer hit-testable) is unchanged.
+
+**Sound (SOUND, `assets/audio/sfx.js`, `assets/js/game/88-audio-director.js`, `tools/audio/`).** The build had two sampled
+one-shots and synthesised everything else. `tools/audio/gen_sfx.py` now renders a coherent neon-arcade library (31 cues,
+82 round-robin variants, deterministic seeds) packed by `pack-bank.mjs` into one MP3 sprite bank with a cue table in the
+manifest (`sfxBank`, 462 KB); `sfx.js` plays cues from a 32-voice sample pool (no variant twice in a row, 1-5 % rate
+jitter, per-cue caps, 10 ms steal fades) and keeps every synth as the fallback (legacy manifests, native shells,
+`file://`, before the bank has decoded). The mix bus gains a sidechain duck of the music under explosions, boss hits,
+hull damage, the boss kill and the announcer (-3 / -4 dB, .35 s hold), a gentle compressor and a soft-clip limiter (.86
+ceiling measured on a five-onset burst). The typing tick climbs an octave across the word on `zap(progress)` and resolves
+on the last glyph, with a dull knock on a miss. A radio announcer (`gen_vo.py`: macOS `say` through a 300-3400 Hz band,
+ring-mod and bit-crush under the clean signal, compression, squelch tail; 14 lines, 96 KB) calls Warning, Boss incoming,
+Ready, Go, Perfect, Overdrive, Sector clear, Signal lost, the rank letters and New record, one line at a time through the
+SFX gain; the **Announcer** setting (default on) silences it. Adaptive music: Demucs (`split_stems.sh`, `htdemucs`)
+separates each track into a drumless layer and a drums layer; on desktop the two play as sample-accurate Web Audio
+buffers over the measured loop body with the drums at the director's intensity (waves .35-.55, approach .7, boss .75 +
+hull lost, combo tiers, Overdrive, low hull; eased at <= 1.4/s), one pair resident (66 MB decoded), the next pair fetched
+at a quarter of the sector and decoded behind the results card; sector 1 streams as before and hands over at its first
+loop boundary (alignment within 1 ms); touch devices, `deviceMemory < 4`, native shells and decode failures keep the
+streamed transport unchanged. Music MP3s re-encoded at `-q:a 5`; `assets/opt` 29 -> 43 MB (budget raised to 45 MB: music is
+fetched per sector). Probes: `audio-contract` (38 / 37 legacy), `audio-lifecycle` (19), new `audio-sound` (17).
+
+**Platform (PLATFORM, `sw.js`, `site.webmanifest`, `assets/js/game/12-access.js`).** The game is installable and plays
+offline: a service worker precaches the shell (74 entries, generated by `tools/gen-sw-precache.mjs`, checked by
+`deploy-check --local`), serves `assets/opt/**` cache-first with a 60 MB cap, navigations network-first, and only takes
+over when the page asks, so an update shows "NEW VERSION READY — RELOAD" on the menu instead of swapping code mid-run;
+`tools/bump-version.sh` rewrites `SW_VERSION`, the harness never registers it (`TypeRHarness.sw = false`), the host policy
+serves `sw.js` and the manifest no-cache. Install and Reload links appear in the menu footer only when the browser offers
+them; icons 192 / 512 (any + maskable) rendered from the mark. Six accessibility settings: **Plate colours** (Neon or a
+colour-blind-safe High contrast set with bracket and dash cues drawn in the overlay), **Plate font** (a dyslexia-friendly
+monospace built from the OpenDyslexic OFL sources, 13 KB subset), **Plate size** 100-130 %, **Screen shake** 0-100 %
+independent of reduce-motion, **Reduce flashes**, **Keyboard layout** (Auto detects QWERTY / AZERTY / QWERTZ / Dvorak /
+Colemak for the Flight log heatmap; typing itself already uses `event.key`). The pause cockpit scrolls its settings
+column on short viewports. Probe `t-platform` (21).
+
+**Daily sortie leaderboard (LEADERBOARD, `assets/js/game/54-leaderboard.js`, `api/`, `tools/leaderboard/`).** An
+optional public board of today's daily sortie results, shipped **off** (`LEADERBOARD.endpoint` is empty: no UI, no
+token, no requests). When the owner sets the endpoint and a player turns on **Share daily sortie scores**, a counted
+sortie posts pilot name, an anonymous save-local UUID, day, rating, WPM, accuracy, score, sector, ship, rank and shell
+token; the results screen shows the top 10 and "You: #n", the menu tile a one-line teaser. Two interchangeable backends
+with the same contract and plausibility rules: `api/leaderboard.php` (PDO SQLite above the web root, salted IP hash for
+rate limiting kept <= 24 h, 90-day retention, same-origin only) and a Cloudflare Worker (`tools/leaderboard/worker.js`,
+KV). The privacy policy (effective 1 November 2026) describes it and the service worker cache. Probe `t-leaderboard`
+(17); `test-php.sh` 34 checks, `test-worker.mjs` 35.
+
+**Probes.** `t-words-render` now warms the canvas up with one readback before its pixel diffs (Chrome re-rasterises on the
+first `getImageData`; the diff failed on fa06754 too under the current Chrome). `assets-loader` expects 39 synth entries
+and does not require never-loaded pins to be resident after gc. `ui-screens` checks script order and versioning instead of a
+hard-coded tag count. `p2-render`'s "locked plate drawn last" and `d1`'s low-HP pulse remain the known flakes.
 
 ### 2026-10-31 presentation pass (release token `20261031a`, art token `202611010527`)
 
