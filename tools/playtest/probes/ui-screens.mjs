@@ -367,12 +367,16 @@ try {
   await sleep(400);
   const mainBox = await rect(page, "#main");
   const clip = { x: Math.round(mainBox.left), y: Math.round(mainBox.top), width: Math.round(mainBox.width), height: Math.round(mainBox.height) };
+  // The mode is faked in the DOM only, so the attract scene behind the pause scrim keeps animating (ghost plates, their
+  // drones, the parallax); freeze the loop so both shots really are the same frame, then re-arm it.
+  await page.evaluate(() => { const g = window.game; if (g && g.rafId != null) { cancelAnimationFrame(g.rafId); g.rafId = null; } });
+  await sleep(50);
   const onPng = decodePng(await page.screenshot({ clip }));
   await page.evaluate(() => { document.documentElement.dataset.crt = "off"; });
   await sleep(200);
   const crtDisplay = await css(page, "#crtOverlay", "display");
   const offPng = decodePng(await page.screenshot({ clip }));
-  await page.evaluate(() => { delete document.documentElement.dataset.crt; });
+  await page.evaluate(() => { delete document.documentElement.dataset.crt; const g = window.game; if (g && typeof g.requestFrame === "function") g.requestFrame(); });
   const cornerOn = onPng.avg(6, 6, 4), cornerOff = offPng.avg(6, 6, 4);
   const cx = Math.floor(clip.width / 2) - 3, cy = Math.floor(clip.height / 2) - 3;
   const centreOn = onPng.avg(cx, cy, 6), centreOff = offPng.avg(cx, cy, 6);

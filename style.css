@@ -3189,13 +3189,22 @@ body[data-mode="paused"] #bossChargeFill { transition: none; }
 /* ===== end track:ARCADE ===== */
 
 @media (max-width: 1024px) {
+  /* the 3-column HUD grid at this width: cells go back to label-beside-value so the panel stays under 64 px (ui-screens) */
+  .hudCell--stack { display: inline-flex; align-items: center; gap: 6px; }
+  .hudCell--stack .label { font-size: var(--fs-2xs); letter-spacing: 0.12em; }
   .hudCell--stack .mono { font-size: 13px; }
-  .hudCell--score .mono { font-size: 18px; }
+  .hudCell--score .mono { font-size: 13px; letter-spacing: 0.02em; }
+  .comboBar { display: none; }
   .hudShipIcon { display: none; }
-  .hudCell--hull .meter { width: 120px; height: 10px; }
+  .hudCell--hull .meter { width: 110px; height: 8px; transform: skewX(-10deg); }
   .bossPortrait { width: 48px; height: 30px; }
+  .hudRow .hudCell--wpm.hudCell--stack { display: none; }   /* the earlier breakpoint rules hide WPM here; the stack display must not revive it */
+}
+@media (orientation: portrait) and (max-width: 1024px), (max-height: 520px) and (orientation: landscape) {
+  .hudRow .hudCell--pilot.hudCell--stack, .hudRow .hudCell--wpm.hudCell--stack { display: none; }
 }
 @media (max-width: 640px) {
+  .hudRow .hudCell--pilot.hudCell--stack, .hudRow .hudCell--wpm.hudCell--stack { display: none; }
   .hudCell--stack .label { font-size: 9px; }
   .hudCell--stack .mono { font-size: 11px; }
   .hudCell--score .mono { font-size: 14px; }
