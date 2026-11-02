@@ -1,5 +1,5 @@
 {
- "version": "202611010527",
+ "version": "202611012354",
  "music": [
   "./assets/opt/audio/galactic_high_score_1.mp3",
   "./assets/opt/audio/galactic_high_score_2.mp3",
@@ -352,6 +352,57 @@
     "h": 1504
    },
    "fallback": "./assets/foregrounds/tenthlevelFG.png"
+  },
+  "mid/wreckage": {
+   "orig": {
+    "w": 2816,
+    "h": 640
+   },
+   "x1": {
+    "src": "./assets/opt/mid/wreckage@1x.webp",
+    "w": 1408,
+    "h": 320
+   },
+   "x2": {
+    "src": "./assets/opt/mid/wreckage@2x.webp",
+    "w": 2816,
+    "h": 640
+   },
+   "fallback": "./assets/midgrounds/wreckage.png"
+  },
+  "mid/gantry": {
+   "orig": {
+    "w": 2816,
+    "h": 640
+   },
+   "x1": {
+    "src": "./assets/opt/mid/gantry@1x.webp",
+    "w": 1408,
+    "h": 320
+   },
+   "x2": {
+    "src": "./assets/opt/mid/gantry@2x.webp",
+    "w": 2816,
+    "h": 640
+   },
+   "fallback": "./assets/midgrounds/gantry.png"
+  },
+  "mid/asteroids": {
+   "orig": {
+    "w": 2816,
+    "h": 640
+   },
+   "x1": {
+    "src": "./assets/opt/mid/asteroids@1x.webp",
+    "w": 1408,
+    "h": 320
+   },
+   "x2": {
+    "src": "./assets/opt/mid/asteroids@2x.webp",
+    "w": 2816,
+    "h": 640
+   },
+   "fallback": "./assets/midgrounds/asteroids.png"
   },
   "ships/coconut": {
    "orig": {
@@ -764,6 +815,12 @@
    "w": 2816,
    "h": 1536,
    "fallback": "./assets/explosions/explosions.png"
+  },
+  "fx/drones": {
+   "src": "./assets/opt/fx/drones.webp",
+   "w": 1152,
+   "h": 896,
+   "fallback": "./assets/sprites/drones.png"
   }
  }
 }

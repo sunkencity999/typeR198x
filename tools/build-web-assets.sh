@@ -70,7 +70,7 @@ build_og_card() {
 }
 if [[ "$OG_ONLY" == "1" ]]; then build_og_card; exit $?; fi
 
-mkdir -p "$OUT/bg" "$OUT/fg" "$OUT/bosses" "$OUT/ships" "$OUT/fx" "$OUT/audio"
+mkdir -p "$OUT/bg" "$OUT/fg" "$OUT/mid" "$OUT/bosses" "$OUT/ships" "$OUT/fx" "$OUT/audio"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
@@ -122,6 +122,26 @@ for t in "${THEMES[@]}"; do
     MANIFEST_ENTRIES+=("\"$kind/$t\":{\"orig\":{\"w\":$ow,\"h\":$oh},\"x1\":{\"src\":\"./assets/opt/$kind/${t}@1x.webp\",\"w\":$w1,\"h\":$h1},\"x2\":{\"src\":\"./assets/opt/$kind/${t}@2x.webp\",\"w\":$w2,\"h\":$h2},\"fallback\":\"./assets/$([[ $kind == bg ]] && echo backgrounds/${t}levelbg.png || echo foregrounds/${t}levelFG.png)\"}")
     echo "layer $kind/$t -> $(du -h "$OUT/$kind/${t}@1x.webp" | cut -f1) / $(du -h "$OUT/$kind/${t}@2x.webp" | cut -f1)"
   done
+done
+# ---------------------------------------------------------------- mid-depth strips (AMBIENT, tools/art/gen_midlayer.py)
+for m in wreckage gantry asteroids; do
+  src="$SRC/midgrounds/${m}.png"
+  read -r ow oh < <(dims "$src")
+  for scale in 1 2; do
+    w=$(( scale == 1 ? ow / 2 : ow ))
+    out="$OUT/mid/${m}@${scale}x.webp"
+    if encoding; then
+      mkdir -p "$OUT/mid"
+      resize_png "$src" "$w" "$TMP/mid-${m}@${scale}x.png"
+      encode_webp "$TMP/mid-${m}@${scale}x.png" "$out" "$Q_ALPHA" 1
+    else
+      require_file "$out"
+    fi
+  done
+  read -r w1 h1 < <(dims "$OUT/mid/${m}@1x.webp")
+  read -r w2 h2 < <(dims "$OUT/mid/${m}@2x.webp")
+  MANIFEST_ENTRIES+=("\"mid/$m\":{\"orig\":{\"w\":$ow,\"h\":$oh},\"x1\":{\"src\":\"./assets/opt/mid/${m}@1x.webp\",\"w\":$w1,\"h\":$h1},\"x2\":{\"src\":\"./assets/opt/mid/${m}@2x.webp\",\"w\":$w2,\"h\":$h2},\"fallback\":\"./assets/midgrounds/${m}.png\"}")
+  echo "mid/$m -> $(du -h "$OUT/mid/${m}@1x.webp" | cut -f1) / $(du -h "$OUT/mid/${m}@2x.webp" | cut -f1)"
 done
 # ---------------------------------------------------------------- sprites (trim + alpha)
 # trim_sprite <id> <src.png> <outdir-kind> <max2xWidth> <fallbackRelPath>
@@ -176,6 +196,15 @@ fi
 read -r ew eh < <(dims "$OUT/fx/explosions.webp")
 MANIFEST_ENTRIES+=("\"fx/explosions\":{\"src\":\"./assets/opt/fx/explosions.webp\",\"w\":$ew,\"h\":$eh,\"fallback\":\"./assets/explosions/explosions.png\"}")
 echo "fx/explosions -> $(du -h "$OUT/fx/explosions.webp" | cut -f1)"
+# Drone sheet (tools/art/gen_drones.py): crisp 4 px art pixels with hard alpha -> lossless WebP (smaller than lossy here).
+if encoding; then
+  cwebp -quiet -lossless -z 9 -metadata none "$SRC/sprites/drones.png" -o "$OUT/fx/drones.webp"
+else
+  require_file "$OUT/fx/drones.webp"
+fi
+read -r dw dh < <(dims "$OUT/fx/drones.webp")
+MANIFEST_ENTRIES+=("\"fx/drones\":{\"src\":\"./assets/opt/fx/drones.webp\",\"w\":$dw,\"h\":$dh,\"fallback\":\"./assets/sprites/drones.png\"}")
+echo "fx/drones -> $(du -h "$OUT/fx/drones.webp" | cut -f1)"
 
 # ---------------------------------------------------------------- audio
 MUSIC=()

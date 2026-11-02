@@ -228,7 +228,7 @@ try {
     return { l0: Assets.levelKeys(0), l1, before, after, pinned: Assets.pinned };
   });
   const expectKeep = new Set([...gc.pinned, ...gc.l1]);
-  const kept = gc.after.every((k) => expectKeep.has(k)) && [...expectKeep].filter((k) => k !== "bosses/9").every((k) => gc.after.includes(k));
+  const kept = gc.after.every((k) => expectKeep.has(k)) && [...expectKeep].filter((k) => k !== "bosses/9" && (gc.before.includes(k) || gc.l1.includes(k))).every((k) => gc.after.includes(k));   // pinned sheets / mid strips never loaded here (fx/drones, mid/*) are not resident
   const dropped = gc.l0.every((k) => !gc.after.includes(k));
   check("gc: keeps pins (4 ships + fx) and keepKeys, releases level 0", kept && dropped, `before=${gc.before.length} after=[${gc.after.join(",")}]`);
   const fxReq = (report.requests["/assets/opt/fx/explosions.webp"] || []).length;
@@ -333,7 +333,7 @@ try {
     const s = Assets.sprite("ships/coconut", 150);
     return { bootReason: st.bootReason, total: st.totalCount, url: Assets.url("ships/coconut"), loaded: !!d, sprite: { x: s.x, y: s.y, w: s.w, h: Math.round(s.h * 1000) / 1000 }, keys: Object.keys(Assets.manifest.images).length };
   });
-  check("synth manifest: orig-only entries from the content tables, PNG masters load, sprite is the full box", syn.bootReason === "synth" && syn.total === 35 && /S_S_Coconut\.png/.test(syn.url) && syn.loaded && syn.sprite.x === 0 && syn.sprite.w === 150, JSON.stringify(syn));
+  check("synth manifest: orig-only entries from the content tables, PNG masters load, sprite is the full box", syn.bootReason === "synth" && syn.total === 39 && /S_S_Coconut\.png/.test(syn.url) && syn.loaded && syn.sprite.x === 0 && syn.sprite.w === 150, JSON.stringify(syn));
   await synthCtx.close();
   await ctx.close();
 } catch (e) {

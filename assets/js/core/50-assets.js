@@ -142,6 +142,8 @@ const Assets = (() => {
     }
     const sheet = explosionSheet();
     if (sheet && sheet.src) images["fx/explosions"] = { src: sheet.src, fallback: sheet.src, w: sheet.width, h: sheet.height, synthetic: true };
+    images["fx/drones"] = { src: "./assets/sprites/drones.png", fallback: "./assets/sprites/drones.png", w: 1152, h: 896, synthetic: true };   // DRONES sheet (74-drones.js)
+    for (const m of ["wreckage", "gantry", "asteroids"]) images["mid/" + m] = { src: `./assets/midgrounds/${m}.png`, fallback: `./assets/midgrounds/${m}.png`, orig: { w: 2816, h: 640 }, synthetic: true };   // AMBIENT mid strips (73-ambient.js)
     return { version: masterVersion() || "synth", music: [], sfx: {}, images, synthetic: true };
   }
 
@@ -160,7 +162,7 @@ const Assets = (() => {
     const keys = Object.keys(state.manifest.images || {});
     state.pinned.clear();
     for (const key of keys) {
-      if (key.startsWith("ships/") || key === "fx/explosions") state.pinned.add(key);
+      if (key.startsWith("ships/") || key.startsWith("fx/") || key.startsWith("mid/")) state.pinned.add(key);   // sheets (explosions, drones) and the AMBIENT mid strips stay resident
     }
     // Records whose key vanished from a re-supplied manifest are released; the rest keep their entry fresh.
     for (const [key, r] of [...state.records]) {

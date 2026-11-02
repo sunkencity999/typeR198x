@@ -31,6 +31,9 @@
 //   assets/js/game/70-render.js      Game.prototype: resizeCanvas, plates/capsules/rails, boss art + slab, parallax, stars, render() layer order
 //   assets/js/game/72-atmos.js       Game.prototype: ATMOS seam-dissolve parallax tiles, per-sector grade / lane haze / storm hue (baked once)
 //   assets/js/game/75-fx-draw.js     Game.prototype: ship, beams, rings/bolts/debris, particles, overlays, vignette, active-target redraw
+//   assets/js/game/47-cinematic.js  Game.prototype: CINEMATIC camera zoom (sector drop-in, boss punch), letterbox subtitles / telemetry, hazard chevrons, edge pulse, screen wipe
+//   assets/js/game/73-ambient.js     Game.prototype: AMBIENT mid-depth silhouette strip, blinking emissives, weather, explosion light, bolts
+//   assets/js/game/74-drones.js      Game.prototype: DRONES plate bodies (sheet from tools/art/gen_drones.py, baked per accent), tethers, wrecks
 //   assets/js/game/76-bloom.js       Game.prototype: BLOOM quarter-res luminance^3 halo added over L1-L12 (no filters, no pixel reads)
 //   assets/js/game/78-bossfx.js      Game.prototype: BOSSFX boss motion, emissive pulse, baked damage states, sparks / smoke (overrides drawBossArt)
 //   assets/js/game/80-fx.js          Game.prototype: trauma camera, hit-stop/slow-mo, flash channels, onKeyFx/onKillFx, effect lists, stepAmbient

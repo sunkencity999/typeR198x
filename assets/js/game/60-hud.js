@@ -102,8 +102,9 @@ Object.assign(Game.prototype, {
       name: $("hudName"), level: $("hudLevel"), score: $("hudScore"), combo: $("hudCombo"), mult: $("hudMult"),
       acc: $("hudAcc"), wpm: $("hudWpm"), hp: $("hudHP"), hpMeter: $("hudHPMeter"), hpFill: $("hudHPFill"), hpGhost: $("hudHPGhost"),
       chips: $("hudChips"),
+      comboBar: $("hudComboBar"), shipIcon: $("hudShipIcon"),                       // 2026-11 HUD: tier progress bar, ship silhouette
       bossBar: $("bossBar"), bossName: $("bossName"), bossPhase: $("bossPhase"), bossSegment: $("bossSegment"),
-      bossMeter: $("bossMeter"), bossFill: $("bossFill"),
+      bossMeter: $("bossMeter"), bossFill: $("bossFill"), bossPortrait: $("bossPortrait"),
       stageBar: stage,
       stageSegs: stage ? [0, 1, 2].map((w) => stage.querySelector(`.stageSeg[data-wave="${w}"]`)) : [null, null, null],
       stageBoss: stage ? stage.querySelector(".stageSeg--boss") : null
@@ -135,6 +136,7 @@ Object.assign(Game.prototype, {
     }
     this.updateWpmCell(commit);
     this.updateHullMeter(commit);
+    if (commit) this.updateHudShipIcon();
     this.updateStageBar();
     this.syncChips(commit);
     if (this.inBoss && this.boss) this.refreshBossUI();
@@ -172,6 +174,31 @@ Object.assign(Game.prototype, {
     if (combo === 0 && last >= HUD_COMBO_BREAK_MIN) this.pulseClass(el.combo, "break", HUD_COMBO_BREAK_MS);
     this._hudLastCombo = combo;
     if (commit) this.setText(el.combo, String(combo));
+    // tier progress (paint-only style var): how far this run is toward the next multiplier tier; full at the cap
+    if (el.comboBar && typeof COMBO_TIERS !== "undefined") {
+      let p = 1;
+      for (let i = 0; i < COMBO_TIERS.length; i++) {
+        const at = COMBO_TIERS[i][0], next = COMBO_TIERS[i + 1] ? COMBO_TIERS[i + 1][0] : null;
+        if (next == null) { p = 1; break; }
+        if (combo < next) { p = clamp((combo - at) / Math.max(1, next - at), 0, 1); break; }
+      }
+      this.setStyleVar(el.comboBar, "--p", Math.round(p * 100) / 100);
+    }
+  },
+
+  // The hull cell carries the chosen ship's silhouette (manifest x1 WebP, the same URL the ship cards use).
+  updateHudShipIcon() {
+    const el = this.hudEls();
+    const img = el.shipIcon;
+    if (!img) return;
+    const id = typeof this.currentShipId === "function" ? this.currentShipId() : (this.player && this.player.shipId);
+    if (!id || id === this._hudShipIconId) return;
+    if (typeof Assets === "undefined" || !Assets || typeof Assets.url !== "function") return;
+    const url = Assets.url("ships/" + id, "x1");
+    if (!url) return;
+    this._hudShipIconId = id;
+    img.src = url;
+    img.hidden = false;
   },
 
   // Trailing-10 s live WPM; written on commit frames (rising and falling alike).
@@ -271,9 +298,25 @@ Object.assign(Game.prototype, {
     // data-state = current phase (B-11), colour only: p1 magenta, p2 amber, p3 danger, p4 violet.
     this.setAttr(el.bossMeter, "data-state", `p${Math.min(boss.phase + 1, 4)}`);
     this.setClass(el.bossMeter, "isCharging", !!boss.surge);
+    // phase ticks already passed break off the meter (2026-11 HUD: .isBroken, CSS transition)
+    if (el.bossMeter) {
+      const ticks = el.bossMeter.children;
+      for (let i = 0, k = 0; i < ticks.length; i++) {
+        if (!ticks[i].classList.contains("bossPhaseTick")) continue;
+        this.setClass(ticks[i], "isBroken", boss.phase > k);
+        k++;
+      }
+    }
     if (opts.full) {
       this.setStyleVar(el.bossMeter, "--segments", n <= BOSS_METER_MAX_TICKS ? n : 4);
       this.layoutBossPhaseTicks(boss);
+      // portrait: the boss art at x1 (already fetched for the fight, so a cache hit)
+      const img = el.bossPortrait;
+      if (img && typeof Assets !== "undefined" && Assets && typeof Assets.url === "function") {
+        const url = Assets.url("bosses/" + ((this.levelIndex | 0) + 1), "x1");
+        if (url && img.getAttribute("src") !== url) img.src = url;
+        img.hidden = !url;
+      }
     }
   },
 

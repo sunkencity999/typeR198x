@@ -558,6 +558,85 @@ body[data-mode="playing"] #hud { background: rgba(5,6,11,0.74); }
 
 .hudCell .label { margin-right: 4px; }
 #hudScore { color: var(--c-text); font-weight: 600; }
+
+/* ===== 2026-11 HUD: hierarchy (score hero, stacked cells, combo tier bar, ship silhouette, boss portrait) ===== */
+#hud { padding: 6px 14px 8px; }
+body[data-mode="playing"] #hud {
+  background: rgba(5,6,11,0.74);
+  box-shadow: 0 1px 0 rgba(57,245,255,0.16), 0 12px 34px rgba(0,0,0,0.38);
+}
+.hudCell--stack { display: inline-grid; grid-template-columns: auto; grid-auto-rows: min-content; align-content: center; gap: 0; }
+.hudCell--stack .label { margin: 0; font-size: 10px; letter-spacing: 0.22em; line-height: 1.1; opacity: 0.62; }
+.hudCell--stack .mono { font-size: 15px; line-height: 1.15; }
+.hudCell--score .mono {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 22px;
+  letter-spacing: 0.04em;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+#hudScore { min-width: 8ch; }
+#hudScore.gain { text-shadow: 0 0 14px rgba(255,193,74,0.85), 0 0 2px rgba(255,193,74,0.9); }
+.hudComboVal { display: inline-flex; align-items: center; gap: 6px; }
+.comboBar {
+  display: block;
+  width: 100%;
+  min-width: 76px;
+  height: 3px;
+  margin-top: 3px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.10);
+  overflow: hidden;
+}
+.comboBar::before {
+  content: "";
+  display: block;
+  height: 100%;
+  width: 100%;
+  transform-origin: left center;
+  transform: scaleX(var(--p, 0));
+  background: linear-gradient(90deg, var(--c-ui), var(--c-score));
+  transition: transform 160ms var(--ease-out);
+}
+.hudCell--hull { gap: 8px; }
+.hudShipIcon {
+  width: 52px;
+  height: 30px;
+  object-fit: contain;
+  flex: 0 0 auto;
+  opacity: 0.95;
+  filter: drop-shadow(0 0 5px rgba(57,245,255,0.35));
+}
+.hudCell--hull .meter {
+  width: 168px;
+  height: 12px;
+  border-radius: 3px;
+  transform: skewX(-14deg);
+  background: rgba(255,255,255,0.10);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
+}
+.hudCell--hull .meter::after {
+  background: repeating-linear-gradient(90deg, transparent 0 calc(10% - 2px), rgba(5,6,11,0.9) calc(10% - 2px) 10%);
+}
+#hudHPFill { box-shadow: 0 0 10px rgba(57,245,255,0.35); }
+#hud[data-hp="warn"] #hudHPFill { box-shadow: 0 0 10px rgba(255,193,74,0.4); }
+#hud[data-hp="crit"] #hudHPFill { box-shadow: 0 0 12px rgba(255,77,109,0.55); }
+.bossBar { grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; }
+.bossPortrait {
+  width: 64px;
+  height: 40px;
+  object-fit: contain;
+  padding: 2px;
+  border-radius: 6px;
+  background: rgba(255,57,209,0.08);
+  border: 1px solid rgba(255,57,209,0.35);
+  box-shadow: 0 0 10px rgba(255,57,209,0.25);
+}
+.bossBody { display: grid; gap: 6px; min-width: 0; }
+.bossPhaseTick { transition: transform 420ms var(--ease-in-out), opacity 420ms var(--ease-in-out); }
+.bossPhaseTick.isBroken { transform: translateY(9px) rotate(16deg); opacity: 0.25; }
+:root.reduce-motion .bossPhaseTick { transition: none; }
 #hudCombo { transition: color var(--dur-2); }
 #hudCombo.break {
   color: var(--c-danger);
@@ -734,6 +813,29 @@ body[data-mode] .screen:not(.is-active) .screenInner > * {
   pointer-events: none;
   animation: crtOff 420ms var(--ease-in-out) forwards;
 }
+
+/* CINEMATIC (47-cinematic.js): scanline wipe between screens; JS adds .run on a mode change, removes it after 420 ms */
+#cineWipe {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -18%;
+  height: 18%;
+  z-index: 31;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    linear-gradient(180deg, rgba(57,245,255,0) 0%, rgba(57,245,255,0.10) 55%, rgba(246,247,255,0.55) 97%, rgba(246,247,255,0.9) 100%),
+    repeating-linear-gradient(180deg, rgba(255,255,255,0.06) 0 1px, rgba(0,0,0,0) 1px 3px);
+}
+#cineWipe.run { animation: cineWipe 360ms cubic-bezier(.2,.7,.2,1) forwards; }
+@keyframes cineWipe {
+  0% { transform: translateY(0); opacity: 0; }
+  12% { opacity: 1; }
+  88% { opacity: 1; }
+  100% { transform: translateY(660%); opacity: 0; }
+}
+:root.reduce-motion #cineWipe.run { animation: none; opacity: 0; }
 
 /* ----- 6. Buttons --------------------------------------------------------------- */
 .btn-arcade.primary {
@@ -2704,8 +2806,8 @@ fieldset.shipGrid > legend {
 /* Title cabinet: near-clear glass so the live attract scene (D8, graded by ATMOS and bloomed) is the title's hero shot;
    the scrim below is lightened to match (presentation pass 2026-10-31). The menu's own panels keep their backings. */
 .screen--menu {
-  -webkit-backdrop-filter: blur(1.5px);
-  backdrop-filter: blur(1.5px);
+  -webkit-backdrop-filter: none;   /* 2026-11 TITLE: the live attract scene shows between the column cards */
+  backdrop-filter: none;
 }
 
 /* ===== training scaffold: DOM rendered by shared code (results notes, results tags) ===== */
@@ -3085,3 +3187,62 @@ body[data-mode="paused"] #bossChargeFill { transition: none; }
 @media (orientation: portrait) and (max-width: 640px) { .bossCharge { height: 2px; } }
 @media (max-height: 520px) and (orientation: landscape) { .bossCharge { grid-column: 2; grid-row: 1; top: 50%; margin-top: 6px; } }
 /* ===== end track:ARCADE ===== */
+
+@media (max-width: 1024px) {
+  .hudCell--stack .mono { font-size: 13px; }
+  .hudCell--score .mono { font-size: 18px; }
+  .hudShipIcon { display: none; }
+  .hudCell--hull .meter { width: 120px; height: 10px; }
+  .bossPortrait { width: 48px; height: 30px; }
+}
+@media (max-width: 640px) {
+  .hudCell--stack .label { font-size: 9px; }
+  .hudCell--stack .mono { font-size: 11px; }
+  .hudCell--score .mono { font-size: 14px; }
+  .comboBar { display: none; }
+  .hudCell--hull .meter { width: 96px; height: 7px; transform: none; }
+  .bossPortrait { display: none; }
+  .bossBar { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ===== 2026-11 TITLE: hero block over the live attract scene (47-cinematic.js restarts .reveal on each menu entry) ===== */
+.screen--menu { background: linear-gradient(180deg, rgba(5,6,11,0.20), rgba(5,6,11,0.38)); }
+.menuCol {
+  padding: 14px 16px 12px;
+  border-radius: var(--r-lg);
+  background: rgba(5,6,11,0.60);
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.38);
+}
+.menuHero { margin: 0 0 var(--sp-3); }
+.heroRow { display: flex; align-items: center; gap: 16px; }
+.heroMark { width: 64px; height: 64px; flex: 0 0 auto; filter: drop-shadow(0 0 12px rgba(57,245,255,0.45)); }
+.wordmark { font-size: clamp(38px, 3.7vw, 56px); white-space: nowrap; }
+.menuHero.reveal .heroRow { animation: heroPowerOn 900ms steps(1, end) both; }
+.menuHero.reveal .tagline, .menuHero.reveal .screenEyebrow { animation: heroFadeIn 600ms var(--ease-out) 520ms both; }
+@keyframes heroPowerOn {   /* opacity-only flicker: a blur/brightness filter here cost ~5 fps on the attract scene at DPR 2 */
+  0% { opacity: 0; }
+  8% { opacity: 1; }
+  14% { opacity: 0.15; }
+  22% { opacity: 1; }
+  30% { opacity: 0.45; }
+  38% { opacity: 1; }
+  100% { opacity: 1; }
+}
+@keyframes heroFadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+#btnStart { min-height: 56px; font-size: var(--fs-lg); letter-spacing: 0.22em; }
+.sectorCard { min-height: 58px; background: rgba(0,0,0,0.28); }
+#sectorTitle, fieldset.shipGrid > legend, .practicePanel .label { opacity: 0.8; }
+@media (max-height: 820px) and (min-width: 901px) {
+  .wordmark { font-size: clamp(30px, 3.2vw, 44px); }
+  .heroMark { width: 40px; height: 40px; }
+  .heroRow { gap: 12px; }
+  .menuHero { margin-bottom: var(--sp-2); }
+  .menuHero .screenEyebrow { margin-bottom: 4px; }
+  .menuCol { padding: 6px 12px 6px; }
+  #btnStart { min-height: 48px; font-size: var(--fs-md); }
+}
+@media (max-width: 640px) {
+  .heroMark { width: 40px; height: 40px; }
+  .menuCol { padding: 10px 10px; }
+}

@@ -64,13 +64,14 @@
           <div class="stageSeg stageSeg--boss"><div class="stageFill"></div></div>
         </div>
         <div class="hudRow">
-          <div class="hudCell hudCell--pilot"><span class="label">Pilot</span> <span id="hudName" class="mono"></span></div>
-          <div class="hudCell"><span class="label">Sector</span> <span id="hudLevel" class="mono"></span></div>
-          <div class="hudCell"><span class="label">Score</span> <span id="hudScore" class="mono"></span></div>
-          <div class="hudCell"><span class="label">Combo</span> <span id="hudCombo" class="mono"></span> <span id="hudMult" class="multBadge" data-tier="1">x1</span></div>
-          <div class="hudCell"><span class="label">Acc</span> <span id="hudAcc" class="mono"></span></div>
-          <div class="hudCell hudCell--wpm"><span class="label">WPM</span> <span id="hudWpm" class="mono">0</span></div>
+          <div class="hudCell hudCell--pilot hudCell--stack"><span class="label">Pilot</span> <span id="hudName" class="mono"></span></div>
+          <div class="hudCell hudCell--sector hudCell--stack"><span class="label">Sector</span> <span id="hudLevel" class="mono"></span></div>
+          <div class="hudCell hudCell--score hudCell--stack"><span class="label">Score</span> <span id="hudScore" class="mono"></span></div>
+          <div class="hudCell hudCell--combo hudCell--stack"><span class="label">Combo</span> <span class="hudComboVal"><span id="hudCombo" class="mono"></span> <span id="hudMult" class="multBadge" data-tier="1">x1</span></span><i id="hudComboBar" class="comboBar" aria-hidden="true" style="--p:0"></i></div>
+          <div class="hudCell hudCell--acc hudCell--stack"><span class="label">Acc</span> <span id="hudAcc" class="mono"></span></div>
+          <div class="hudCell hudCell--wpm hudCell--stack"><span class="label">WPM</span> <span id="hudWpm" class="mono">0</span></div>
           <div class="hudCell hudCell--hull">
+            <img id="hudShipIcon" class="hudShipIcon" alt="" width="52" height="30" decoding="async" hidden />
             <span class="label">Hull</span>
             <div id="hudHPMeter" class="meter" role="meter" aria-label="Hull" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><div id="hudHPGhost"></div><div id="hudHPFill"></div></div>
             <span id="hudHP" class="mono"></span>
@@ -79,18 +80,21 @@
         </div>
         <div id="hudChips" class="hudChips"></div>
         <div id="bossBar" class="bossBar hidden">
-          <div class="bossTitle">
-            <span class="label">Boss</span>
-            <span id="bossName" class="mono"></span>
-            <span id="bossPhase" class="mono small"></span>
-            <span id="bossSegment" class="mono small"></span>
+          <img id="bossPortrait" class="bossPortrait" alt="" width="64" height="40" decoding="async" hidden />
+          <div class="bossBody">
+            <div class="bossTitle">
+              <span class="label">Boss</span>
+              <span id="bossName" class="mono"></span>
+              <span id="bossPhase" class="mono small"></span>
+              <span id="bossSegment" class="mono small"></span>
+            </div>
+            <div id="bossMeter" class="bossMeter" role="progressbar" aria-label="Boss integrity" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100" data-state="ok" style="--segments:6">
+              <div id="bossFill"></div>
+              <i class="bossPhaseTick" aria-hidden="true"></i>
+              <i class="bossPhaseTick" aria-hidden="true"></i>
+            </div>
+            <div id="bossCharge" class="bossCharge" aria-hidden="true"><div id="bossChargeFill"></div></div>
           </div>
-          <div id="bossMeter" class="bossMeter" role="progressbar" aria-label="Boss integrity" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100" data-state="ok" style="--segments:6">
-            <div id="bossFill"></div>
-            <i class="bossPhaseTick" aria-hidden="true"></i>
-            <i class="bossPhaseTick" aria-hidden="true"></i>
-          </div>
-          <div id="bossCharge" class="bossCharge" aria-hidden="true"><div id="bossChargeFill"></div></div>
         </div>
       </section>
 
@@ -99,9 +103,14 @@
         <div class="screenInner menuInner">
           <form id="menuForm" novalidate>
             <div class="menuCol menuCol--left">
-              <p class="screenEyebrow">Neon typing shmup // 198X</p>
-              <h1 id="menuTitle" class="wordmark" aria-label="Type-R 198X"><span>TYPE-R</span> <span class="wordmarkYear">198X</span></h1>
-              <p class="tagline">Type to lock on. Finish the word to fire.</p>
+              <div class="menuHero">
+                <p class="screenEyebrow">Neon typing shmup // 198X</p>
+                <div class="heroRow">
+                  <img class="heroMark" src="./assets/ui/mark.svg?v=20261031a" alt="" width="64" height="64" decoding="async" />
+                  <h1 id="menuTitle" class="wordmark" aria-label="Type-R 198X"><span>TYPE-R</span> <span class="wordmarkYear">198X</span></h1>
+                </div>
+                <p class="tagline">Type to lock on. Finish the word to fire.</p>
+              </div>
               <p id="pressStart" class="pressStart"><span class="pressStart__kbd">Press Enter to start</span><span class="pressStart__tap">Tap start</span></p>
 
               <section id="resumeCard" class="resumeCard hidden" aria-label="Saved run">
@@ -686,11 +695,14 @@
   <script src="./assets/js/game/40-combat.js?v=20261031a"></script>
   <script src="./assets/js/game/42-pacing.js?v=20261031a"></script>
   <script src="./assets/js/game/45-feedback.js?v=20261031a"></script>
+  <script src="./assets/js/game/47-cinematic.js?v=20261031a"></script>
   <script src="./assets/js/game/50-boss.js?v=20261031a"></script>
   <script src="./assets/js/game/52-modes.js?v=20261031a"></script>
   <script src="./assets/js/game/60-hud.js?v=20261031a"></script>
   <script src="./assets/js/game/70-render.js?v=20261031a"></script>
   <script src="./assets/js/game/72-atmos.js?v=20261031a"></script>
+  <script src="./assets/js/game/73-ambient.js?v=20261031a"></script>
+  <script src="./assets/js/game/74-drones.js?v=20261031a"></script>
   <script src="./assets/js/game/75-fx-draw.js?v=20261031a"></script>
   <script src="./assets/js/game/76-bloom.js?v=20261031a"></script>
   <script src="./assets/js/game/78-bossfx.js?v=20261031a"></script>

@@ -51,11 +51,12 @@ P.check("R4 two-word plate width = measured text (gap = one glyph advance) + PLA
 
 // R2 pixel diff: the dot is visible and confined to the gap cell. BLOOM (76-bloom.js) is a screen-space halo over
 // every bright pixel, the dot included, so the pixel diffs run with the harness switch off; R1 / R4 / R6 keep it on.
-await P.g(() => { window.TypeRHarness = Object.assign(window.TypeRHarness || {}, { bloom: false }); });
+await P.g(() => { window.TypeRHarness = Object.assign(window.TypeRHarness || {}, { bloom: false, ambient: false, drones: false }); });   // AMBIENT / DRONES (2026-11) animate pixels outside the gap cell too
 const diff = async (label) => P.g(async (label) => {
   const g = window.game, c = g.canvas, s = g.renderScale || 1;
   const L = window.__gap.last; const adv = (L.wd + L.wr) / 9; const cx = L.x0 + 4.5 * adv, cy = L.y;
   const grab = () => { g.render(); const x = Math.round((cx - 3 * adv) * s), y = Math.round((cy - 12) * s), w = Math.round(6 * adv * s), h = Math.round(24 * s); return { d: c.getContext("2d").getImageData(x, y, w, h).data, w, h }; };
+  grab();   // warm-up: Chrome re-rasterises the canvas on the first readback (a uniform brightness shift over the whole frame; seen on fa06754 too), so both compared frames come from the same path
   const on = grab();
   const keep = window.lexiconDrawGapDots; window.lexiconDrawGapDots = () => {};
   const off = grab();
@@ -78,7 +79,7 @@ await press(P, "Space");
 await sleep(1200);
 const d3 = await diff("done");
 P.check("R3b typed gap: the dim dot (text .25) is still drawn", d3.inCell >= 2 && d3.outCell === 0, d3);
-await P.g(() => { delete window.TypeRHarness.bloom; });
+await P.g(() => { delete window.TypeRHarness.bloom; delete window.TypeRHarness.ambient; delete window.TypeRHarness.drones; });
 await P.shot(`warp-core-${RM ? "rm" : "full"}-dpr${DPR}`);
 await press(P, "Backspace");
 

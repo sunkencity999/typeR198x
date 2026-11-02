@@ -55,8 +55,8 @@ const BOSS_DISSOLVE_START_S = 0.4;  // the bossKill crack starts the dissolve
 const BOSS_DISSOLVE_S = 1.2;
 const BOSS_JITTER_PX = 4;
 const STORM_TINT_ALPHA = 0.22;
-const STORM_BOLT_MIN_S = 6;
-const STORM_BOLT_MAX_S = 11;
+const STORM_BOLT_MIN_S = 4;         // AMBIENT 2026-11: tighter cadence, the flash now strikes a visible bolt (73-ambient.js)
+const STORM_BOLT_MAX_S = 8;
 
 // Procedural powerup icons (VIS-05): 16 x 16 box centred on the origin, 2 px strokes in the type accent.
 const POWER_ICON = {
@@ -1367,10 +1367,14 @@ Object.assign(Game.prototype, {
     ctx.save();
     ctx.translate(sx, sy);
     if (rot) { ctx.translate(this.w / 2, this.h / 2); ctx.rotate(rot); ctx.translate(-this.w / 2, -this.h / 2); }
+    const zoom = (typeof this.cameraZoom === "number" && this.cameraZoom > 1) ? this.cameraZoom : 1;   // CINEMATIC (47-cinematic.js): >= 1 only, the shake margin stays covered
+    if (zoom !== 1) { ctx.translate(this.w / 2, this.h / 2); ctx.scale(zoom, zoom); ctx.translate(-this.w / 2, -this.h / 2); }
 
     this.drawBackground(ctx);                                  // L1
     this.drawStars(ctx);                                       // L2
+    if (typeof this.drawMidLayer === "function") this.drawMidLayer(ctx);          // L2b (AMBIENT): mid-depth silhouettes
     this.drawForegroundParallax(ctx);                          // L3
+    if (typeof this.drawAmbientFront === "function") this.drawAmbientFront(ctx);  // L3b (AMBIENT): explosion light, weather, bolts
     this.drawThemeFx(ctx);                                     // L4 (storm tint / lightning)
     this.drawLaneRails(ctx);                                   // L5
     const boss = (this.inBoss && this.boss) ? this.boss : null;

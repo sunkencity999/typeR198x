@@ -391,7 +391,9 @@ try {
   check("-webkit-backdrop-filter precedes every backdrop-filter", prefixedOk, `${decls.length} declarations`);
   check("source: <div id=\"loadingOverlay\" ... with no class attr", /<div id="loadingOverlay"(?![^>]*\sclass=)/.test(html), "regex");
   check("source: no bg/fg preloads, one font preload", (html.match(/rel="preload"/g) || []).length === 1 && /as="font"/.test(html), String((html.match(/rel="preload"/g) || []).length));
-  check("source: 31 external script tags unchanged order", (html.match(/<script src=/g) || []).length === 31 && html.indexOf("sfx.js?v=") < html.indexOf("00-util.js?v=") && html.indexOf("80-fx.js") < html.indexOf("99-boot.js"), String((html.match(/<script src=/g) || []).length));
+  // 2026-11: the count moves with every module (ATMOS, AMBIENT, DRONES, CINEMATIC, ...); the contract is the order and that every tag is versioned.
+  const scriptTags = html.match(/<script src="[^"]+"/g) || [];
+  check("source: external script tags in load order (sfx.js first, 80-fx.js before 99-boot.js), every one versioned", scriptTags.length >= 31 && scriptTags.every((t) => /\?v=/.test(t)) && html.indexOf("sfx.js?v=") < html.indexOf("00-util.js?v=") && html.indexOf("80-fx.js") < html.indexOf("99-boot.js"), String(scriptTags.length));
   await context.close();
 } catch (e) {
   results.errors.push(String(e && e.stack || e));
