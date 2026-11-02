@@ -1,0 +1,23 @@
+# Type-R 198X — api/ (the optional daily sortie leaderboard, api/leaderboard.php; see tools/leaderboard/README.md).
+# Uploaded by tools/deploy/deploy.mjs with the rest of api/. Apache 2.4 (SiteGround); the 2.2 fallbacks are kept.
+
+# The endpoint is never cached by a browser or the host's static cache (the script says so too).
+<IfModule mod_headers.c>
+  <FilesMatch "\.php$">
+    Header always set Cache-Control "no-store"
+    Header always set X-Content-Type-Options "nosniff"
+  </FilesMatch>
+</IfModule>
+
+# The fallback database (api/.ht_leaderboard.sqlite), its journals and the IP-hash salt must never be served.
+<FilesMatch "^\.ht|\.(sqlite|sqlite-journal|sqlite-wal|sqlite-shm|salt)$">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+  </IfModule>
+</FilesMatch>
+
+Options -Indexes

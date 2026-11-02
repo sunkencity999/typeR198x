@@ -34,9 +34,10 @@ the play-test harness has its own [tools/playtest/README.md](./tools/playtest/RE
 14. [Tools](#tools)
 15. [Deployment](#deployment)
 16. [Native wrappers](#native-wrappers)
-17. [Privacy](#privacy)
-18. [Credits](#credits)
-19. [Changelog](#changelog)
+17. [Daily sortie leaderboard (optional)](#daily-sortie-leaderboard-optional)
+18. [Privacy](#privacy)
+19. [Credits](#credits)
+20. [Changelog](#changelog)
 
 ## The game
 
@@ -247,6 +248,7 @@ Module map, in `index.html` load order:
 | `assets/js/game/45-feedback.js` | Banner system (sector, wave, boss intro/clear, callouts) and score floaters |
 | `assets/js/game/50-boss.js` | Boss v2: phases, minions, intro and finale; Counter-Signal (surge cadence, `surgeWindow` from the pilot's speed, telegraph, fail reset, counter, DOM charge bar) (ARCADE) |
 | `assets/js/game/52-modes.js` | Daily Sortie (date seed, per-wave mulberry32 through `this.rand()`, medal, streak, share line), Endless Drift and Drill streams (`waveTuning`, own text picker), the title deck, the mode results screen, `save.modes` (MODES) |
+| `assets/js/game/54-leaderboard.js` | LEADERBOARD: the optional public daily-sortie board (`LEADERBOARD.endpoint`, empty = off: no UI, no network); opt-in `settings.shareDailyScores`, anonymous `save.playerToken`, POST on `modesRunEnd` with one retry, "Today's board" under the sortie card (wraps `renderModeResults`), the menu teaser (`menuRender`, one GET per 5 min), `TypeRHarness.leaderboardEndpoint` for probes |
 | `assets/js/game/60-hud.js` | DOM HUD with write-on-change diffing: score, combo and multiplier, HP meter, chips, boss meter |
 | `assets/js/game/70-render.js` | `resizeCanvas`/`renderScale`, plates, capsules and rails, dying and escaping plates, boss art (Counter-Signal glow) and console slab, warp-in, storms, parallax, stars, `render()` in layer order |
 | `assets/js/game/72-atmos.js` | ATMOS: parallax tiles baked once per sector into offscreen canvases with a seam-dissolve edge (the masters do not wrap), a per-sector multiply tint + saturation pull + lane haze, and a hue shift for sectors 6 / 8 / 9 that share art with 3 / 4 / 5 (`ATMOS_GRADES`) |
@@ -435,8 +437,10 @@ on an integrated GPU.
 
 One `localStorage` key, **`typesmup198x.save.v1`**, schema 3 (`assets/js/core/40-save.js`):
 `playerName`, `selectedShip`, `highScore`, `lastUnlockedLevel` (1..10), `storySeen`, `settings`
-(`muted`, `crt`, `musicVolume`, `sfxVolume`, `crtIntensity`, `reduceMotion`, `renderScaleCap`),
-`highScores` (top 10), `sectorBests` ("1".."10" -> score, rank, wpm, acc, maxCombo, date), `bestWpm`,
+(`muted`, `crt`, `musicVolume`, `sfxVolume`, `crtIntensity`, `reduceMotion`, `renderScaleCap`, `shareDailyScores`, the
+leaderboard opt-in, default false, anything but a stored `true` reads as off), `playerToken` (LEADERBOARD: the anonymous
+board UUID, `""` until the first opt-in or counted daily sortie with the board on, kept only when UUID-shaped, erased by
+Reset save), `highScores` (top 10), `sectorBests` ("1".."10" -> score, rank, wpm, acc, maxCombo, date), `bestWpm`,
 `victories`, `tutorialSeen` (the overhaul's tips plus `phrase`, the first two-word tip, one write per save lifetime,
 and `surge` / `overdrive`, the first Counter-Signal and Overdrive tips), `onboardingDone` (ms epoch when the first-run
 flight check was passed or skipped, 0 = not yet; written once, never on quit-to-menu; `migrateSave` keeps it),
@@ -507,8 +511,8 @@ headlines: `pageErrors`, `fps.*`, `maxRenderMs`, `shadowBlurPerFrame`, `fullFram
 speed, typos, ranks, the profile and the Flight log, `t-onboard-*` for the flight check and the briefing, `t-words-*`
 for the lexicon, two-word plates and the weak-key bias, `t-arcade-*` for Counter-Signal, Overdrive, readability, the
 boss budget and the surge balance, `t-pace-*` for pace, stakes, hull carry, Cadet, the pace save, perf and the balance
-re-pass (`t-pace-balance --matrix`), `t-modes-*` for the daily sortie, endless drift, drill and the title deck,
-`harness-report-check.mjs` for report shape and the byte budget). `b10.mjs` and `t-pace-balance.mjs` take
+re-pass (`t-pace-balance --matrix`), `t-modes-*` for the daily sortie, endless drift, drill and the title deck, `t-leaderboard` for the optional daily board
+against a `page.route` mock of its endpoint, `harness-report-check.mjs` for report shape and the byte budget). `b10.mjs` and `t-pace-balance.mjs` take
 `--acquire-ms N` (lead ruling Z7: a target-acquisition pause before the first key of every new target, doubled one
 time in ten; off by default). The balance numbers are recorded in
 [tools/playtest/balance.md](./tools/playtest/balance.md).
@@ -527,6 +531,8 @@ Full flag, field and fixture tables: [tools/playtest/README.md](./tools/playtest
 | `tools/deploy/htaccess-cache.txt`, `tools/nginx-cache.conf` | Cache and MIME policy for Apache (`--htaccess`) and nginx hosts |
 | `tools/unreferenced-assets.sh [--out file]` | Files under `assets/` the web build never references (22.6 MB today: native icon sets, explosion frame PNGs, manifest.json, OFL text, two icons) |
 | `tools/check-globals.sh [index.html]` | Duplicate top-level declarations across the classic scripts |
+| `tools/leaderboard/test-php.sh [--port N] [--keep]` | Runs `api/leaderboard.php` under `php -S` with a temp database and exercises the contract with curl (GET / POST / validation / headers / limits / retention) |
+| `tools/leaderboard/worker.js`, `wrangler.toml.example` | The Cloudflare Worker backend of the daily board and its config template; `tools/leaderboard/README.md` holds the API contract |
 | `tools/measure-loops.sh [audio-dir]` | Music loop points and the duplicate-song test |
 | `tools/playtest/play.mjs`, `run-matrix.sh`, `probes/*` | The harness, the matrix, the per-task probes; `balance.md` for the tuning record |
 
@@ -599,6 +605,35 @@ The Xcode projects remain as documented in `native/ios/README.md` and `native/ma
 `bash native/sync-web.sh` from the repo root, open the platform project, add the synced `www` folder as a
 folder reference, configure signing and bundle identifiers, test on hardware, archive and submit.
 
+## Daily sortie leaderboard (optional)
+
+An opt-in public board of today's daily sortie results (LEADERBOARD, `assets/js/game/54-leaderboard.js`). **It ships
+off**: `LEADERBOARD.endpoint` is `""`, and with an empty endpoint the module shows no UI, makes no request and the
+game runs exactly as before (`t-leaderboard` asserts zero non-origin requests through a counted sortie). Enabling it is
+one constant plus a backend, documented step by step in [tools/leaderboard/README.md](./tools/leaderboard/README.md):
+
+- **Client.** Set `endpoint` to `"./api/leaderboard.php"` (same origin) or to a Cloudflare Worker URL. The settings
+  row **Share daily sortie scores** (default off; nothing is ever sent while it is off), the tile teaser
+  (`Board: NAME leads with RATING · n pilots`, one GET per 5 minutes) and the **Today's board** block under the sortie
+  card (top 10, your row highlighted, `You: #n of total`; loading / empty / unavailable states, `aria-live="polite"`)
+  appear on their own. A counted daily sortie with consent on POSTs `{day, token, name, rating, speed, acc, score,
+  sector, ship, rank, version}` once (6 s timeout, one retry on a network failure) and reads the board back; a practice
+  or unrated sortie never posts. Failures are a muted "Board unavailable" line, never a toast, and nothing runs in the
+  frame loop. The pilot is identified by `save.playerToken`, an anonymous UUID that Reset save erases.
+- **Backend A, SiteGround:** `api/leaderboard.php` (PHP 8, PDO SQLite, no Composer) with `api/.htaccess`; the database
+  lives in `typer198x-private/` above the web root (fallback `api/.ht_leaderboard.sqlite`, denied by the `.htaccess`;
+  `TYPER_LEADERBOARD_DB` overrides). `deploy.mjs` uploads `api/` (`ASSET_DIRS`), never a database or salt file.
+- **Backend B, Cloudflare:** `tools/leaderboard/worker.js` on a KV namespace `BOARD` (`wrangler.toml.example`).
+- **Rules** (one table at the top of each backend): a day within one day of UTC today, UUID token, name sanitised to
+  12 code points, rating 0..3000 consistent with speed x (acc/100)^2, speed 0..300, acc 0..100, score 0..5,000,000,
+  sector 1..10, the four ship ids, rank S..D or null, one row per (day, token) keeping the best rating, 30 POSTs per
+  salted-hashed IP per day, 90-day retention purged on write, body <= 2 KB, same origin only (no CORS header on A).
+  This is honour-system grade anti-cheat, like every indie web board: it rejects nonsense, not a determined player
+  with the open-source client.
+- **Tests:** `tools/leaderboard/test-php.sh` (php -S + curl, the contract end to end with a temp database) and
+  `tools/playtest/probes/t-leaderboard.mjs` (endpoint empty / consent off / consent on / 500 / Reset save, the
+  endpoint mocked with `page.route`). `tools/deploy-check.sh` checks the served endpoint only when it is enabled.
+
 ## Privacy
 
 Everything the game stores lives on the player's device under `typesmup198x.save.v1` (plus a one-session
@@ -609,8 +644,15 @@ the last 100 sessions: sector attempts, deaths included, daily sorties, drills a
 results of up to 60 days with the sortie count, streak and that day's attempts, the drill and endless drift run counts
 and bests, and when the Flight Check was finished or skipped; it is never sent anywhere and Reset save erases it.
 The game uses that profile on the device to pace the stream, rate daily sorties and aim words and drills at weak keys.
-[privacy-policy.html](./privacy-policy.html) says so, effective 26 October 2026. No accounts, analytics, telemetry or
-third-party scripts; the web build makes no network calls while playing beyond fetching its own code, art and music. The footer links
+[privacy-policy.html](./privacy-policy.html) says so, effective 1 November 2026. No accounts, analytics, telemetry or
+third-party scripts; the web build makes no network calls while playing beyond fetching its own code, art and music,
+with one opt-in exception: the [daily sortie leaderboard](#daily-sortie-leaderboard-optional). When the owner has
+enabled it (`LEADERBOARD.endpoint`, empty in this build) **and** the player has turned on **Share daily sortie scores**,
+a counted daily sortie's result (pilot name trimmed to 12 characters, an anonymous save-local token `playerToken`, the
+day, rating, WPM, accuracy, score, sector, ship, rank, shell token) is POSTed to the board and today's board is read back
+(day + token). The board is public; the server keeps entries 90 days and a salted hash of the submitting IP for at most
+24 h (rate limiting), never the address; the setting turns it off again at any time and Reset save rotates the token.
+The policy's "Daily sortie leaderboard (optional)" section says the same. The footer links
 [privacy-policy.html](./privacy-policy.html); `privacy.html` is a meta-refresh stub for old links.
 [info.html](./info.html) and [support.html](./support.html) carry the same icon/meta block as the game
 and a back link.

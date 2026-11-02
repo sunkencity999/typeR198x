@@ -3,3 +3,11 @@ native/APP_STORE_NEXT_STEPS.md
 HANDOFF.md
 tools/playtest/out/
 .claude/
+# leaderboard: a local php -S run may leave the fallback database / salt in api/; the Worker config holds the KV id
+api/*.sqlite
+api/*.sqlite-journal
+api/*.sqlite-wal
+api/*.sqlite-shm
+api/.ht_leaderboard.sqlite*
+api/*.salt
+tools/leaderboard/wrangler.toml

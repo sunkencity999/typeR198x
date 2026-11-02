@@ -1,0 +1,17 @@
+# Type-R 198X — daily sortie leaderboard on a Cloudflare Worker (tools/leaderboard/worker.js).
+# Copy to wrangler.toml, fill the KV namespace id, then:
+#   npx wrangler kv namespace create BOARD            # prints the id for [[kv_namespaces]]
+#   npx wrangler secret put IP_SALT                   # any long random string; never commit it
+#   npx wrangler deploy                               # prints https://typer198x-leaderboard.<account>.workers.dev
+# Then set LEADERBOARD.endpoint in assets/js/game/54-leaderboard.js to that URL and deploy the game.
+name = "typer198x-leaderboard"
+main = "worker.js"
+compatibility_date = "2026-01-01"
+
+[[kv_namespaces]]
+binding = "BOARD"
+id = "<your KV namespace id>"
+
+[vars]
+# Comma-separated page origins allowed to read and write the board (echoed as Access-Control-Allow-Origin, never "*").
+ALLOWED_ORIGINS = "https://typer198x.com,https://www.typer198x.com"

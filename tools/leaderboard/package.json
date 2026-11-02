@@ -1,0 +1,11 @@
+{
+  "name": "typer198x-leaderboard",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Type-R 198X daily sortie leaderboard: Cloudflare Worker backend (worker.js) and its Node test; the PHP backend lives in ../../api",
+  "type": "module",
+  "scripts": {
+    "test": "node test-worker.mjs",
+    "test:php": "bash test-php.sh"
+  }
+}
