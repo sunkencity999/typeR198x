@@ -384,6 +384,28 @@ Extra one-off scripts live in `probes/` (shipped) or `out/` (ignored). They can 
   fixtures (F5, F5P), `startMode`, `isolation`, `card` and a scripted static-plate typist (`typeWords`). Probe hooks:
   `game.modesDebug()` = `{ setNow, advance, state, plan, finish }`.
 - `probes/review-runtime.mjs` — regression checks for the review-fix runtime track (~25 s): explosion sheet factor through a DPR 1 -> 2 flip and back (R1), `PALETTE.rgba` alpha quantisation (R12), dying plates under source-over (R13), the full 450 ms loading fade (R27), plate-cache re-warm after a mid-sector resize (R30), bounded spawn/leak telemetry logs and their reset on a new run (R31).
+- `probes/t-platform.mjs --root ../..` — the PLATFORM acceptance (21): the six accessibility rows round-tripped
+  through a reload, the High-contrast palette's contrast from `assets/style/palette.json`, the bracket / dash cue
+  pixels, plate geometry at 130 %, shake and flash scaling, the keyboard heatmap rows, the Install / Reload UI, the
+  frame budget under High contrast, and the service worker in its own `{ sw: true }` context (precache, a cache-served
+  second load).
+- `probes/audio-sound.mjs --root ../..` — the SOUND set (17): the sample pool (round-robin without repeats, per-cue
+  caps, the 32-voice steal), the climbing typing tick, the sidechain duck, the announcer queue and its setting, the
+  adaptive music layers and the eased intensity.
+- `probes/t-leaderboard.mjs --root ../..` — the optional daily board (17) against a `page.route` mock of its endpoint:
+  endpoint empty (no UI, no non-origin request through a counted sortie), consent off, consent on (one POST, one retry
+  on a connection reset, the board read back), HTTP 500 (no retry, the muted "Board unavailable" line), Reset save
+  rotating the token; the posted `version` must equal the live shell token.
+- `probes/t-career.mjs --root ../..` — CAREER (12): the migration from `victories`, the service record strip, the
+  pick modal, the loop run rules (plate speed, boss segments, score), Absorb, Safe Release, beam tier 4, a sector-10
+  clear into the victory panel and the LOOP / BOONS record tags, PURE, a Drill run untouched by career, the
+  Commendations table.
+- `probes/t-hangar.mjs --root ../..` — the Career hulls in the hangar (17): locked cards (greyed, out of the tab
+  order, skipped by the arrow keys), the NEW pill after `hangarRefresh({ newlyUnlocked })`, the plume nozzles on the
+  three generated hulls, the Coconut fallback for a locked saved selection.
+- `probes/t-wallpaper.mjs --root ../..` — the commendation wallpaper (14): both sizes rendered from a faked career,
+  pixel checks, the stubbed download, the victory-slot buttons, the records Hall button, the render budget; it writes
+  `wallpaper-desktop.png` / `wallpaper-phone.png` into its out dir.
 
 ## Music loop points (`tools/measure-loops.sh`)
 

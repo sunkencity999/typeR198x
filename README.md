@@ -7,14 +7,19 @@ target to lock on, finish the word to fire, and clear ten sectors of word-bosses
 (plain HTML, CSS and classic JavaScript, no bundler, no runtime dependencies) that plays at
 **[https://typer198x.com](https://typer198x.com)** and can be served from any static host.
 
-This README describes the web build after the 2026 overhaul, the training update (release `20261024b`: hand-speed
-WPM, typo feedback, rank lines, the pilot profile and Flight log, the first-run flight check, everyday words and
-two-word targets aimed at weak keys, the Counter-Signal boss attack and Overdrive, a stream that follows the pilot's
-speed with timed-out waves, hull carry and Cadet pace, and the daily sortie, drill and endless drift) and its pace
-follow-up (release `20261025a`: the pace also counts how quickly the pilot finds the next target, and a wave at the
-standard pace lasts and ends by the original wave rules). Release steps
-live in [DEPLOY.md](./DEPLOY.md);
-the play-test harness has its own [tools/playtest/README.md](./tools/playtest/README.md).
+This README describes the web build as of release `20261102a` (2 November 2026): the 2026 overhaul plus five passes
+on top of it. The training update (`20261024b`: hand-speed WPM, typo feedback, rank lines, the pilot profile and
+Flight log, the first-run flight check, everyday words and two-word targets aimed at weak keys, the Counter-Signal
+boss attack and Overdrive, a stream that follows the pilot's speed with timed-out waves, hull carry and Cadet pace,
+and the daily sortie, drill and endless drift) and its pace follow-up (`20261025a`: the pace also counts how quickly
+the pilot finds the next target, and a wave at the standard pace lasts and ends by the original wave rules). The
+presentation pass (`20261031a`: one pixel-art language across ships, bosses and backdrops, graded seam-free parallax,
+bloom, boss damage states). The AAA pass (`20261101a`: a drone body behind every plate, living backgrounds, cinematic
+framing, the HUD and title hero, a sampled sound library with a radio announcer and adaptive music, an installable
+offline PWA with six accessibility settings, and an optional daily-sortie leaderboard that ships off). The Career pass
+(`20261102a`: commendations, boons, loops, three unlockable ships, beam tiers and a commendation wallpaper for every
+campaign clear). Release steps live in [DEPLOY.md](./DEPLOY.md); the play-test harness has its own
+[tools/playtest/README.md](./tools/playtest/README.md).
 
 ## Contents
 
@@ -42,9 +47,12 @@ the play-test harness has its own [tools/playtest/README.md](./tools/playtest/RE
 
 ## The game
 
-- **Lock and fire.** Every enemy is a word on a plate. Typing its first letter locks the nearest matching
-  plate; each further correct letter fires a shot, and the last one destroys it. Lime means "type this";
-  violet is a pickup, magenta is hostile, amber is score, red is damage, cyan is chrome.
+- **Lock and fire.** Every enemy is a word on a plate, the call-sign tag of a small pixel-art drone flying a dozen
+  pixels behind it (scouts carry single letters, interceptors short words, haulers long ones, pods the boss minions;
+  `assets/js/game/74-drones.js`). Typing its first letter locks the nearest matching plate and lime corner brackets
+  mark its drone; each further correct letter fires a shot, and the last one destroys it: the drone tumbles and pops.
+  A plate that gets through streaks past the ship and costs hull. Lime means "type this"; violet is a pickup, magenta
+  is hostile, amber is score, red is damage, cyan is chrome.
 - **Words.** Half the word targets in Sectors 1-5 (30 % from Sector 6) are everyday English from a 500-word list
   (`COMMON_WORDS`, `assets/js/core/25-lexicon.js`); the rest are real neon, space and retro words (the invented words
   stay with the bosses, callouts and capsules). From Sector 4, 15 % of word targets are two-word phrases (20 % from
@@ -63,7 +71,8 @@ the play-test harness has its own [tools/playtest/README.md](./tools/playtest/RE
   provisional 25 WPM that refreshes every second, so a new pilot's first Overdrive ends by the same rule.
 - **Powerups.** `SHIELD`, `MULTI`, `SPREAD`, `PIERCE`, `RAPID` and `HEAL` capsules drift in; type the
   label to grab one. Combo tiers lift the score multiplier up to x5 (x7 under `MULTI`); a hard miss or
-  hull damage breaks the combo. Wrong keys never cost points.
+  hull damage breaks the combo. Wrong keys never cost points. Career boons can stretch the capsules (Long Burn,
+  Field Repair, Wide Spread; see [Career](#career-commendations-boons-loops-ships-beams)).
 - **Seven ships.** The S.S. Coconut, Little Dark One, Sofrito and HoneyBee fly from the start, each with its own
   sprite, thruster and shield ring. Three Career hulls unlock with campaign clears (`save.career.clears`; the hangar
   cards stay locked, greyed and unfocusable until then, `14-hangar.js`):
@@ -75,8 +84,27 @@ the play-test harness has its own [tools/playtest/README.md](./tools/playtest/RE
   | The S.S. Moonpie | 12 clears | White-and-gold cruiser: rounded, chrome trim, three small engines in a row, greenhouse canopy, a fin. "Comfort class. The dashboard lights up like a diner at midnight." |
 - **Progress.** Checkpoints every sector; retry a boss from the phase you reached or the sector from its
   start; Continue from the resume card; replay any unlocked sector from the title grid; a records modal
-  keeps the top ten runs and your sector bests, and its Flight log tab keeps your typing profile (see
-  [hand speed](#sectors-bosses-and-ranks)).
+  keeps the top ten runs, your sector bests and your Commendations (the Hall tab, with the wallpaper button), and
+  its Flight log tab keeps your typing profile (see [hand speed](#sectors-bosses-and-ranks)).
+- **Career.** Every clear of sector 10 is a commendation on the title screen's service record and earns a pick from
+  three permanent boons, opens the next loop (New Game+: faster plates, longer bosses, more points), and at 1 / 5 / 12
+  clears a new ship, at 1 / 5 / 12 / 20 a cosmetic beam tier, plus a downloadable wallpaper every time. One setting
+  turns boons and loops off for a PURE campaign. See [Career](#career-commendations-boons-loops-ships-beams).
+- **HUD.** The score is the hero cell; beside it the combo count with a progress bar toward the next tier, the
+  multiplier, hand-speed WPM and accuracy, the chosen ship's silhouette next to a segmented hull meter, and during a
+  fight the boss bar with its portrait and phase ticks that break off as phases fall. Narrow screens drop the WPM
+  cell, phones the pilot name.
+- **Presentation.** Ten hand-painted art sets graded per sector, a mid-depth silhouette strip, painted lights that
+  blink, weather (rain, ash, embers, motes), lightning and explosion light splashes under the plates; camera zoom on
+  the sector drop-in, the boss slam and the boss kill; a scanline wipe between screens; bloom; bosses that scorch and
+  crack as their phases fall. Reduced motion turns the moving parts off (see
+  [Settings](#settings-reduced-motion-and-touch-play)).
+- **Sound.** Every cue is a round-robin sample from a generated neon-arcade library, the typing tick climbs an octave
+  across each word, a radio announcer calls the fight (Warning, Boss incoming, Perfect, Sector clear, the rank) and
+  on desktop the music's drums fade in and out with the action. See [Music and sound](#music-and-sound).
+- **Install it.** The game is an installable, offline-capable PWA: an Install link appears in the title's link row
+  when the browser offers it, and a new release shows NEW VERSION READY on the menu instead of swapping code mid-run.
+  See [Install (PWA) and offline](#install-pwa-and-offline).
 - **Flight check.** A fresh save flies a short check before the Sector 1 card: type `J`, finish `SPARK`, then let go
   of `COMET` with `Space` and take the nearer `LASER`. Nothing can hit you, nothing scores and nothing reaches the
   records; `Esc` or **Skip** goes straight to the sector, and returning pilots never see it. The mission briefing
@@ -141,7 +169,9 @@ Ten sectors share seven hand-painted art sets (`LEVEL_THEMES` in `assets/js/core
 back half revisits earlier skylines as *storm passes* (1.25x parallax, lightning, a multiply tint) and the
 finale gets the crystal city. Each sector's quota, cap, target characters per second, enemy speed,
 letter/word ratio, word-length window, surge cadence and minion rate come from `LEVEL_TABLE` in
-`assets/js/core/20-constants.js`.
+`assets/js/core/20-constants.js`. A Career loop run (see [Career](#career-commendations-boons-loops-ships-beams))
+layers on top: plate speed x(1 + 0.06 x loop) after the pace controller, the boss's longest segments repeated once
+per loop, every point x(1 + 0.10 x loop).
 
 Counter-Signal cadence (`LEVEL_TABLE` `surgeEvery`, ARCADE D10): none in sector 1, every 20 s in sectors 2-3, then 14 /
 13 / 12 / 11 / 10 / 9 / 8 s; the first surge of a fight arms min(6 s, surgeEvery) after the intro and the cadence runs
@@ -191,9 +221,12 @@ days flown and a goal line built from the last five sessions (also on the title 
 
 ## Settings, reduced motion and touch play
 
-The settings panel (title screen link row or the pause screen) has **Music** (default 70 %), **SFX**
-(80 %), **Mute**, **Career boons & loops** (on; off = PURE runs, see Career), **CRT filter** and its **intensity** (on, 75 %), **Motion** (*Follow system* /
-*Reduced* / *Full*), the accessibility rows below and a **Fullscreen** button. All of it persists in the save.
+The settings panel (title screen link row or the pause screen) has, in order: **Music** (default 70 %), **Sound FX**
+(80 %), **Career boons & loops** (on; off = PURE campaign runs, see
+[Career](#career-commendations-boons-loops-ships-beams)), **Announcer** (on; the radio voice lines,
+`settings.announcer`), **Mute all**, **CRT filter** and its **intensity** (on, 75 %), **Motion** (*Follow system* /
+*Reduced* / *Full*), the six accessibility rows below, a **Fullscreen** button and, only when the owner has enabled
+the daily board, **Share daily sortie scores** (off). All of it persists in the save.
 
 **Accessibility options (PLATFORM, `assets/js/game/12-access.js`).** Six more rows in the same panel, each stored in
 `save.settings` (defaults and sanitising in `40-save.js`) and applied through the shell's `setSetting` / `applySettings`
@@ -256,7 +289,7 @@ root (scope `/`).
   row) only at the menu, never during a run; the worker swaps (`SKIP_WAITING`) and the page reloads when the player asks.
   Old caches are deleted on activate.
 - **Precache.** `tools/gen-sw-precache.mjs` writes the `PRECACHE` block of `sw.js` from `index.html` (every local `<script>` /
-  `<link>`, the secondary pages, the manifest, `assets/fonts/*.woff2`, `assets/ui/**`; 69 entries, no `assets/opt` art). Run it
+  `<link>`, the secondary pages, the manifest, `assets/fonts/*.woff2`, `assets/ui/**`; 77 entries for `20261102a`, no `assets/opt` art). Run it
   after adding a script or a UI asset; `tools/deploy-check.sh --local` fails when the list is stale (`--check`). Install adds the
   entries one by one and swallows failures, so a stale list never breaks the page.
 - **Strategies.** Navigations are network-first with a cache fallback (the page, else `index.html`); `assets/opt/**` (versioned,
@@ -291,7 +324,7 @@ Module map, in `index.html` load order:
 | `assets/js/core/20-constants.js` | Timing and balance constants, `LEVEL_TABLE` -> `LEVELS`, `RANK`/`rankFor`, powerups, `buildBossSegments` |
 | `assets/js/core/25-lexicon.js` | `COMMON_WORDS`, `PHRASES`, the wave-pool mix (`lexiconAttachLevel`: common / two-word shares, `waveTextLen` for the spawner's cps), two-word plates (Space types the gap, the gap dot), weak-key bias from MEASURE's profile, THREAT INTEL; GAME_HOOKS listeners only (WORDS) |
 | `assets/js/core/30-content.js` | Word pools and letter sets, boss tables, ship configs, `LEVEL_THEMES`, explosion sheet, victory script |
-| `assets/js/core/40-save.js` | `LS_KEY`, schema 3 `defaultSave`, `loadSave`/`storeSave`, `migrateSave`, checkpoints and resume helpers |
+| `assets/js/core/40-save.js` | `LS_KEY`, schema 3 `defaultSave`, `loadSave`/`storeSave`, `migrateSave` (with `normaliseCareer`, which rebuilds `save.career` from `victories`), checkpoints and resume helpers |
 | `assets/js/core/50-assets.js` | `Assets` IIFE (`window.TypeRAssets`): manifest-driven image loader, variants, prepare, prefetch, gc |
 | `assets/js/core/60-entities.js` | `Enemy`, `Powerup`, `Bullet`, `ExplosionSprite`, `Particle`, `Boss` |
 | `assets/js/core/70-canvas.js` | Stateless canvas helpers: `roundRect`, `bracketRect`, `drawSplitText`, `fitText`, `drawTracked` |
@@ -299,6 +332,7 @@ Module map, in `index.html` load order:
 | `assets/js/game/05-boot.js` | Boot sequence, loading overlay and watchdog, per-sector asset gate, prefetch of the next sector (from the page's first typed key) |
 | `assets/js/game/10-ui.js` | Shell: `setMode` state machine, focus routing, announcer, modals and confirms, settings + `resolveMotion`, fullscreen, top bar, mobile input |
 | `assets/js/game/12-access.js` | PLATFORM: the accessibility rows (plate colours / font / size, screen shake, reduce flashes) as wrappers over `plateFontPx`, `motion`, `drawThemeFx`, `FONT.target` and `applySettings` / `bindSettings`, the high-contrast `PLATE_STYLES` swap + `renderOverlay` shape cues, keyboard layout detection (`keyboardLayout` / `keyboardRows`), the service-worker registration and update toast, the Install link (`ACCESS_*`, `access*`) |
+| `assets/js/game/14-hangar.js` | CAREER ships: `hangarRefresh({ newlyUnlocked })` locks the hangar cards of hulls the pilot has not earned (`SHIP_CONFIGS[].unlock` against `save.career.clears`: greyed, "Unlocks after N clears", out of the tab order and skipped by the arrow keys), rings a fresh unlock with a NEW pill and falls back to the Coconut when the saved selection is locked |
 | `assets/js/game/15-screens.js` | Title cabinet (sector grid, resume card), records and help modals, results cards, tutorial toasts, CRT overlay and the typewriter ending |
 | `assets/js/game/17-onboarding.js` | First-run Flight check (ONBOARD): eligibility, the three drills, Skip / `Esc`, pause relabel, the briefing summary and disclosure, the `TypeRHarness.flightCheck` flag |
 | `assets/js/game/20-run.js` | Run and sector lifecycle, checkpoints, `saveRun`, level complete / game over / victory |
@@ -311,12 +345,14 @@ Module map, in `index.html` load order:
 | `assets/js/game/50-boss.js` | Boss v2: phases, minions, intro and finale; Counter-Signal (surge cadence, `surgeWindow` from the pilot's speed, telegraph, fail reset, counter, DOM charge bar) (ARCADE) |
 | `assets/js/game/52-modes.js` | Daily Sortie (date seed, per-wave mulberry32 through `this.rand()`, medal, streak, share line), Endless Drift and Drill streams (`waveTuning`, own text picker), the title deck, the mode results screen, `save.modes` (MODES) |
 | `assets/js/game/54-leaderboard.js` | LEADERBOARD: the optional public daily-sortie board (`LEADERBOARD.endpoint`, empty = off: no UI, no network); opt-in `settings.shareDailyScores`, anonymous `save.playerToken`, POST on `modesRunEnd` with one retry, "Today's board" under the sortie card (wraps `renderModeResults`), the menu teaser (`menuRender`, one GET per 5 min), `TypeRHarness.leaderboardEndpoint` for probes |
-| `assets/js/game/60-hud.js` | DOM HUD with write-on-change diffing: score, combo and multiplier, HP meter, chips, boss meter |
+| `assets/js/game/56-career.js` | CAREER: `save.career` (`clears`, `loop`, `pure`, `boons`, `picks`, `commendations`) and its accessor, `careerRecordClear` from the wrapped `commitLevelClear`, deterministic boon offers and the `#boonModal` pick, the seven boon effects (hooks `sectorStart` / `damageWillApply`, wrappers over `collectPowerup`, `releaseLock`, `applySpread`, `odTick`), loops (`paceApplyTuning` speed, `buildBossPlan` segments, `scoreWillAdd`), the LOOP / BOONS / PURE record tags, the title's service record strip, the victory panel, the Commendations table, the **Career boons & loops** setting, `beamTier()` |
+| `assets/js/game/58-wallpaper.js` | WALLPAPER: `renderCareerWallpaper` (desktop 2560x1440 / phone 1080x1920, composed on demand on an offscreen canvas from the `@2x` art, nothing per frame), `downloadCareerWallpaper`, the buttons mounted into `#careerWallpaperSlot` on the victory screen and into the records modal's Hall tab |
+| `assets/js/game/60-hud.js` | DOM HUD with write-on-change diffing: the score as the hero cell, combo count with the tier progress bar (`#hudComboBar`), multiplier, WPM / ACC, the chosen ship's silhouette (`#hudShipIcon`) beside the segmented hull meter, chips, the boss meter with its portrait (`#bossPortrait`) and phase ticks that break off as phases fall |
 | `assets/js/game/70-render.js` | `resizeCanvas`/`renderScale`, plates, capsules and rails, dying and escaping plates, boss art (Counter-Signal glow) and console slab, warp-in, storms, parallax, stars, `render()` in layer order |
 | `assets/js/game/72-atmos.js` | ATMOS: parallax tiles baked once per sector into offscreen canvases with a seam-dissolve edge (the masters do not wrap), a per-sector multiply tint + saturation pull + lane haze, and a hue shift for sectors 6 / 8 / 9 that share art with 3 / 4 / 5 (`ATMOS_GRADES`) |
 | `assets/js/game/73-ambient.js` | AMBIENT: mid-depth silhouette strip (`mid/*`, `AMBIENT_MID_FOR_LEVEL`), blinking emissives derived from the baked tiles with blend modes only (two phase groups + dropouts, half resolution), per-sector weather (rain / ash / embers / motes), explosion light splashes under the plates, visible lightning bolts on the storm flash; `TypeRHarness.ambient = false` freezes it |
 | `assets/js/game/74-drones.js` | DRONES: the plate bodies (scout / interceptor / hauler / pod from `fx/drones`, hull + accent bands baked per sector accent, idle bob / roll / flicker, tether, lime lock brackets, wrecks after kills and leaks, attract ghosts too); drawn before every plate in `drawEnemies` / `drawAttract`; `TypeRHarness.drones = false` freezes it |
-| `assets/js/game/75-fx-draw.js` | Ship, beams, rings/bolts/debris, particles, overlays, vignette, active-target redraw |
+| `assets/js/game/75-fx-draw.js` | Ship, beams (plus the Career beam tiers, `drawBeamTierPasses` inside the same additive batch), rings/bolts/debris, particles, overlays, vignette, active-target redraw |
 | `assets/js/game/76-bloom.js` | BLOOM: the frame so far drawn at quarter resolution, multiplied by itself twice (luminance^3 threshold), blurred by a 1/16 round trip and added back at `BLOOM.alpha`; two offscreen composite sets per frame, self-disables when its own cost stays above `BLOOM.budgetMs` |
 | `assets/js/game/78-bossfx.js` | BOSSFX: overrides `drawBossArt` / `drawBossDissolve` with roll + breathing + phase punch, an emissive pulse extracted from the sprite (luminance^3, no pixel reads), three damage states baked per fight (seeded scorch blotches, cracks, char) with a crossfade, intro slide ghosts, sparks and smoke from the tick hook (`BOSSFX`) |
 | `assets/js/game/80-fx.js` | Effects clock: trauma camera and `shakeOffset`, hit-stop/slow-mo, flash channels, `onKeyFx`/`onKillFx`, ambient step |
@@ -341,7 +377,7 @@ come from `PALETTE` / CSS variables rather than literals.
    is its only writer:
 
    ```bash
-   tools/bump-version.sh 20261025a            # rewrite every shell token (index, info, support, privacy pages, game.js)
+   tools/bump-version.sh 20261102a            # rewrite every shell token (index, info, support, privacy pages, game.js, sw.js)
    tools/bump-version.sh                      # today's date + next letter
    tools/bump-version.sh --dry-run            # report only
    tools/bump-version.sh --add-missing        # also stamp script/stylesheet tags that have no ?v= yet (never the font preload)
@@ -415,7 +451,7 @@ SKIP_OG=1 tools/build-web-assets.sh        # skip the og-card step
 
 **`Assets` loader** (`assets/js/core/50-assets.js`, also `window.TypeRAssets`): reads the manifest and
 loads images on demand. The loading screen waits only for the critical set (seven ships, `bg/first`,
-`fg/first`, `fx/explosions`); each sector's background, foreground and boss load when the sector starts
+`fg/first`, `fx/explosions`, `fx/drones`); each sector's background, foreground and boss load when the sector starts
 and the next sector is prefetched a quarter of the way through (once the pilot has typed in this page session, so a
 run resumed past that point does not fetch it before the first keystroke) and during the finale; images are
 decoded off the main thread into bitmaps at the size they are drawn (`x2` files above `renderScale` 1.25,
@@ -506,26 +542,27 @@ announcer on. `tools/playtest/probes/audio-contract.mjs`, `audio-lifecycle.mjs` 
 
 ## Budgets (measured)
 
-Numbers from the harness at a 1440x900 viewport. The frame-rate and render rows were re-measured for release
-`20261101a` (the AAA pass: drones, ambient layers, cinematic framing, HUD, sound) with `play.mjs --scenario all` and
-`probes/e2-budget.mjs`; the byte rows for `20261024b` / the SOUND pass as noted:
+Numbers from the harness at a 1440x900 viewport, re-measured for release `20261102a` (the Career pass on top of the
+AAA pass) with `play.mjs --scenario all` at DPR 1 and DPR 2 and `probes/e2-budget.mjs`. Byte figures are MiB, the
+unit `harness-report-check.mjs --budget-mb` compares against:
 
 | Metric | Measured | Budget |
 | --- | --- | --- |
-| Non-media bytes finished before the first keystroke | 2.11 MB at DPR 1, 2.57 MB at DPR 2 (1.94 / 2.39 for `20261024a`); 2.34 MB for the `fixture-legacy-inboss` matrix row, which loads a boss before its first keystroke | <= 2.5 MB at DPR 1, <= 2.75 MB at DPR 2 and for `fixture-legacy-inboss` (CONTRACT 8.y W2, 8.z Z11) |
-| `assets/opt` (everything the web build can download) | 42.96 MB (29 MB before the SOUND pass: +0.56 MB sample banks, +18.2 MB music layers, -5.9 MB music MP3s at `-q:a 5`) | <= 45 MB whole game (SOUND pass budget; was 35) |
+| Non-media bytes finished before the first keystroke | 2.31 MiB at DPR 1, 2.74 MiB at DPR 2 (`20261102a`: the three Career hulls joined the critical set; 2.11 / 2.57 for `20261024b`, 1.94 / 2.39 for `20261024a`); 2.34 MiB for the `fixture-legacy-inboss` matrix row, which loads a boss before its first keystroke | <= 2.5 MiB at DPR 1, <= 2.75 MiB at DPR 2 and for `fixture-legacy-inboss` (CONTRACT 8.y W2, 8.z Z11); DPR 2 now sits 14 KB under its line, so the next critical-set asset needs a trade |
+| `assets/opt` (everything the web build can download) | 43.12 MB (`20261102a`; 29 MB before the SOUND pass: +0.56 MB sample banks, +18.2 MB music layers, -5.9 MB music MP3s at `-q:a 5`; +0.16 MB for the three Career hulls) | <= 45 MB whole game (SOUND pass budget; was 35) |
 | Decoded audio resident (one music layer pair + the two sample banks) | 56-67 MB (track 1: 66.4, track 6: 66.6; banks 10.4 MB; peak equals resident, the old pair is released before the next decodes) | <= ~90 MB |
 | Audio decode at unlock / per sector | sample banks 28 + 6 ms inside the unlock gesture (never gating Start past 1.5 s); a music layer pair 160-180 ms behind the results card | Start unaffected (`startToPlayingMs` 67-136 ms in the probes) |
-| Frame rate (menu, gameplay, boss, finale windows) | 60 fps at DPR 1 and DPR 2 (`20261101a`: all / mobile / reduced-motion 60-61; the native-UA scenario reads 30 on `fa06754` as well) | >= 58 |
-| `render()` wall time | 4.8 ms max at DPR 1 (`--scenario all`), 5.4 ms at renderScale 2 in the budget scene (14 plates with drones, a lock, chips, toast, banner; 5 composite sets) | <= 16 ms |
+| Frame rate (menu, gameplay, boss, finale windows) | 60 fps at DPR 1 and DPR 2 (`20261102a`: all / reduced-motion / mobile / no-music 60, native-UA 60-61) | >= 58 |
+| `render()` wall time | 5.8 ms max at DPR 1 (`--scenario all`), 10.2 ms peak at renderScale 2 (`--scenario all --dpr 2 --reduced-motion`), 5.4-5.6 ms at renderScale 2 in the budget scene (14 plates with drones, a lock, chips, toast, banner; 5 composite sets) | <= 16 ms |
 | `shadowBlur` sets per frame in steady state | 0 | <= 2 |
 | Translucent full-frame fill alpha | .12 (storm tint .22 multiply is the documented exception) | <= .12 |
 | Decoded bitmap pixels at DPR 2, sector 1 | ~10.9 Mpx (~19 Mpx with the next sector prefetched) | <= 12 Mpx resident |
 
-Known and tracked: `layoutCountPer5s` while typing reads 15-35 with the probe run alone (34.2 at DPR 1 and 30.8 at
-DPR 2 for `20261024b`, 14.9 / 25.7 for `20261024a`; the window tracks how many keys and callouts land in it; target
-<= 40 per 5 s: the 5 Hz HUD commits plus event-driven writes, see `probes/e2-layout.mjs`); idle play is about 4
-(`layoutCountPer5sIdle` 3.9 / 3.5); the
+Known and tracked: `layoutCountPer5s` while typing reads 22-37 on the desktop rows with the probe run alone (36.5 at
+DPR 1 and 22.4 at DPR 2 for `20261102a`, 34.2 / 30.8 for `20261024b`, 14.9 / 25.7 for `20261024a`; the window tracks
+how many keys and callouts land in it; target <= 40 per 5 s: the 5 Hz HUD commits plus event-driven writes, see
+`probes/e2-layout.mjs`), and 43.7 on the `20261102a` mobile smoke row, over the target and not yet attributed; idle
+play is about 4 (`layoutCountPer5sIdle` 3.9 / 0.9); the
 first frame of a sector entered by a direct `startLevel(i)` jump costs 45-80 ms at DPR 2 (GPU upload;
 `advanceLevel` is pre-warmed and does not hitch).
 
@@ -547,41 +584,100 @@ on an integrated GPU.
 
 ## Career: commendations, boons, loops, ships, beams
 
-Every clear of sector 10 earns a **commendation** (rank, ship, loop, score, speed, accuracy, date) in the **service
-record**, a strip under the title hero that appears after the first clear: one hexagonal badge per commendation (the
-twentieth is a star, the Electromancer's Seal), the **loop** selector for the next run, the **boons** you hold and a
-CHOOSE BOON button while a pick is waiting. The same strip's data feeds a Commendations table in the records modal
-and the LOOP n / BOONS / PURE tags on results cards and high-score rows. `assets/js/game/56-career.js`; probe
-`tools/playtest/probes/t-career.mjs`.
+The meta-progression layer (CAREER, `assets/js/game/56-career.js`; probe `tools/playtest/probes/t-career.mjs`). Every
+clear of sector 10 earns a **commendation** (rank, ship, loop, score, speed, accuracy, date) and one boon pick. A save
+from before the pass is rebuilt from its `victories` count with one generic commendation and one pick per clear, so
+nothing a pilot earned is lost; a PURE clear (below) records a commendation too.
 
-**Boons** (one pick per clear, three offered at a time, seven in all, permanent, campaign only):
+**Where it shows.** The **service record** (`#serviceRecord`) is a strip under the title hero that appears after the
+first clear: one hexagonal badge per commendation with its rank letter (the twentieth is a star, the Electromancer's
+Seal), a meta line (`n CLEARS · BEAM <tier>`), the **loop** selector for the next run (arrow keys move it), the
+**boons** held and a CHOOSE BOON button while a pick waits. The victory screen shows the COMMENDATION n panel
+(`#careerPanel`: the pick button, the callouts for a new ship, beam tier, loop or the seal, and the wallpaper buttons).
+The records modal's Hall tab gains a Commendations table; results cards and high-score rows carry LOOP n / BOONS /
+PURE tags. Everything reads `save.career` (`{ clears, loop, pure, boons[], picks, commendations[] }`, see
+[Save data](#save-data)); a fresh ship unlock calls `hangarRefresh` so the hangar card lights up on the next menu.
 
-| Boon | Effect |
-| --- | --- |
-| Shield Start | Every sector opens with a 4 s shield already up |
-| Absorb | The first plate to reach the hull in each sector is absorbed |
-| Long Burn | Powerups last half as long again |
-| Safe Release | Once per wave, releasing a lock keeps the letters you typed |
-| Field Repair | Repair kits restore half as much hull again |
-| Wide Spread | Spread blasts reach 40 % further |
-| Hot Engine | The Overdrive meter charges 25 % faster |
+**Boons.** One pick per clear from three offers in the `#boonModal` (the offers are deterministic per clear count and
+boons held, so a reload shows the same three; *Later* closes the modal and keeps the pick), seven in all, permanent,
+campaign only:
 
-**Loops** (New Game+, one unlocked per clear up to loop 5): plates +6 % speed per loop (on top of the pace
-controller), the boss carries one more segment per loop (its longest segments repeat; phases keep their starts) and
-every point scores +10 % per loop. Boons and loops never apply to the Daily Sortie, Endless Drift or Drill, and the
-**Career boons & loops** setting turns both off for campaign runs (loop 0, no boons, the run is tagged PURE), so a
-pure campaign is always one toggle away. The run record carries `loop`, `boons` and `pure`, so a saved run resumes
-with what it started with.
+| Boon | Effect | Where it hooks in |
+| --- | --- | --- |
+| Shield Start | Every sector opens with a 4 s shield already up | `sectorStart` hook |
+| Absorb | The first plate to reach the hull in each sector costs no hull | `damageWillApply` hook |
+| Long Burn | Powerups last half as long again (x1.5) | wraps `collectPowerup` |
+| Safe Release | Once per wave, releasing a lock keeps the letters you typed | wraps `releaseLock` |
+| Field Repair | Repair kits restore half as much hull again (x1.5) | wraps `collectPowerup` |
+| Wide Spread | Spread blasts reach 40 % further (x1.4) | wraps `applySpread` |
+| Hot Engine | The Overdrive meter charges 25 % faster (x1.25) | wraps `odTick` |
 
-**Unlocks by clears:** ships Paprika (1), Nightjar (5), Moonpie (12) in the hangar; cosmetic beam tiers for the main
-weapon, Twin Rail (1), Prism (5), Lance (12), Aurora (20), drawn inside the beam's additive batch in `75-fx-draw.js`;
-the commendation wallpaper (desktop and phone) from the victory screen and the records modal (`58-wallpaper.js`).
+Each boon is a wrapper over the owning method or a listener on an existing hook; no combat code changed.
+
+**Loops** (New Game+, one unlocked per clear up to loop 5, chosen on the service record before a run; the selector
+follows the pilot up unless a lower loop was pinned): plates +6 % speed per loop on top of the pace controller
+(`paceApplyTuning`), the boss carries one more segment per loop (its longest segments repeat; phases keep their
+starts, `buildBossPlan`) and every point scores +10 % per loop (`scoreWillAdd`). The run record carries `loop`,
+`boons` and `pure`, so a saved run resumes with what it started with.
+
+**PURE.** Boons and loops never apply to the Daily Sortie, Endless Drift or Drill, and the **Career boons & loops**
+setting turns both off for campaign runs (loop 0, no boons, the run and its records tagged PURE), so the tuned
+campaign is always one toggle away.
+
+**Unlocks by clears:**
+
+| Clears | Ship (hangar, `14-hangar.js`) | Beam tier (cosmetic, `drawBeamTierPasses` in `75-fx-draw.js`) | Also |
+| --- | --- | --- | --- |
+| 1 | The S.S. Paprika | Twin Rail: two thin rails beside the beam | loop 1 opens; the first wallpaper |
+| 5 | The S.S. Nightjar | Prism: a gradient core at 1.5x width | loop 5, the cap, is open |
+| 12 | The S.S. Moonpie | Lance: a dashed sheath racing along the beam | |
+| 20 | | Aurora: the sheath cycles hue and the impact sparkles | the Electromancer's Seal (the star badge) |
+
+Beam tiers change nothing but pixels: they draw inside the beam's existing additive batch, so the composite-set
+budget holds. A freshly unlocked hull gets a ring and a NEW pill in the hangar; a locked card is greyed, reads
+"Unlocks after N clears" and is skipped by the arrow keys. The three hulls are generated pixel art
+(`tools/art/gen_ships.py`), built to sit beside the four illustrated ships.
+
+### Commendation wallpapers
+
+Every campaign clear earns a downloadable wallpaper (`assets/js/game/58-wallpaper.js`, WALLPAPER) composed from the
+game's own art and the pilot's run: the sector-10 vista (`bg/tenth` + the untiled `fg/tenth`, graded darker toward the
+bottom third, vignette, seeded stars), the pilot's ship large in the lower left with its plume glow at the
+`THRUSTER_OFFSET` nozzles, two or three drone silhouettes from `fx/drones` behind it, the Final Electromancer
+(`bosses/10`) as a faint accent-graded hologram on the right, the wordmark in Orbitron, `COMMENDATION Nº n`, the pilot
+name, the rank badge (coloured like the CSS `.rankBadge`: `RANK.colors`), a stats row (score, WPM, accuracy, loop,
+PURE / boons), the twenty-slot badge strip (one hexagon per commendation with its rank letter, older ones dimmed, the
+twentieth a star) and a footer (date · ship · typer198x.com). Two sizes: **desktop** 2560 × 1440 and **phone**
+1080 × 1920 (the phone stacks vista / ship / text).
+
+Where: the victory screen's career panel (`#careerWallpaperSlot`, filled at runtime with the two `.btn-arcade` buttons
+"Wallpaper · desktop" / "Wallpaper · phone" and a hint, on `modeChange` to `victory` with a 300 ms retry for up to
+10 s) and the records modal's Hall tab (`#careerWallpaperRecords`, one "Wallpaper" button sized by the screen's
+orientation, after the table, hidden with no clears; created in a wrapper of `openRecords`, no markup edit). The file is
+`TypeR-198X-commendation-<n>-<desktop|phone>.png`, saved through a temporary `<a download>` (a browser without
+`download` opens the image in a new tab); the button carries `.is-busy` / `aria-busy` while rendering. A shell whose
+canvas is tainted (`file://` images in Chrome) makes `toBlob` throw: the buttons hide and the hint says so.
+
+Data: `save.career` (the Career module: `clears`, `commendations[{ n, date, rank, ship, loop, score, wpm, acc, boons,
+pure }]`) when present, else `save.victories`, the live run results or the newest `highScores` row and `selectedShip`.
+Nothing runs per frame: the render happens on demand in its own offscreen canvas (blend modes, gradients and
+`shadowBlur` are fine there) from the `@2x` files (`Assets.url(key, "x2")`, same origin, no CORS attribute), with the
+loader's resident drawable as the fallback; the decoded images are released 20 s after the last render. Pixel art
+draws with `imageSmoothingEnabled` false when enlarged; the vista scales smoothly. Measured: 170 ms for the first
+desktop render on the harness machine (image fetches included), a few ms for the second size.
+
+API: `game.renderCareerWallpaper({ size, commendation?, career? }) -> Promise<HTMLCanvasElement>` (never rejects: a
+missing asset skips its element, a failed Orbitron load uses the system stack), `game.downloadCareerWallpaper(size,
+{ button? })`, `game.careerWallpaperMount()`, `game.careerWallpaperRecordsMount()`, `game.careerWallpaperData()`,
+`game.careerWallpaperFilename(size, data)`. Probe: `node probes/t-wallpaper.mjs --root ../..` (renders both sizes
+from a faked career, pixel checks, the stubbed download, the victory slot, the records button, the render budget; it
+writes `wallpaper-desktop.png` / `wallpaper-phone.png` into its out dir).
 
 ## Save data
 
 One `localStorage` key, **`typesmup198x.save.v1`**, schema 3 (`assets/js/core/40-save.js`):
 `playerName`, `selectedShip`, `highScore`, `lastUnlockedLevel` (1..10), `storySeen`, `settings`
-(`muted`, `crt`, `musicVolume`, `sfxVolume`, `crtIntensity`, `reduceMotion`, `renderScaleCap`, `shareDailyScores`, the
+(`muted`, `crt`, `musicVolume`, `sfxVolume`, `crtIntensity`, `reduceMotion`, `renderScaleCap`, `announcer` (SOUND, default true), `shareDailyScores`, the
 leaderboard opt-in, default false, anything but a stored `true` reads as off, and the PLATFORM rows `plateColor`, `plateFont`,
 `plateScale`, `shakeAmount`, `reduceFlashes`, `keyboardLayout`), `career` (CAREER: `{ clears, loop, pure, boons[], picks, commendations[] }`, rebuilt from `victories` for older saves), `playerToken` (LEADERBOARD: the anonymous
 board UUID, `""` until the first opt-in or counted daily sortie with the board on, kept only when UUID-shaped, erased by
@@ -628,41 +724,6 @@ phase. `storeSave()` keeps playing from memory with a toast when storage is unav
 the title screen (link row under the pilot stats) erases everything after a confirmation. The harness
 fixtures under `tools/playtest/fixtures/` are the regression set for every legacy shape.
 
-### Commendation wallpapers
-
-Every campaign clear earns a downloadable wallpaper (`assets/js/game/58-wallpaper.js`, WALLPAPER) composed from the
-game's own art and the pilot's run: the sector-10 vista (`bg/tenth` + the untiled `fg/tenth`, graded darker toward the
-bottom third, vignette, seeded stars), the pilot's ship large in the lower left with its plume glow at the
-`THRUSTER_OFFSET` nozzles, two or three drone silhouettes from `fx/drones` behind it, the Final Electromancer
-(`bosses/10`) as a faint accent-graded hologram on the right, the wordmark in Orbitron, `COMMENDATION Nº n`, the pilot
-name, the rank badge (coloured like the CSS `.rankBadge`: `RANK.colors`), a stats row (score, WPM, accuracy, loop,
-PURE / boons), the twenty-slot badge strip (one hexagon per commendation with its rank letter, older ones dimmed, the
-twentieth a star) and a footer (date · ship · typer198x.com). Two sizes: **desktop** 2560 × 1440 and **phone**
-1080 × 1920 (the phone stacks vista / ship / text).
-
-Where: the victory screen's career panel (`#careerWallpaperSlot`, filled at runtime with the two `.btn-arcade` buttons
-"Wallpaper · desktop" / "Wallpaper · phone" and a hint, on `modeChange` to `victory` with a 300 ms retry for up to
-10 s) and the records modal's Hall tab (`#careerWallpaperRecords`, one "Wallpaper" button sized by the screen's
-orientation, after the table, hidden with no clears; created in a wrapper of `openRecords`, no markup edit). The file is
-`TypeR-198X-commendation-<n>-<desktop|phone>.png`, saved through a temporary `<a download>` (a browser without
-`download` opens the image in a new tab); the button carries `.is-busy` / `aria-busy` while rendering. A shell whose
-canvas is tainted (`file://` images in Chrome) makes `toBlob` throw: the buttons hide and the hint says so.
-
-Data: `save.career` (the Career module: `clears`, `commendations[{ n, date, rank, ship, loop, score, wpm, acc, boons,
-pure }]`) when present, else `save.victories`, the live run results or the newest `highScores` row and `selectedShip`.
-Nothing runs per frame: the render happens on demand in its own offscreen canvas (blend modes, gradients and
-`shadowBlur` are fine there) from the `@2x` files (`Assets.url(key, "x2")`, same origin, no CORS attribute), with the
-loader's resident drawable as the fallback; the decoded images are released 20 s after the last render. Pixel art
-draws with `imageSmoothingEnabled` false when enlarged; the vista scales smoothly. Measured: 170 ms for the first
-desktop render on the harness machine (image fetches included), a few ms for the second size.
-
-API: `game.renderCareerWallpaper({ size, commendation?, career? }) -> Promise<HTMLCanvasElement>` (never rejects: a
-missing asset skips its element, a failed Orbitron load uses the system stack), `game.downloadCareerWallpaper(size,
-{ button? })`, `game.careerWallpaperMount()`, `game.careerWallpaperRecordsMount()`, `game.careerWallpaperData()`,
-`game.careerWallpaperFilename(size, data)`. Probe: `node probes/t-wallpaper.mjs --root ../..` (renders both sizes
-from a faked career, pixel checks, the stubbed download, the victory slot, the records button, the render budget; it
-writes `wallpaper-desktop.png` / `wallpaper-phone.png` into its out dir).
-
 ## Play-test harness
 
 `tools/playtest/play.mjs` is a headless Playwright driver that serves the repo on a random port (correct
@@ -674,6 +735,7 @@ error or non-resource console error.
 cd tools/playtest && npm install                      # once (Playwright, Chrome channel)
 node play.mjs --root ../.. --out ./out/all --scenario all --dpr 2
 node play.mjs --root ../.. --out ./out/smoke --scenario smoke
+npm run all | smoke | hidpi | mobile | reduced-motion | native | no-music | audio   # the same runs as package.json scripts
 bash run-matrix.sh [--quick] [--only dpr1,dpr2]       # the standard matrix, summary table at the end
 ```
 
@@ -691,10 +753,13 @@ headlines: `pageErrors`, `fps.*`, `maxRenderMs`, `shadowBlurPerFrame`, `fullFram
 speed, typos, ranks, the profile and the Flight log, `t-onboard-*` for the flight check and the briefing, `t-words-*`
 for the lexicon, two-word plates and the weak-key bias, `t-arcade-*` for Counter-Signal, Overdrive, readability, the
 boss budget and the surge balance, `t-pace-*` for pace, stakes, hull carry, Cadet, the pace save, perf and the balance
-re-pass (`t-pace-balance --matrix`), `t-modes-*` for the daily sortie, endless drift, drill and the title deck, `t-leaderboard` for the optional daily board
-against a `page.route` mock of its endpoint, `t-hangar` for the Career hull unlocks in the hangar (locked cards, arrow-key
-skipping, the plume nozzles on the three generated hulls, the coconut fallback), `harness-report-check.mjs` for report
-shape and the byte budget). `b10.mjs` and `t-pace-balance.mjs` take
+re-pass (`t-pace-balance --matrix`), `t-modes-*` for the daily sortie, endless drift, drill and the title deck, `t-platform` for the accessibility rows, the
+install / update UI and the service worker, `audio-sound` for the sample pool, sidechain, announcer and music layers,
+`t-leaderboard` for the optional daily board against a `page.route` mock of its endpoint, `t-career` for the
+commendations, boon picks and effects, loops, PURE and the record tags, `t-hangar` for the Career hull unlocks in the
+hangar (locked cards, arrow-key skipping, the plume nozzles on the three generated hulls, the coconut fallback),
+`t-wallpaper` for the commendation wallpaper renderer, `content-tables` for the ship / boss / level tables (seven
+ships with their unlock counts), `harness-report-check.mjs` for report shape and the byte budget). `b10.mjs` and `t-pace-balance.mjs` take
 `--acquire-ms N` (lead ruling Z7: a target-acquisition pause before the first key of every new target, doubled one
 time in ten; off by default). The balance numbers are recorded in
 [tools/playtest/balance.md](./tools/playtest/balance.md).
@@ -709,6 +774,8 @@ Full flag, field and fixture tables: [tools/playtest/README.md](./tools/playtest
 | `tools/art/gen_drones.py <out_dir> [seed]` | Generates the enemy drone sheet master (`assets/sprites/drones.png`: hull band + accent band, four classes x three silhouettes x two frames) + preview; see `tools/art/README.md` |
 | `tools/art/gen_midlayer.py <out_dir> [seed]` | Generates the three mid-depth silhouette strips (`assets/midgrounds/{wreckage,gantry,asteroids}.png`, seamless, alpha) + preview |
 | `tools/art/gen_ships.py <out_dir> [seed] [--colors 44]` | Generates the three Career ship masters (`assets/ships/S_S_{Paprika,Nightjar,Moonpie}.png`, 2816x1536, 22 px art blocks, 44 colours) + `ships-preview.png` beside the four originals, and prints each hull's `THRUSTER_OFFSET` rows; see `tools/art/README.md` |
+| `tools/art/gen_vista.py <abyss\|foundry\|engine> <bg.png> <fg.png> [--seed N]` | Generates the backdrop and foreground vistas for sectors 6 / 8 / 9 (the `seventh` / `eighth` / `ninth` art sets) |
+| `tools/art/deflame.py <ship-id> <in.png> <out.png>` | Removes the painted exhaust from an illustrated ship master before `pixelize.py` (the plume is drawn live at the `THRUSTER_OFFSET` nozzles) |
 | `tools/audio/gen_sfx.py`, `gen_vo.py`, `pack-bank.mjs`, `split_stems.sh` | The SOUND generators: 82 round-robin SFX masters + `index.json`, the 14 radio announcer lines (macOS `say` through a radio chain), the MP3 sprite-bank packer, the Demucs two-stem split; see `tools/audio/README.md` |
 | `tools/art/pixelize.py` | Pixel-consistency pass for a sprite master (box downsample to the backdrops' art density, k-means palette, hard alpha, edge darkening, nearest upscale back to master size) |
 | `tools/bump-version.sh [token] [--root] [--dry-run] [--add-missing] [--quiet]` | Single writer of the shell token (pages, `game.js`, and `sw.js`'s `SW_VERSION` + precache `?v=`) |
@@ -720,6 +787,7 @@ Full flag, field and fixture tables: [tools/playtest/README.md](./tools/playtest
 | `tools/unreferenced-assets.sh [--out file]` | Files under `assets/` the web build never references (22.6 MB today: native icon sets, explosion frame PNGs, manifest.json, OFL text, two icons) |
 | `tools/check-globals.sh [index.html]` | Duplicate top-level declarations across the classic scripts |
 | `tools/leaderboard/test-php.sh [--port N] [--keep]` | Runs `api/leaderboard.php` under `php -S` with a temp database and exercises the contract with curl (GET / POST / validation / headers / limits / retention) |
+| `tools/leaderboard/test-worker.mjs` | Drives `worker.js` in Node against an in-memory KV namespace: the same contract checks as `test-php.sh`, minus the SQLite specifics |
 | `tools/leaderboard/worker.js`, `wrangler.toml.example` | The Cloudflare Worker backend of the daily board and its config template; `tools/leaderboard/README.md` holds the API contract |
 | `tools/measure-loops.sh [audio-dir]` | Music loop points and the duplicate-song test |
 | `tools/playtest/play.mjs`, `run-matrix.sh`, `probes/*` | The harness, the matrix, the per-task probes; `balance.md` for the tuning record |
@@ -729,9 +797,9 @@ Full flag, field and fixture tables: [tools/playtest/README.md](./tools/playtest
 The full, ordered procedure is in [DEPLOY.md](./DEPLOY.md). In short:
 
 ```bash
-tools/bump-version.sh 20261025a                               # 1. new shell token (never deploy the old one)
+tools/bump-version.sh                                         # 1. new shell token, today's date + next letter (never deploy the old one)
 (cd tools/playtest && bash run-matrix.sh)                      # 2. matrix green
-node tools/deploy/deploy.mjs --dry-run --user <ftp-user>       # 3. what would upload (about 200 files, ~370 MB listed; unchanged binaries skipped by size)
+node tools/deploy/deploy.mjs --dry-run --user <ftp-user>       # 3. what would upload (about 230 files since 20261101a; unchanged binaries skipped by size)
 TYPER_FTP_PASSWORD=... node tools/deploy/deploy.mjs --user <ftp-user> --htaccess   # 4. backup, upload, cache policy, verify
 tools/deploy-check.sh https://typer198x.com --strict            # 5. go/no-go
 ```
@@ -750,7 +818,8 @@ tools/deploy-check.sh https://typer198x.com --strict            # 5. go/no-go
   reloads it once only when its old `game.js` is gone from the cache; a browser holding the whole old build is
   repaired on its next visit to `/`, see [Versioning](#versioning-the-two-tokens)).
   `--htaccess` merges `tools/deploy/htaccess-cache.txt` into the web root's `.htaccess`
-  (never replaces it: the download is kept as `tools/deploy/backups/htaccess-<ms>.previous.txt`, the uploaded
+  (never replaces the file: a stale `# Type-R 198X cache policy` block left by an earlier release is swapped for the
+  current snippet in place and everything else is kept; the download is kept as `tools/deploy/backups/htaccess-<ms>.previous.txt`, the uploaded
   text as `htaccess-<ms>.merged.txt`, a new file is created only after a download attempt answers "no such
   file" even when the listing hides dotfiles, and any other download failure makes the step skip and the
   run exit 1): HTML, `manifest.js`, `sw.js` and `site.webmanifest` `no-cache`, URLs carrying `?v=` `immutable` for a year, bare js/css/json
@@ -786,7 +855,7 @@ loads its art and music without tokens. `tools/deploy-check.sh --local` runs the
 asserts both patches.
 
 Two notes for the native owner (amendment E-4b): the rsync carries the **masters and `assets/opt`** into
-both bundles (341 MB of PNG/WAV plus 29 MB of encoded files); excluding `assets/opt` there, or syncing
+both bundles (341 MB of PNG/WAV plus 43 MB of encoded files); excluding `assets/opt` there, or syncing
 from the encoded set only, would halve the bundles. This release is **web-only**: nothing under `native/`
 changed and no native build was produced. The secondary pages link back to the game with
 `./index.html?v=<shell token>`, not `./`: inside the WKWebView a `./` link is a `file:` directory, which has no index,
@@ -819,7 +888,9 @@ one constant plus a backend, documented step by step in [tools/leaderboard/READM
 - **Backend B, Cloudflare:** `tools/leaderboard/worker.js` on a KV namespace `BOARD` (`wrangler.toml.example`).
 - **Rules** (one table at the top of each backend): a day within one day of UTC today, UUID token, name sanitised to
   12 code points, rating 0..3000 consistent with speed x (acc/100)^2, speed 0..300, acc 0..100, score 0..5,000,000,
-  sector 1..10, the four ship ids, rank S..D or null, one row per (day, token) keeping the best rating, 30 POSTs per
+  sector 1..10, one of the four original ship ids (`coconut`, `little-dark-one`, `sofrito`, `honeybee`: the client's
+  `LEADERBOARD_SHIPS`, the PHP `ships` rule and the Worker's `RULES.ships` have not been extended to the Career hulls,
+  so a sortie flown in the Paprika, Nightjar or Moonpie is posted as `coconut`), rank S..D or null, one row per (day, token) keeping the best rating, 30 POSTs per
   salted-hashed IP per day, 90-day retention purged on write, body <= 2 KB, same origin only (no CORS header on A).
   This is honour-system grade anti-cheat, like every indie web board: it rejects nonsense, not a determined player
   with the open-source client.
@@ -835,7 +906,9 @@ the up to 200 most-typed letter pairs, the average and best speeds, how long the
 target, each sector's best speed and accuracy, the count of days played with the last date, a dated summary of each of
 the last 100 sessions: sector attempts, deaths included, daily sorties, drills and endless drifts), the daily sortie
 results of up to 60 days with the sortie count, streak and that day's attempts, the drill and endless drift run counts
-and bests, and when the Flight Check was finished or skipped; it is never sent anywhere and Reset save erases it.
+and bests, when the Flight Check was finished or skipped, and the career record (the campaign clears with each
+clear's rank, ship, loop, score, speed, accuracy and date, the boons chosen and the loop selected); it is never sent
+anywhere and Reset save erases it.
 The game uses that profile on the device to pace the stream, rate daily sorties and aim words and drills at weak keys.
 [privacy-policy.html](./privacy-policy.html) says so, effective 1 November 2026. No accounts, analytics, telemetry or
 third-party scripts; the web build makes no network calls while playing beyond fetching its own code, art and music,
@@ -905,7 +978,8 @@ downloaded as PNG from the victory screen and the records modal.
 tier 4, a sector-10 clear into the panel and the record tags, PURE, a Drill run without career, the Commendations table),
 `t-hangar` (17), `t-wallpaper` (14); `content-tables` expects seven ships. Harness all / mobile / reduced-motion /
 native / no-music: 0 errors, 60 fps, max render 5.8 ms; budget probe 60 fps, 5.4-5.6 ms, 5 composite sets, 0 shadowBlur.
-Non-media bytes before the first keystroke 2.42 MB at DPR 1 (three more x1 ship WebPs; budget 2.5 MB).
+Non-media bytes before the first keystroke 2.31 MiB at DPR 1 and 2.74 MiB at DPR 2 (three more ship WebPs in the
+critical set; budgets 2.5 / 2.75 MiB, so DPR 2 now sits at its line).
 
 ### 2026-11-01 AAA pass (release token `20261101a`, art token `202611020055`)
 
